@@ -47,14 +47,32 @@ export default function Home() {
     ContentItem | Project | null
   >(null);
   const [explorerCategory, setExplorerCategory] = useState<string>("");
+  const [sceneSettings, setSceneSettings] = useState<{
+    sceneName: string;
+    canvasWidth: number;
+    canvasHeight: number;
+    frameRate: number;
+  } | null>(null);
 
   const handleViewChange = (
     view: CurrentView,
-    content?: ContentItem | Project,
+    content?: ContentItem | Project | any,
     category?: string
   ) => {
     setCurrentView(view);
-    if (content) setSelectedContent(content);
+    if (content) {
+      // Check if content contains scene settings
+      if (
+        content.sceneName &&
+        content.canvasWidth &&
+        content.canvasHeight &&
+        content.frameRate
+      ) {
+        setSceneSettings(content);
+      } else {
+        setSelectedContent(content);
+      }
+    }
     if (category) setExplorerCategory(category);
   };
 
@@ -121,7 +139,10 @@ export default function Home() {
       case "animation-editor":
         return (
           <Suspense fallback={<LoadingSpinner />}>
-            <AnimationEditor onViewChange={handleViewChange} />
+            <AnimationEditor
+              onViewChange={handleViewChange}
+              sceneSettings={sceneSettings}
+            />
           </Suspense>
         );
 

@@ -1,0 +1,414 @@
+import React, { useRef } from "react";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from "./ui/table";
+import { Button } from "./ui/button";
+
+export interface DrawingFrame {
+  rowId: string;
+  frameIndex: number;
+  length: number; // for future extension
+  imageUrl?: string; // for template image
+  fileName?: string;
+}
+
+interface TimelineGridProps {
+  rows: { id: string; name: string }[];
+  setRows: (rows: { id: string; name: string }[]) => void;
+  frames: number;
+  setFrames: (n: number) => void;
+  drawingFrames: DrawingFrame[];
+  setDrawingFrames: React.Dispatch<React.SetStateAction<DrawingFrame[]>>;
+  selectedRow: string | null;
+  setSelectedRow: (id: string) => void;
+  selectedLayerId?: string | null;
+  setSelectedLayerId?: (id: string) => void;
+}
+
+export default function TimelineGrid({
+  rows,
+  setRows,
+  frames,
+  setFrames,
+  drawingFrames,
+  setDrawingFrames,
+  selectedRow,
+  setSelectedRow,
+  selectedLayerId,
+  setSelectedLayerId,
+}: TimelineGridProps) {
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = React.useState<null | {
+    rowId: string;
+    frameIndex: number;
+    startX: number;
+    origLength: number;
+  }>(null);
+
+  const handleAddRow = () => {
+    const newId = `row-${rows.length + 1}`;
+    setRows([...rows, { id: newId, name: `Row${rows.length + 1}` }]);
+  };
+
+  const handleAddFrame = () => {
+    if (!selectedRow) return;
+    // Find the first empty frame in the selected row
+    const rowFrames = drawingFrames
+      .filter((df) => df.rowId === selectedRow)
+      .map((df) => df.frameIndex);
+    let targetFrame = 0;
+    while (rowFrames.includes(targetFrame) && targetFrame < frames) {
+      targetFrame++;
+    }
+    // If all frames are filled, grow the timeline
+    if (targetFrame >= frames) {
+      setFrames((prev) => prev + 1);
+    }
+    setDrawingFrames((prev) => [
+      ...prev,
+      { rowId: selectedRow, frameIndex: targetFrame, length: 1 },
+    ]);
+  };
+
+  const handleDeleteRow = () => {
+    if (!selectedRow) return;
+    setRows(rows.filter((row) => row.id !== selectedRow));
+    setDrawingFrames(drawingFrames.filter((df) => df.rowId !== selectedRow));
+  };
+
+  const handleDeleteFrame = () => {
+    if (!selectedLayerId) return;
+    // selectedLayerId is in the format rowId-frameIndex
+    const [rowId, frameIndexStr] = selectedLayerId.split("-");
+    const frameIndex = parseInt(frameIndexStr, 10);
+    setDrawingFrames(
+      drawingFrames.filter(
+        (df) => !(df.rowId === rowId && df.frameIndex === frameIndex)
+      )
+    );
+    // Optionally, clear selection after delete
+    if (setSelectedLayerId) setSelectedLayerId(null);
+  };
+
+  // Drag logic for frame extension
+  const onMouseDownHandle = (
+    rowId: string,
+    frameIndex: number,
+    origLength: number,
+    e: React.MouseEvent
+  ) => {
+    setDragging({ rowId, frameIndex, startX: e.clientX, origLength });
+    e.stopPropagation();
+  };
+
+  // Handle image drop
+  const handleDrop = (
+    rowId: string,
+    frameIndex: number,
+    e: React.DragEvent
+  ) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    const url = URL.createObjectURL(file);
+    const name = file.name;
+    setDrawingFrames((prev) =>
+      prev.map((df) =>
+        df.rowId === rowId && df.frameIndex === frameIndex
+          ? { ...df, imageUrl: url, fileName: name }
+          : df
+      )
+    );
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  React.useEffect(() => {
+    if (!dragging) return;
+    const onMouseMove = (e: MouseEvent) => {
+      const cellWidth = 64; // px, matches w-16
+      let delta = Math.round((e.clientX - dragging.startX) / cellWidth);
+      let newLength = Math.max(1, dragging.origLength + delta);
+      let endFrame = dragging.frameIndex + newLength - 1;
+      if (endFrame >= frames) {
+        setFrames((prev) => endFrame + 1);
+      }
+      setDrawingFrames((prev) =>
+        prev.map((df) =>
+          df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex
+            ? { ...df, length: newLength }
+            : df
+        )
+      );
+    };
+    const onMouseUp = () => {
+      setDragging(null);
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [dragging, frames]);
+
+  return (
+    <div
+      ref={gridRef}
+      className="w-full bg-gray-900 border-t border-gray-700 p-2"
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <Button size="sm" variant="outline" onClick={handleAddFrame}>
+          + Add Frame
+        </Button>
+        <Button size="sm" variant="outline" onClick={handleAddRow}>
+          + Add Row
+        </Button>
+        <Button
+          size="sm"
+          variant="destructive"
+          onClick={handleDeleteFrame}
+          disabled={!selectedLayerId}
+          className="ml-2 flex items-center justify-center w-8 h-8 p-0"
+        >
+          🗑️
+        </Button>
+      </div>
+      <div className="overflow-y-auto max-h-48">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-24">Frames</TableHead>
+              {Array.from({ length: frames }).map((_, i) => (
+                <TableHead key={i} className="w-16 text-center">
+                  {i + 1}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row, rowIdx) => (
+              <TableRow key={row.id}>
+                <TableCell
+                  className={`w-24 cursor-pointer ${
+                    selectedRow === row.id ? "bg-blue-700 text-white" : ""
+                  }`}
+                  onClick={() => setSelectedRow(row.id)}
+                >
+                  {row.name}
+                </TableCell>
+                {Array.from({ length: frames }).map((_, i) => {
+                  // Find if this cell is the start of a drawing frame
+                  const drawing = drawingFrames.find(
+                    (df) => df.rowId === row.id && df.frameIndex === i
+                  );
+                  // Check if this cell is covered by an extended drawing frame
+                  const covered = drawingFrames.find(
+                    (df) =>
+                      df.rowId === row.id &&
+                      i > df.frameIndex &&
+                      i < df.frameIndex + df.length
+                  );
+                  if (drawing) {
+                    const isDragging =
+                      dragging &&
+                      dragging.rowId === row.id &&
+                      dragging.frameIndex === i;
+                    const isSingle = drawing.length === 1;
+                    const folderId = `${row.id}-${i}`;
+                    // Check if this cell should be highlighted based on selectedLayerId
+                    const isSelected =
+                      selectedLayerId === folderId ||
+                      selectedLayerId === `${folderId}-main` ||
+                      selectedLayerId?.startsWith(`${folderId}-extra-`);
+                    return (
+                      <TableCell
+                        key={row.id + "-" + i}
+                        colSpan={drawing.length}
+                        className={`h-8 border border-blue-400 text-center align-middle relative p-0 ${
+                          isDragging
+                            ? "opacity-70"
+                            : isSelected
+                            ? "bg-blue-600 text-white"
+                            : "bg-blue-800"
+                        }`}
+                        style={{
+                          width: `${drawing.length * 64}px`,
+                          fontSize: "0.75rem",
+                          padding: 0,
+                        }}
+                        onClick={() =>
+                          setSelectedLayerId && setSelectedLayerId(folderId)
+                        }
+                        onDrop={(e) => handleDrop(row.id, i, e)}
+                        onDragOver={handleDragOver}
+                      >
+                        <div
+                          className={`flex flex-row items-center h-full w-full justify-between`}
+                          style={{ height: "100%", width: "100%" }}
+                        >
+                          {drawing.imageUrl ? (
+                            isSingle ? (
+                              <>
+                                <div className="flex flex-col items-start justify-center pl-1 flex-1 h-full">
+                                  <img
+                                    src={drawing.imageUrl}
+                                    alt="template"
+                                    className="h-5 w-auto max-w-[80%] object-contain mb-0.5"
+                                  />
+                                  <span className="leading-tight select-none">{`R${
+                                    rowIdx + 1
+                                  }`}</span>
+                                  <span className="leading-tight select-none">{`F${
+                                    i + 1
+                                  }`}</span>
+                                </div>
+                                <span
+                                  className="cursor-ew-resize pr-1 select-none flex items-center h-full"
+                                  onMouseDown={(e) =>
+                                    onMouseDownHandle(
+                                      row.id,
+                                      i,
+                                      drawing.length,
+                                      e
+                                    )
+                                  }
+                                  style={{
+                                    userSelect: "none",
+                                    fontSize: "0.7em",
+                                  }}
+                                >
+                                  ||
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex flex-row items-center flex-1 h-full pl-1">
+                                  <img
+                                    src={drawing.imageUrl}
+                                    alt="template"
+                                    className="h-5 w-auto max-w-[40px] object-contain mr-1"
+                                  />
+                                  <span className="select-none whitespace-nowrap text-left">{`R${
+                                    rowIdx + 1
+                                  } F${i + 1}:${i + drawing.length}`}</span>
+                                </div>
+                                <span
+                                  className="cursor-ew-resize pr-1 select-none flex items-center h-full"
+                                  onMouseDown={(e) =>
+                                    onMouseDownHandle(
+                                      row.id,
+                                      i,
+                                      drawing.length,
+                                      e
+                                    )
+                                  }
+                                  style={{
+                                    userSelect: "none",
+                                    fontSize: "0.7em",
+                                  }}
+                                >
+                                  ||
+                                </span>
+                              </>
+                            )
+                          ) : isSingle ? (
+                            <>
+                              <div className="flex flex-col items-start justify-center pl-1 flex-1 h-full">
+                                <span className="leading-tight select-none">{`R${
+                                  rowIdx + 1
+                                }`}</span>
+                                <span className="leading-tight select-none">{`F${
+                                  i + 1
+                                }`}</span>
+                              </div>
+                              <span
+                                className="cursor-ew-resize pr-1 select-none flex items-center h-full"
+                                onMouseDown={(e) =>
+                                  onMouseDownHandle(
+                                    row.id,
+                                    i,
+                                    drawing.length,
+                                    e
+                                  )
+                                }
+                                style={{
+                                  userSelect: "none",
+                                  fontSize: "0.7em",
+                                }}
+                              >
+                                ||
+                              </span>
+                            </>
+                          ) : (
+                            <div className="flex flex-row items-center h-full w-full justify-between">
+                              <span className="pl-1 select-none whitespace-nowrap flex-1 text-left">{`R${
+                                rowIdx + 1
+                              } F${i + 1}:${i + drawing.length}`}</span>
+                              <span
+                                className="cursor-ew-resize pr-1 select-none flex items-center h-full"
+                                onMouseDown={(e) =>
+                                  onMouseDownHandle(
+                                    row.id,
+                                    i,
+                                    drawing.length,
+                                    e
+                                  )
+                                }
+                                style={{
+                                  userSelect: "none",
+                                  fontSize: "0.7em",
+                                }}
+                              >
+                                ||
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    );
+                  } else if (covered) {
+                    // Don't render a cell if it's covered by an extended frame
+                    return null;
+                  } else {
+                    // Allow image drop on empty cell
+                    return (
+                      <TableCell
+                        key={row.id + "-" + i}
+                        className="h-8 bg-gray-800 border border-gray-700 text-center align-middle"
+                        onDrop={(e) => {
+                          handleDrop(row.id, i, e);
+                          // If dropped image, create a drawing frame at this cell
+                          const file = e.dataTransfer.files[0];
+                          if (file && file.type.startsWith("image/")) {
+                            setDrawingFrames((prev) => [
+                              ...prev,
+                              {
+                                rowId: row.id,
+                                frameIndex: i,
+                                length: 1,
+                                imageUrl: URL.createObjectURL(file),
+                                fileName: file.name,
+                              },
+                            ]);
+                          }
+                        }}
+                        onDragOver={handleDragOver}
+                      ></TableCell>
+                    );
+                  }
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}

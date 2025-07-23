@@ -105,6 +105,7 @@ export function AnimationEditor({
   onViewChange,
   sceneSettings,
 }: AnimationEditorProps) {
+  // Component body starts here
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -1331,12 +1332,12 @@ export function AnimationEditor({
   };
 
   // Helper to get the active frame folder id from selectedLayerId
-  function getActiveFrameFolderId(selectedLayerId: string | null) {
+  const getActiveFrameFolderId = (selectedLayerId: string | null) => {
     if (!selectedLayerId) return null;
     // e.g. "row1-0-main" or "row1-0-extra-0" => "row1-0"
     const match = selectedLayerId.match(/^(row\d+-\d+)/);
     return match ? match[1] : selectedLayerId;
-  }
+  };
 
   // Draw current frame
   const drawFrame = useCallback(() => {
@@ -1411,7 +1412,7 @@ export function AnimationEditor({
     drawFrame();
   }, [drawFrame, selectedLayerId]);
 
-  function moveRowUp(rowId: string) {
+  const moveRowUp = (rowId: string) => {
     setRows((prev) => {
       const idx = prev.findIndex((r) => r.id === rowId);
       if (idx > 0) {
@@ -1421,8 +1422,9 @@ export function AnimationEditor({
       }
       return prev;
     });
-  }
-  function moveRowDown(rowId: string) {
+  };
+  
+  const moveRowDown = (rowId: string) => {
     setRows((prev) => {
       const idx = prev.findIndex((r) => r.id === rowId);
       if (idx < prev.length - 1 && idx !== -1) {
@@ -1432,8 +1434,9 @@ export function AnimationEditor({
       }
       return prev;
     });
-  }
+  };
 
+  // Main component render
   return (
     <div className="h-screen bg-gray-900 text-white flex flex-col overflow-hidden">
       {/* Top Navigation */}
@@ -1454,7 +1457,7 @@ export function AnimationEditor({
           </div>
           <div className="flex items-center gap-4">
             {/* Undo/Redo Controls */}
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -1535,14 +1538,14 @@ export function AnimationEditor({
           onMouseEnter={() => setIsHoveringToolbar(true)}
           onMouseLeave={() => setIsHoveringToolbar(false)}
         >
-          {/* Tool Sidebar */}
+        {/* Tool Sidebar */}
           <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-4 gap-2 flex-shrink-0">
-            {tools.map((tool) => (
-              <Button
-                key={tool.id}
+          {tools.map((tool) => (
+            <Button
+              key={tool.id}
                 variant={currentTool === tool.id ? "default" : "ghost"}
-                size="sm"
-                className="w-12 h-12 p-0"
+              size="sm"
+              className="w-12 h-12 p-0"
                 onClick={() => {
                   setCurrentTool(tool.id as any);
                   // Reset move tool state when switching tools
@@ -1559,18 +1562,18 @@ export function AnimationEditor({
                   }
                 }}
                 title={tool.label}
-              >
-                <tool.icon className="w-5 h-5" />
-              </Button>
-            ))}
+            >
+              <tool.icon className="w-5 h-5" />
+            </Button>
+          ))}
 
-            <Separator className="w-8 my-2" />
+          <Separator className="w-8 my-2" />
 
-            <Button
-              variant={onionSkin ? "default" : "ghost"}
-              size="sm"
-              className="w-12 h-12 p-0"
-              onClick={() => setOnionSkin(!onionSkin)}
+          <Button
+            variant={onionSkin ? "default" : "ghost"}
+            size="sm"
+            className="w-12 h-12 p-0"
+            onClick={() => setOnionSkin(!onionSkin)}
               title="Onion Skin"
             >
               {onionSkin ? (
@@ -1588,7 +1591,7 @@ export function AnimationEditor({
               title="Show Grid"
             >
               <Grid className="w-5 h-5" />
-            </Button>
+          </Button>
           </div>
 
           {/* Sliding Settings Panel */}
@@ -1807,8 +1810,8 @@ export function AnimationEditor({
         {/* Right Sidebar (Layer Panel) */}
         <div className="w-80 bg-gray-800 border-l border-gray-700 p-4">
           {/* Top row: Add/Delete Layer buttons and Opacity slider */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
               <Button
                 size="sm"
                 variant="outline"
@@ -1818,7 +1821,7 @@ export function AnimationEditor({
                 className="w-8 h-8 p-0"
               >
                 +
-              </Button>
+                </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -1829,7 +1832,7 @@ export function AnimationEditor({
                 disabled={!selectedLayerId}
               >
                 <Trash2 className="w-4 h-4" />
-              </Button>
+                </Button>
             </div>
             <div className="flex flex-col items-end flex-1 ml-2">
               <Slider
@@ -1853,163 +1856,92 @@ export function AnimationEditor({
                     100
                 )}
                 %
-              </span>
+                </span>
             </div>
           </div>
           {/* Thin Separator */}
           <div className="border-b border-gray-600 mb-4" />
           {/* Tools Section */}
           <div className="space-y-2">
-            {sidebarFolders.map((folder) => (
-              <div key={folder.id} className="bg-gray-700 rounded shadow">
-                {/* Folder Header */}
-                <div
-                  className={`flex items-center p-2 border-b border-gray-600 rounded-t ${
-                    selectedLayerId === folder.id
-                      ? "bg-blue-600 text-white"
-                      : ""
-                  }`}
-                >
+            {rows.map(row => {
+              const folder = sidebarFolders.find(f => f.id.startsWith(row.id));
+              if (!folder) return null;
+              return (
+                <div key={folder.id} className="bg-gray-700 rounded shadow">
+                  {/* Folder Header */}
                   <div
-                    className="flex items-center gap-2 cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFolder(folder.id);
-                    }}
+                    className={`flex items-center p-2 border-b border-gray-600 rounded-t ${
+                      selectedLayerId === folder.id
+                        ? "bg-blue-600 text-white"
+                        : ""
+                    }`}
                   >
-                    {openFolders[folder.id] ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                  </div>
-                  <div
-                    className="flex items-center gap-2 cursor-pointer ml-2"
-                    onClick={() => {
-                      setSelectedLayerId(folder.id);
-                    }}
-                  >
-                    <Folder className="w-4 h-4 text-gray-400" />
-                    <span className="font-medium text-xs">{folder.label}</span>
-                  </div>
-                  {/* Up/Down arrows for reordering */}
-                  <div className="flex items-center gap-1 ml-auto">
-                    {sidebarFolders.length > 1 && (
-                      <>
-                        {sidebarFolders.findIndex((f) => f.id === folder.id) >
-                          0 && (
-                          <button
-                            className="text-gray-400 hover:text-white px-1"
-                            title="Move Up"
-                            onClick={() => moveRowUp(folder.id)}
-                          >
-                            <ChevronUp className="w-4 h-4" />
-                          </button>
-                        )}
-                        {sidebarFolders.findIndex((f) => f.id === folder.id) <
-                          sidebarFolders.length - 1 && (
-                          <button
-                            className="text-gray-400 hover:text-white px-1"
-                            title="Move Down"
-                            onClick={() => moveRowDown(folder.id)}
-                          >
-                            <ChevronDown className="w-4 h-4" />
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-                {/* Folder Content (Layer) */}
-                {openFolders[folder.id] && (
-                  <div className="pl-2 py-2 flex flex-col gap-1 rounded-b">
-                    {/* Render image or drawing layer */}
                     <div
-                      className={`flex items-center justify-between px-3 py-2 rounded cursor-pointer ${
-                        selectedLayerId === `${folder.id}-main`
-                          ? "bg-blue-600"
-                          : "bg-gray-600 hover:bg-gray-500"
-                      }`}
-                      onClick={() => setSelectedLayerId(`${folder.id}-main`)}
+                      className="flex items-center gap-2 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFolder(folder.id);
+                      }}
                     >
-                      <div className="flex items-center gap-2 flex-1">
-                        <Eye
-                          className={`w-4 h-4 ${
-                            layerVisibility[`${folder.id}-main`] !== false
-                              ? "text-white"
-                              : "text-gray-500"
-                          }`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setLayerVisibility((prev) => ({
-                              ...prev,
-                              [`${folder.id}-main`]:
-                                prev[`${folder.id}-main`] === false
-                                  ? true
-                                  : false,
-                            }));
-                          }}
-                        />
-                        {editingLayerName === `${folder.id}-main` ? (
-                          <input
-                            value={editingLayerValue}
-                            onChange={(e) =>
-                              setEditingLayerValue(e.target.value)
-                            }
-                            onBlur={() => handleSaveRename(`${folder.id}-main`)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter")
-                                handleSaveRename(`${folder.id}-main`);
-                              if (e.key === "Escape") handleCancelRename();
-                            }}
-                            className="text-sm bg-gray-800 text-white px-2 py-1 rounded border border-gray-600 flex-1"
-                            autoFocus
-                          />
-                        ) : (
-                          <span className="text-sm text-white flex-1">
-                            {folder.fileName
-                              ? getFileNameBaseFromString(folder.fileName)
-                              : "Untitled.1"}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Edit3
-                          className="w-3 h-3 text-gray-400 hover:text-white cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const currentName = folder.fileName
-                              ? getFileNameBaseFromString(folder.fileName)
-                              : "Untitled.1";
-                            handleStartRename(`${folder.id}-main`, currentName);
-                          }}
-                        />
-                        <div className="text-xs text-gray-300">
-                          {Math.round(
-                            (layerOpacities[`${folder.id}-main`] ?? 1) * 100
-                          )}
-                          %
-                        </div>
-                      </div>
+                      {openFolders[folder.id] ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
                     </div>
-                    {/* Render additional layers if any */}
-                    {(folderLayers[folder.id] || []).map((layerName, idx) => (
+                    <div
+                      className="flex items-center gap-2 cursor-pointer ml-2"
+                      onClick={() => {
+                        setSelectedLayerId(folder.id);
+                      }}
+                    >
+                      <Folder className="w-4 h-4 text-gray-400" />
+                      <span className="font-medium text-xs">{folder.label}</span>
+                    </div>
+                    {/* Up/Down arrows for reordering */}
+                    <div className="flex items-center gap-1 ml-auto">
+                      {sidebarFolders.length > 1 && (
+                        <>
+                          {sidebarFolders.findIndex((f) => f.id === folder.id) >
+                            0 && (
+                            <button
+                              className="text-gray-400 hover:text-white px-1"
+                              title="Move Up"
+                              onClick={() => moveRowUp(folder.id)}
+                            >
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
+                          )}
+                          {sidebarFolders.findIndex((f) => f.id === folder.id) <
+                            sidebarFolders.length - 1 && (
+                            <button
+                              className="text-gray-400 hover:text-white px-1"
+                              title="Move Down"
+                              onClick={() => moveRowDown(folder.id)}
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {/* Folder Content (Layer) */}
+                  {openFolders[folder.id] && (
+                    <div className="pl-2 py-2 flex flex-col gap-1 rounded-b">
+                      {/* Render image or drawing layer */}
                       <div
-                        key={layerName}
                         className={`flex items-center justify-between px-3 py-2 rounded cursor-pointer ${
-                          selectedLayerId === `${folder.id}-extra-${idx}`
+                          selectedLayerId === `${folder.id}-main`
                             ? "bg-blue-600"
                             : "bg-gray-600 hover:bg-gray-500"
                         }`}
-                        onClick={() =>
-                          setSelectedLayerId(`${folder.id}-extra-${idx}`)
-                        }
+                        onClick={() => setSelectedLayerId(`${folder.id}-main`)}
                       >
                         <div className="flex items-center gap-2 flex-1">
                           <Eye
                             className={`w-4 h-4 ${
-                              layerVisibility[`${folder.id}-extra-${idx}`] !==
-                              false
+                              layerVisibility[`${folder.id}-main`] !== false
                                 ? "text-white"
                                 : "text-gray-500"
                             }`}
@@ -2017,25 +1949,23 @@ export function AnimationEditor({
                               e.stopPropagation();
                               setLayerVisibility((prev) => ({
                                 ...prev,
-                                [`${folder.id}-extra-${idx}`]:
-                                  prev[`${folder.id}-extra-${idx}`] === false
+                                [`${folder.id}-main`]:
+                                  prev[`${folder.id}-main`] === false
                                     ? true
                                     : false,
                               }));
                             }}
                           />
-                          {editingLayerName === `${folder.id}-extra-${idx}` ? (
+                          {editingLayerName === `${folder.id}-main` ? (
                             <input
                               value={editingLayerValue}
                               onChange={(e) =>
                                 setEditingLayerValue(e.target.value)
                               }
-                              onBlur={() =>
-                                handleSaveRename(`${folder.id}-extra-${idx}`)
-                              }
+                              onBlur={() => handleSaveRename(`${folder.id}-main`)}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter")
-                                  handleSaveRename(`${folder.id}-extra-${idx}`);
+                                  handleSaveRename(`${folder.id}-main`);
                                 if (e.key === "Escape") handleCancelRename();
                               }}
                               className="text-sm bg-gray-800 text-white px-2 py-1 rounded border border-gray-600 flex-1"
@@ -2043,32 +1973,108 @@ export function AnimationEditor({
                             />
                           ) : (
                             <span className="text-sm text-white flex-1">
-                              {layerName}
+                              {folder.fileName
+                                ? getFileNameBaseFromString(folder.fileName)
+                                : "Untitled.1"}
                             </span>
                           )}
-                        </div>
-                        <div className="flex items-center gap-2">
+                    </div>
+                    <div className="flex items-center gap-2">
                           <Edit3
                             className="w-3 h-3 text-gray-400 hover:text-white cursor-pointer"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleStartRename(
-                                `${folder.id}-extra-${idx}`,
-                                layerName
-                              );
+                              const currentName = folder.fileName
+                                ? getFileNameBaseFromString(folder.fileName)
+                                : "Untitled.1";
+                              handleStartRename(`${folder.id}-main`, currentName);
                             }}
                           />
-                          <div className="text-xs text-gray-300">100%</div>
-                        </div>
-                      </div>
-                    ))}
+                          <div className="text-xs text-gray-300">
+                            {Math.round(
+                              (layerOpacities[`${folder.id}-main`] ?? 1) * 100
+                            )}
+                            %
+                    </div>
                   </div>
-                )}
+                  </div>
+                  {/* Render additional layers if any */}
+                  {(folderLayers[folder.id] || []).map((layerName, idx) => (
+                    <div
+                      key={layerName}
+                      className={`flex items-center justify-between px-3 py-2 rounded cursor-pointer ${
+                        selectedLayerId === `${folder.id}-extra-${idx}`
+                          ? "bg-blue-600"
+                          : "bg-gray-600 hover:bg-gray-500"
+                      }`}
+                      onClick={() =>
+                        setSelectedLayerId(`${folder.id}-extra-${idx}`)
+                      }
+                    >
+                      <div className="flex items-center gap-2 flex-1">
+                        <Eye
+                          className={`w-4 h-4 ${
+                            layerVisibility[`${folder.id}-extra-${idx}`] !==
+                            false
+                              ? "text-white"
+                              : "text-gray-500"
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLayerVisibility((prev) => ({
+                              ...prev,
+                              [`${folder.id}-extra-${idx}`]:
+                                prev[`${folder.id}-extra-${idx}`] === false
+                                  ? true
+                                  : false,
+                            }));
+                          }}
+                        />
+                        {editingLayerName === `${folder.id}-extra-${idx}` ? (
+                          <input
+                            value={editingLayerValue}
+                            onChange={(e) =>
+                              setEditingLayerValue(e.target.value)
+                            }
+                            onBlur={() =>
+                              handleSaveRename(`${folder.id}-extra-${idx}`)
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter")
+                                handleSaveRename(`${folder.id}-extra-${idx}`);
+                              if (e.key === "Escape") handleCancelRename();
+                            }}
+                            className="text-sm bg-gray-800 text-white px-2 py-1 rounded border border-gray-600 flex-1"
+                            autoFocus
+                          />
+                        ) : (
+                          <span className="text-sm text-white flex-1">
+                            {layerName}
+                          </span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Edit3
+                        className="w-3 h-3 text-gray-400 hover:text-white cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartRename(
+                            `${folder.id}-extra-${idx}`,
+                            layerName
+                          );
+                        }}
+                      />
+                      <div className="text-xs text-gray-300">100%</div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      </div>
+        );
+      })}
     </div>
-  );
+  </div>
+</div>
+);
 }

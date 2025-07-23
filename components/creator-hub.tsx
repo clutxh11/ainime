@@ -23,7 +23,7 @@ import {
   Search,
   Plus,
 } from "lucide-react";
-import type { CurrentView } from "@/app/page";
+import type { CurrentView } from "@/types";
 import { ViewTeamsModal } from "@/components/view-teams-modal";
 import { ProfileDropdown } from "@/components/shared/profile-dropdown";
 import { SettingsModal } from "@/components/settings-modal";
@@ -127,6 +127,22 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
     useState(false);
   const [isViewTeamsModalOpen, setIsViewTeamsModalOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+
+  // Scene creation settings
+  const [sceneName, setSceneName] = useState("New Scene");
+  const [canvasWidth, setCanvasWidth] = useState(800);
+  const [canvasHeight, setCanvasHeight] = useState(600);
+  const [frameRate, setFrameRate] = useState(24);
+
+  const handleOpenEditor = () => {
+    // Pass scene settings to animation editor
+    onViewChange("animation-editor", {
+      sceneName,
+      canvasWidth,
+      canvasHeight,
+      frameRate,
+    });
+  };
   const [selectedProjectTitle, setSelectedProjectTitle] = useState("");
 
   const handleViewTeamsClick = (projectId: string, projectTitle: string) => {
@@ -365,94 +381,91 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6 mb-6">
+            <div className="max-w-2xl mx-auto">
               <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="p-6 text-center">
-                  <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Play className="w-8 h-8 text-white" />
+                <CardContent className="p-8">
+                  <div className="text-center mb-6">
+                    <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Play className="w-8 h-8 text-white" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">
+                      Animation Editor
+                    </h3>
+                    <p className="text-gray-400 mb-6 text-sm">
+                      Professional frame-by-frame editor with layers, timeline,
+                      and collaboration
+                    </p>
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">
-                    Animation Editor
-                  </h3>
-                  <p className="text-gray-400 mb-4 text-sm">
-                    Professional frame-by-frame editor with layers, timeline,
-                    and collaboration
-                  </p>
+
+                  {/* Scene Settings */}
+                  <div className="space-y-4 mb-6">
+                    <div>
+                      <label className="text-sm text-gray-300 mb-2 block">
+                        Scene Name
+                      </label>
+                      <Input
+                        value={sceneName}
+                        onChange={(e) => setSceneName(e.target.value)}
+                        placeholder="Enter scene name..."
+                        className="bg-gray-700 border-gray-600 text-white"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm text-gray-300 mb-2 block">
+                          Width
+                        </label>
+                        <Input
+                          type="number"
+                          value={canvasWidth}
+                          onChange={(e) =>
+                            setCanvasWidth(parseInt(e.target.value) || 800)
+                          }
+                          className="bg-gray-700 border-gray-600 text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-gray-300 mb-2 block">
+                          Height
+                        </label>
+                        <Input
+                          type="number"
+                          value={canvasHeight}
+                          onChange={(e) =>
+                            setCanvasHeight(parseInt(e.target.value) || 600)
+                          }
+                          className="bg-gray-700 border-gray-600 text-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-gray-300 mb-2 block">
+                        Frame Rate
+                      </label>
+                      <Input
+                        type="number"
+                        value={frameRate}
+                        onChange={(e) =>
+                          setFrameRate(parseInt(e.target.value) || 24)
+                        }
+                        min="1"
+                        max="60"
+                        className="bg-gray-700 border-gray-600 text-white"
+                      />
+                    </div>
+                  </div>
+
                   <Button
                     className="bg-blue-600 hover:bg-blue-700 w-full"
-                    onClick={() => (window.location.href = "/animation-editor")}
+                    onClick={handleOpenEditor}
                   >
                     🎨 Open Editor
                   </Button>
                 </CardContent>
               </Card>
-
-              <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="p-6 text-center">
-                  <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Eye className="w-8 h-8 text-white" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">
-                    Try Demo
-                  </h3>
-                  <p className="text-gray-400 mb-4 text-sm">
-                    Explore the editor with a sample bouncing ball animation
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="border-green-600 text-green-400 hover:bg-green-600 hover:text-white w-full"
-                    onClick={() =>
-                      (window.location.href = "/animation-editor/demo")
-                    }
-                  >
-                    🎬 View Demo
-                  </Button>
-                </CardContent>
-              </Card>
             </div>
-
-            <Card className="bg-gray-800 border-gray-700">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">
-                  ✨ Editor Features
-                </h3>
-                <div className="grid md:grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <h4 className="text-blue-400 font-medium mb-2">
-                      🎨 Drawing Tools
-                    </h4>
-                    <ul className="text-gray-400 space-y-1">
-                      <li>• Pencil, brush, eraser</li>
-                      <li>• Shape tools (circle, rect)</li>
-                      <li>• Color picker & palettes</li>
-                      <li>• Adjustable brush sizes</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <h4 className="text-green-400 font-medium mb-2">
-                      🎬 Animation
-                    </h4>
-                    <ul className="text-gray-400 space-y-1">
-                      <li>• Frame-by-frame timeline</li>
-                      <li>• Keyframe support</li>
-                      <li>• Real-time playback</li>
-                      <li>• Layer management</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <h4 className="text-purple-400 font-medium mb-2">
-                      👥 Collaboration
-                    </h4>
-                    <ul className="text-gray-400 space-y-1">
-                      <li>• Real-time team editing</li>
-                      <li>• Live chat system</li>
-                      <li>• Export in multiple formats</li>
-                      <li>• .aianime project files</li>
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
 
           <TabsContent value="forum" className="mt-6">
@@ -683,12 +696,12 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
         onClose={() => setIsProfileModalOpen(false)}
       />
       <SettingsModal
-        isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
+        open={isSettingsModalOpen}
+        onOpenChange={setIsSettingsModalOpen}
       />
       <ContributionsModal
-        isOpen={isContributionsModalOpen}
-        onClose={() => setIsContributionsModalOpen(false)}
+        open={isContributionsModalOpen}
+        onOpenChange={setIsContributionsModalOpen}
       />
       <ViewTeamsModal
         isOpen={isViewTeamsModalOpen}
