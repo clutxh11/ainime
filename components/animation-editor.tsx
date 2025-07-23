@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -68,6 +68,7 @@ interface Point {
   y: number;
 }
 
+// No need for image-specific properties on DrawingStroke
 interface DrawingStroke {
   id: string;
   points: Point[];
@@ -161,10 +162,24 @@ export function AnimationEditor({
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [lastWheelTime, setLastWheelTime] = useState(0);
 
-  // Generate unique stroke IDs
-  const generateStrokeId = useCallback(() => {
-    return `stroke-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }, []);
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  const [selectedFrameNumber, setSelectedFrameNumber] = useState<number | null>(
+    null
+  );
+  const [layerOpacities, setLayerOpacities] = useState<{
+    [key: string]: number;
+  }>({});
+  const [layerStrokes, setLayerStrokes] = useState<{
+    [layerId: string]: DrawingStroke[];
+  }>({});
+  const [openFolders, setOpenFolders] = useState<{ [key: string]: boolean }>(
+    {}
+  );
+  const [folderLayers, setFolderLayers] = useState<{ [key: string]: string[] }>(
+    {}
+  );
+  const imageCache = useRef<Record<string, HTMLImageElement>>({});
+  const [isLooping, setIsLooping] = useState(false);
 
   const [rows, setRows] = useState([
     { id: "row-1", name: "Row1" },
@@ -186,6 +201,20 @@ export function AnimationEditor({
     }
     return [];
   });
+
+  const maxFrame = useMemo(() => {
+    if (drawingFrames.length === 0) {
+      return 1;
+    }
+    // Find the last frame index that has content
+    return Math.max(1, ...drawingFrames.map((df) => df.frameIndex + df.length));
+  }, [drawingFrames]);
+
+  // Generate unique stroke IDs
+  const generateStrokeId = useCallback(() => {
+    return `stroke-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }, []);
+
   const [selectedRow, setSelectedRow] = useState(rows[0].id);
   const [frames, setFrames] = useState<Frame[]>([
     {
@@ -263,472 +292,37 @@ export function AnimationEditor({
     };
   };
 
-  const draw = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!contextRef.current) return;
+  // Add this helper function to create an image stroke
+  const createImageStroke = async (
+    file: File,
+    layerId: string,
+    x: number,
+    y: number
+  ): Promise<DrawingStroke> => {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        // Scale the image to a reasonable size while maintaining aspect ratio
+        const maxSize = 200;
+        const scale = Math.min(maxSize / img.width, maxSize / img.height);
+        const width = img.width * scale;
+        const height = img.height * scale;
 
-      // Handle panning
-      if (isPanning) {
-        const deltaX = e.clientX - panOffset.x;
-        const deltaY = e.clientY - panOffset.y;
-        setPanOffset((prev) => ({
-          x: prev.x + deltaX,
-          y: prev.y + deltaY,
-        }));
-        setPanOffset({ x: e.clientX, y: e.clientY });
-        return;
-      }
-
-      const { x, y } = getCanvasCoords(e);
-
-      // Update eraser circle position when eraser tool is active
-      if (currentTool === "eraser") {
-        setEraserCircle({ x, y });
-      }
-
-      if (currentTool === "move" && isSelecting && lassoSelection) {
-        // Continue lasso selection
-        setLassoSelection((prev) =>
-          prev
-            ? {
-                ...prev,
-                points: [...prev.points, { x, y }],
-              }
-            : null
-        );
-        return;
-      }
-
-      if (currentTool === "move" && isDragging && lassoSelection) {
-        // Handle moving selected strokes
-        const currentOffsetX = x - dragOffset.x;
-        const currentOffsetY = y - dragOffset.y;
-
-        console.log(
-          "Dragging - Total Movement:",
-          currentOffsetX,
-          currentOffsetY,
-          "Selected strokes:",
-          lassoSelection.selectedStrokeIds.length
-        );
-        console.log(
-          "Selected stroke details:",
-          lassoSelection.selectedStrokeIds
-            .map((strokeId) => {
-              const stroke = frames
-                .find((f) => f.id === currentFrame)
-                ?.layers.find((l) => l.id === currentLayer)
-                ?.strokes.find((s) => s.id === strokeId);
-              return stroke
-                ? {
-                    id: stroke.id,
-                    points: stroke.points.length,
-                    color: stroke.color,
-                    firstPoint: stroke.points[0],
-                    lastPoint: stroke.points[stroke.points.length - 1],
-                  }
-                : null;
-            })
-            .filter(Boolean)
-        );
-
-        setFrames((prev) => {
-          const newFrames = prev.map((frame) =>
-            frame.id === currentFrame
-              ? {
-                  ...frame,
-                  layers: frame.layers.map((layer) =>
-                    layer.id === currentLayer
-                      ? {
-                          ...layer,
-                          strokes: layer.strokes.map((stroke) => {
-                            // Check if this stroke is in the selected strokes by ID
-                            const isSelected =
-                              lassoSelection.selectedStrokeIds.includes(
-                                stroke.id
-                              );
-
-                            if (isSelected) {
-                              console.log(
-                                "Moving stroke",
-                                stroke.id,
-                                "with total movement:",
-                                currentOffsetX,
-                                currentOffsetY
-                              );
-                              const originalPosition =
-                                originalStrokePositions[stroke.id];
-                              if (originalPosition) {
-                                console.log(
-                                  "Using original position for stroke",
-                                  stroke.id
-                                );
-                                return {
-                                  ...stroke,
-                                  points: originalPosition.points.map(
-                                    (point) => ({
-                                      x: point.x + currentOffsetX,
-                                      y: point.y + currentOffsetY,
-                                    })
-                                  ),
-                                };
-                              }
-                            }
-                            return stroke;
-                          }),
-                        }
-                      : layer
-                  ),
-                }
-              : frame
-          );
-          return newFrames;
+        resolve({
+          id: generateStrokeId(),
+          points: [], // Images don't need points
+          color: "none",
+          brushSize: 0,
+          tool: "image",
+          layerId,
         });
-
-        // Update lasso selection points to move with the content
-        setLassoSelection((prev) =>
-          prev
-            ? {
-                ...prev,
-                points: originalLassoPoints.map((point) => ({
-                  x: point.x + currentOffsetX,
-                  y: point.y + currentOffsetY,
-                })),
-              }
-            : null
-        );
-
-        // Save to undo stack after moving strokes
-        setTimeout(() => saveToUndoStack(), 0);
-        return;
-      }
-
-      if (!isDrawing) return;
-
-      // Handle eraser tool differently - remove strokes instead of drawing
-      if (currentTool === "eraser") {
-        // Create an eraser stroke for visual feedback
-        if (!currentStroke) {
-          const eraserStroke: DrawingStroke = {
-            id: generateStrokeId(),
-            points: [{ x, y }],
-            color: "#ffffff",
-            brushSize: eraserSize,
-            tool: "eraser",
-            layerId: selectedLayerId || currentLayer,
-          };
-          setCurrentStroke(eraserStroke);
-        } else {
-          setCurrentStroke((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  points: [...prev.points, { x, y }],
-                }
-              : null
-          );
-        }
-
-        // Handle different eraser styles
-        if (eraserStyle === "stroke") {
-          // Stroke eraser: remove entire strokes that intersect with the eraser
-          if (selectedLayerId) {
-            setLayerStrokes((prev) => {
-              const layerStrokes = prev[selectedLayerId] || [];
-              const filteredStrokes = layerStrokes.filter((stroke) => {
-                // Check if any point in the stroke is within eraser radius
-                const shouldRemove = stroke.points.some((point) => {
-                  const distance = Math.sqrt(
-                    (point.x - x) ** 2 + (point.y - y) ** 2
-                  );
-                  return distance <= eraserSize;
-                });
-                return !shouldRemove;
-              });
-              return { ...prev, [selectedLayerId]: filteredStrokes };
-            });
-          } else {
-            // Fallback to old system for currentLayer
-            setFrames((prev) => {
-              const newFrames = prev.map((frame) =>
-                frame.id === currentFrame
-                  ? {
-                      ...frame,
-                      layers: frame.layers.map((layer) =>
-                        layer.id === currentLayer
-                          ? {
-                              ...layer,
-                              strokes: layer.strokes.filter((stroke) => {
-                                // Check if any point in the stroke is within eraser radius
-                                const shouldRemove = stroke.points.some(
-                                  (point) => {
-                                    const distance = Math.sqrt(
-                                      (point.x - x) ** 2 + (point.y - y) ** 2
-                                    );
-                                    return distance <= eraserSize;
-                                  }
-                                );
-                                return !shouldRemove;
-                              }),
-                            }
-                          : layer
-                      ),
-                    }
-                  : frame
-              );
-              return newFrames;
-            });
-          }
-        } else {
-          // Precision eraser: remove parts of strokes within eraser radius
-          if (selectedLayerId) {
-            setLayerStrokes((prev) => {
-              const layerStrokes = prev[selectedLayerId] || [];
-              const modifiedStrokes = layerStrokes
-                .map((stroke) => {
-                  // Filter out points that are within eraser radius
-                  const filteredPoints = stroke.points.filter((point) => {
-                    const distance = Math.sqrt(
-                      (point.x - x) ** 2 + (point.y - y) ** 2
-                    );
-                    return distance > eraserSize;
-                  });
-
-                  // If stroke has enough points left, return modified stroke
-                  if (filteredPoints.length >= 2) {
-                    return { ...stroke, points: filteredPoints };
-                  } else {
-                    // If stroke has less than 2 points, remove it entirely
-                    return null;
-                  }
-                })
-                .filter(Boolean) as DrawingStroke[]; // Remove null strokes
-              return { ...prev, [selectedLayerId]: modifiedStrokes };
-            });
-          } else {
-            // Fallback to old system for currentLayer
-            setFrames((prev) => {
-              const newFrames = prev.map((frame) =>
-                frame.id === currentFrame
-                  ? {
-                      ...frame,
-                      layers: frame.layers.map((layer) =>
-                        layer.id === currentLayer
-                          ? {
-                              ...layer,
-                              strokes: layer.strokes
-                                .map((stroke) => {
-                                  // Filter out points that are within eraser radius
-                                  const filteredPoints = stroke.points.filter(
-                                    (point) => {
-                                      const distance = Math.sqrt(
-                                        (point.x - x) ** 2 + (point.y - y) ** 2
-                                      );
-                                      return distance > eraserSize;
-                                    }
-                                  );
-
-                                  // If stroke has enough points left, return modified stroke
-                                  if (filteredPoints.length >= 2) {
-                                    return {
-                                      ...stroke,
-                                      points: filteredPoints,
-                                    };
-                                  } else {
-                                    // If stroke has less than 2 points, remove it entirely
-                                    return null;
-                                  }
-                                })
-                                .filter(Boolean) as DrawingStroke[], // Remove null strokes
-                            }
-                          : layer
-                      ),
-                    }
-                  : frame
-              );
-              return newFrames;
-            });
-          }
-        }
-        return;
-      }
-
-      // Normal drawing for non-eraser tools
-      if (!currentStroke) return;
-
-      contextRef.current.lineTo(x, y);
-      contextRef.current.stroke();
-
-      setCurrentStroke((prev) =>
-        prev
-          ? {
-              ...prev,
-              points: [...prev.points, { x, y }],
-              brushSize: currentTool === "eraser" ? eraserSize : brushSize,
-            }
-          : null
-      );
-
-      // Update the stroke in the layer system
-      if (selectedLayerId && currentStroke) {
-        setLayerStrokes((prev) => ({
-          ...prev,
-          [selectedLayerId]:
-            prev[selectedLayerId]?.map((stroke) =>
-              stroke.id === currentStroke.id
-                ? { ...stroke, points: [...stroke.points, { x, y }] }
-                : stroke
-            ) || [],
-        }));
-      }
-    },
-    [
-      isDrawing,
-      currentStroke,
-      zoom,
-      currentTool,
-      isSelecting,
-      lassoSelection,
-      isDragging,
-      dragOffset,
-      currentFrame,
-      eraserSize,
-      brushSize,
-      currentLayer,
-      eraserStyle,
-    ]
-  );
-
-  const stopDrawing = useCallback(() => {
-    // Stop panning
-    if (isPanning) {
-      setIsPanning(false);
-      return;
-    }
-
-    if (currentTool === "move") {
-      if (isSelecting && lassoSelection) {
-        // Complete lasso selection - close the loop and find strokes within the area
-        const closedPoints = [...lassoSelection.points];
-        if (closedPoints.length > 2) {
-          // Close the loop by connecting the last point to the first
-          closedPoints.push(closedPoints[0]);
-        }
-
-        const currentFrameData = frames.find((f) => f.id === currentFrame);
-        if (currentFrameData) {
-          const currentLayerData = currentFrameData.layers.find(
-            (l) => l.id === currentLayer
-          );
-          if (currentLayerData) {
-            const selectedStrokeIds: string[] = [];
-            currentLayerData.strokes.forEach((stroke) => {
-              // Check if any point in the stroke is within the selection area
-              if (
-                stroke.points.some((point) =>
-                  isPointInPolygon(point, closedPoints)
-                )
-              ) {
-                selectedStrokeIds.push(stroke.id);
-              }
-            });
-
-            // Update lasso selection with closed loop and selected stroke IDs
-            setLassoSelection({
-              points: closedPoints,
-              selectedStrokeIds,
-              isActive: true,
-            });
-            console.log(
-              "Lasso created with selected strokes:",
-              selectedStrokeIds.length
-            );
-            console.log("Selected stroke IDs:", selectedStrokeIds);
-          }
-        }
-        setIsSelecting(false);
-        return;
-      } else if (isDragging) {
-        setIsDragging(false);
-        setOriginalLassoPoints([]);
-        setOriginalStrokePositions({});
-        return;
-      }
-      return;
-    }
-
-    if (!isDrawing) return;
-
-    setIsDrawing(false);
-
-    // For eraser tool, we don't save the eraser stroke, just the erasing action
-    if (currentTool === "eraser") {
-      setCurrentStroke(null);
-      // Save to undo stack after erasing
-      setTimeout(() => saveToUndoStack(), 0);
-      return;
-    }
-
-    if (!currentStroke) return;
-
-    contextRef.current?.closePath();
-
-    // Save stroke to current layer
-    setFrames((prev) => {
-      const newFrames = prev.map((frame) =>
-        frame.id === currentFrame
-          ? {
-              ...frame,
-              layers: frame.layers.map((layer) =>
-                layer.id === currentLayer
-                  ? { ...layer, strokes: [...layer.strokes, currentStroke] }
-                  : layer
-              ),
-            }
-          : frame
-      );
-      return newFrames;
+      };
+      img.src = url;
     });
-
-    // Save to undo stack after adding stroke
-    setTimeout(() => saveToUndoStack(), 0);
-
-    setCurrentStroke(null);
-
-    // Hide eraser circle when not using eraser tool
-    if (currentTool !== "eraser") {
-      setEraserCircle(null);
-    }
-  }, [
-    isDrawing,
-    currentStroke,
-    currentFrame,
-    currentLayer,
-    frames,
-    currentTool,
-    isSelecting,
-    lassoSelection,
-    isDragging,
-  ]);
-
-  // Helper function to check if a point is inside a polygon
-  const isPointInPolygon = (point: Point, polygon: Point[]): boolean => {
-    let inside = false;
-    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      if (
-        polygon[i].y > point.y !== polygon[j].y > point.y &&
-        point.x <
-          ((polygon[j].x - polygon[i].x) * (point.y - polygon[i].y)) /
-            (polygon[j].y - polygon[i].y) +
-            polygon[i].x
-      ) {
-        inside = !inside;
-      }
-    }
-    return inside;
   };
 
-  // Draw strokes helper
+  // Restore the original drawStrokes function
   const drawStrokes = useCallback((strokes: DrawingStroke[]) => {
     const context = contextRef.current;
     if (!context) return;
@@ -751,22 +345,450 @@ export function AnimationEditor({
     });
   }, []);
 
+  // Draw frame layers
+  const drawFrameLayers = useCallback(
+    (layers: Layer[], isOnionSkin = false) => {
+      layers.forEach((layer) => {
+        // Check visibility using the new layerVisibility system
+        const layerId = layer.id;
+        const isVisible = layerVisibility[layerId] !== false;
+        if (!isVisible) return;
+
+        const context = contextRef.current;
+        if (!context) return;
+
+        // Get opacity from the new layerOpacities system
+        const opacity = isOnionSkin
+          ? (layerOpacities[layerId] ?? 1) * 0.3
+          : layerOpacities[layerId] ?? 1;
+        context.globalAlpha = opacity;
+
+        drawStrokes(layer.strokes);
+      });
+
+      // Draw strokes from the new layer system
+      Object.entries(layerStrokes).forEach(([layerId, strokes]) => {
+        // Check visibility using the new layerVisibility system
+        const isVisible = layerVisibility[layerId] !== false;
+        if (!isVisible) return;
+
+        const context = contextRef.current;
+        if (!context) return;
+
+        // Get opacity from the new layerOpacities system
+        const opacity = isOnionSkin
+          ? (layerOpacities[layerId] ?? 1) * 0.3
+          : layerOpacities[layerId] ?? 1;
+        context.globalAlpha = opacity;
+
+        drawStrokes(strokes);
+      });
+
+      // Only reset globalAlpha if not drawing onion skin
+      if (contextRef.current && !isOnionSkin) {
+        contextRef.current.globalAlpha = 1;
+      }
+    },
+    [layerVisibility, layerOpacities, layerStrokes, drawStrokes]
+  );
+
+  // Update drawFrame to render images from drawingFrames
+  const drawFrame = useCallback(() => {
+    const context = contextRef.current;
+    if (!context) return;
+    context.save();
+    context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+
+    const frameNumber = selectedFrameNumber ? selectedFrameNumber - 1 : null;
+
+    // 1. Draw white background only for the first frame
+    if (frameNumber === 0) {
+      context.fillStyle = "white";
+      context.fillRect(0, 0, context.canvas.width, context.canvas.height);
+    }
+
+    // 2. Draw grid on top of the background
+    if (showGrid) {
+      context.strokeStyle = "#e0e0e0";
+      context.lineWidth = 0.5;
+      const gridSize = 20;
+
+      const extendedWidth = context.canvas.width * 2;
+      const extendedHeight = context.canvas.height * 2;
+      const offsetX = -context.canvas.width / 2;
+      const offsetY = -context.canvas.height / 2;
+
+      for (let x = offsetX; x <= extendedWidth; x += gridSize) {
+        context.beginPath();
+        context.moveTo(x, offsetY);
+        context.lineTo(x, extendedHeight);
+        context.stroke();
+      }
+      for (let y = offsetY; y <= extendedHeight; y += gridSize) {
+        context.beginPath();
+        context.moveTo(offsetX, y);
+        context.lineTo(extendedWidth, y);
+        context.stroke();
+      }
+    }
+
+    if (frameNumber === null) {
+      context.restore();
+      return;
+    }
+
+    const drawImage = (imageUrl: string) => {
+      if (imageCache.current[imageUrl]) {
+        const img = imageCache.current[imageUrl];
+        const canvasWidth = context.canvas.width;
+        const canvasHeight = context.canvas.height;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > canvasWidth || height > canvasHeight) {
+          const scale = Math.min(canvasWidth / width, canvasHeight / height);
+          width *= scale;
+          height *= scale;
+        }
+
+        const x = (canvasWidth - width) / 2;
+        const y = (canvasHeight - height) / 2;
+        context.drawImage(img, x, y, width, height);
+      } else {
+        const img = new Image();
+        img.onload = () => {
+          imageCache.current[imageUrl] = img;
+          drawFrame(); // Redraw once the image is cached
+        };
+        img.src = imageUrl;
+      }
+    };
+
+    // 3. Render images for the current frame (underneath strokes)
+    drawingFrames
+      .filter(
+        (df) =>
+          df.imageUrl &&
+          frameNumber >= df.frameIndex &&
+          frameNumber < df.frameIndex + df.length
+      )
+      .forEach((frame) => drawImage(frame.imageUrl!));
+
+    // 4. Draw onion skin
+    if (onionSkin) {
+      const prevFrameNumber = frameNumber - 1;
+      if (prevFrameNumber >= 0) {
+        context.globalAlpha = 0.3;
+
+        // Draw onion-skinned images
+        drawingFrames
+          .filter(
+            (df) =>
+              df.imageUrl &&
+              prevFrameNumber >= df.frameIndex &&
+              prevFrameNumber < df.frameIndex + df.length
+          )
+          .forEach((frame) => drawImage(frame.imageUrl!));
+
+        // Draw onion-skinned strokes
+        const prevFrameFolders = drawingFrames.filter(
+          (df) => df.frameIndex === prevFrameNumber
+        );
+        for (const prevFrame of prevFrameFolders) {
+          const prevFolderId = `${prevFrame.rowId}-${prevFrame.frameIndex}`;
+          const prevMainLayerId = `${prevFolderId}-main`;
+          if (
+            layerStrokes[prevMainLayerId] &&
+            layerVisibility[prevMainLayerId] !== false
+          ) {
+            drawStrokes(layerStrokes[prevMainLayerId]);
+          }
+          (folderLayers[prevFolderId] || []).forEach((_, idx) => {
+            const extraLayerId = `${prevFolderId}-extra-${idx}`;
+            if (
+              layerStrokes[extraLayerId] &&
+              layerVisibility[extraLayerId] !== false
+            ) {
+              drawStrokes(layerStrokes[extraLayerId]);
+            }
+          });
+        }
+        context.globalAlpha = 1.0;
+      }
+    }
+
+    // 5. Draw current frame layers from all rows
+    for (const frame of drawingFrames.filter(
+      (df) => df.frameIndex === frameNumber
+    )) {
+      const folderId = `${frame.rowId}-${frame.frameIndex}`;
+      const mainLayerId = `${folderId}-main`;
+      if (layerVisibility[mainLayerId] !== false && layerStrokes[mainLayerId]) {
+        context.globalAlpha = layerOpacities[mainLayerId] ?? 1;
+        drawStrokes(layerStrokes[mainLayerId]);
+      }
+      (folderLayers[folderId] || []).forEach((_, idx) => {
+        const extraLayerId = `${folderId}-extra-${idx}`;
+        if (
+          layerVisibility[extraLayerId] !== false &&
+          layerStrokes[extraLayerId]
+        ) {
+          context.globalAlpha = layerOpacities[extraLayerId] ?? 1;
+          drawStrokes(layerStrokes[extraLayerId]);
+        }
+      });
+    }
+
+    // 6. Draw the current stroke on top
+    if (currentStroke && selectedLayerId?.includes(`-${frameNumber}`)) {
+      context.globalAlpha = 1;
+      drawStrokes([currentStroke]);
+    }
+
+    // 7. Draw eraser circle if active
+    if (eraserCircle && currentTool === "eraser") {
+      context.save();
+      context.fillStyle = "rgba(128, 128, 128, 0.3)";
+      context.beginPath();
+      context.arc(eraserCircle.x, eraserCircle.y, eraserSize, 0, 2 * Math.PI);
+      context.fill();
+      context.restore();
+    }
+
+    context.restore();
+  }, [
+    layerStrokes,
+    folderLayers,
+    layerVisibility,
+    layerOpacities,
+    selectedLayerId,
+    selectedFrameNumber,
+    drawStrokes,
+    showGrid,
+    currentStroke,
+    eraserCircle,
+    currentTool,
+    eraserSize,
+    onionSkin,
+    drawingFrames,
+  ]);
+
+  // Drawing functions
+  const startDrawing = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!contextRef.current || !selectedLayerId) return;
+
+      // Handle panning with middle mouse button or spacebar
+      if (e.button === 1 || isSpacePressed) {
+        setIsPanning(true);
+        setPanOffset({ x: e.clientX, y: e.clientY });
+        return;
+      }
+
+      const { x, y } = getCanvasCoords(e);
+
+      if (currentTool === "move") {
+        // Check if clicking inside existing lasso selection
+        if (lassoSelection && lassoSelection.isActive) {
+          if (isPointInPolygon({ x, y }, lassoSelection.points)) {
+            // Clicking inside lasso - start moving selected strokes
+            setIsDragging(true);
+            // Store the initial mouse position for drag offset calculation
+            setDragOffset({ x, y });
+            // Store original lasso points
+            setOriginalLassoPoints([...lassoSelection.points]);
+            // Store original stroke positions
+            const originalPositions: {
+              [strokeId: string]: { points: Point[] };
+            } = {};
+            lassoSelection.selectedStrokeIds.forEach((strokeId) => {
+              const stroke = frames
+                .find((f) => f.id === currentFrame)
+                ?.layers.find((l) => l.id === currentLayer)
+                ?.strokes.find((s) => s.id === strokeId);
+              if (stroke) {
+                originalPositions[strokeId] = {
+                  points: [...stroke.points],
+                };
+              }
+            });
+            setOriginalStrokePositions(originalPositions);
+            return;
+          } else {
+            // Clicking outside lasso - clear selection
+            setLassoSelection(null);
+            setOriginalLassoPoints([]);
+            setOriginalStrokePositions({});
+          }
+        }
+
+        // Start new lasso selection
+        setIsSelecting(true);
+        setLassoSelection({
+          points: [{ x, y }],
+          selectedStrokeIds: [],
+          isActive: false,
+        });
+        return;
+      }
+
+      setIsDrawing(true);
+
+      // For eraser tool, we'll handle stroke creation in the draw function
+      if (currentTool === "eraser") {
+        return;
+      }
+
+      contextRef.current.beginPath();
+      contextRef.current.moveTo(x, y);
+
+      const newStroke: DrawingStroke = {
+        id: generateStrokeId(),
+        points: [{ x, y }],
+        color,
+        brushSize: currentTool === "eraser" ? eraserSize : brushSize,
+        tool: currentTool,
+        layerId: selectedLayerId,
+      };
+      setCurrentStroke(newStroke);
+    },
+    [
+      color,
+      brushSize,
+      currentTool,
+      selectedLayerId,
+      zoom,
+      isSpacePressed,
+      eraserSize,
+    ]
+  );
+
+  useEffect(() => {
+    drawFrame();
+  }, [selectedFrameNumber, layerVisibility, drawFrame]);
+
+  const handleSidebarSelection = (layerId: string) => {
+    setSelectedLayerId(layerId);
+    const parts = layerId.split("-");
+    if (parts.length >= 3) {
+      const frameIndex = parseInt(parts[2], 10);
+      if (!isNaN(frameIndex)) {
+        setSelectedFrameNumber(frameIndex + 1);
+      }
+    }
+  };
+
+  const handleToggleVisibility = (layerId: string) => {
+    setLayerVisibility((prev) => ({
+      ...prev,
+      [layerId]: prev[layerId] === false ? true : false,
+    }));
+  };
+
+  const draw = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isDrawing || !contextRef.current || !currentStroke) return;
+      const { x, y } = getCanvasCoords(e);
+      setCurrentStroke((prev) =>
+        prev ? { ...prev, points: [...prev.points, { x, y }] } : null
+      );
+      drawFrame();
+    },
+    [isDrawing, currentStroke, getCanvasCoords, drawFrame]
+  );
+
+  const stopDrawing = useCallback(() => {
+    if (isPanning) {
+      setIsPanning(false);
+      return;
+    }
+
+    if (!isDrawing || !currentStroke || !selectedLayerId) return;
+
+    setIsDrawing(false);
+
+    // Add the completed stroke to the permanent layerStrokes state
+    setLayerStrokes((prev) => ({
+      ...prev,
+      [selectedLayerId]: [...(prev[selectedLayerId] || []), currentStroke],
+    }));
+
+    setCurrentStroke(null);
+
+    setTimeout(() => saveToUndoStack(), 0);
+  }, [isDrawing, isPanning, currentStroke, selectedLayerId]);
+
+  // Helper function to check if a point is inside a polygon
+  const isPointInPolygon = (point: Point, polygon: Point[]): boolean => {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      if (
+        polygon[i].y > point.y !== polygon[j].y > point.y &&
+        point.x <
+          ((polygon[j].x - polygon[i].x) * (point.y - polygon[i].y)) /
+            (polygon[j].y - polygon[i].y) +
+            polygon[i].x
+      ) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  };
+
+  // Animation playback
+  const handlePlayPause = () => {
+    setIsPlaying(!isPlaying);
+  };
+
+  const handlePrevFrame = () => {
+    setSelectedFrameNumber((prev) => {
+      const current = prev || 1;
+      if (current <= 1) return isLooping ? maxFrame : 1;
+      return current - 1;
+    });
+  };
+
+  const handleNextFrame = () => {
+    setSelectedFrameNumber((prev) => {
+      const current = prev || 1;
+      if (current >= maxFrame) return isLooping ? 1 : maxFrame;
+      return current + 1;
+    });
+  };
+
+  const handleFirstFrame = () => {
+    setSelectedFrameNumber(1);
+  };
+
+  const handleLastFrame = () => {
+    setSelectedFrameNumber(maxFrame);
+  };
+
+  const handleToggleLoop = () => {
+    setIsLooping(!isLooping);
+  };
+
   // Animation playback
   useEffect(() => {
     if (!isPlaying) return;
 
     const interval = setInterval(() => {
-      setCurrentFrame((prev) => {
-        if (prev >= frames.length) {
-          setIsPlaying(false);
-          return 1;
+      setSelectedFrameNumber((prev) => {
+        const currentFrameNumber = prev || 1;
+
+        if (currentFrameNumber >= maxFrame) {
+          if (isLooping) {
+            return 1; // Loop back to the start
+          }
+          setIsPlaying(false); // Stop playback
+          return maxFrame; // Stay on the last frame
         }
-        return prev + 1;
+        return currentFrameNumber + 1;
       });
-    }, 200); // 5 FPS
+    }, 1000 / (sceneSettings?.frameRate ?? 12));
 
     return () => clearInterval(interval);
-  }, [isPlaying, frames.length]);
+  }, [isPlaying, maxFrame, isLooping, sceneSettings?.frameRate]);
 
   // Tools
   const tools = [
@@ -970,31 +992,103 @@ export function AnimationEditor({
 
   // Undo/Redo functions
   const saveToUndoStack = useCallback(() => {
-    setUndoStack((prev) => [...prev, JSON.parse(JSON.stringify(frames))]);
+    setUndoStack((prev) => {
+      // Create a deep copy of the current state
+      const currentState = {
+        layerStrokes: JSON.parse(JSON.stringify(layerStrokes)),
+        folderLayers: JSON.parse(JSON.stringify(folderLayers)),
+        drawingFrames: JSON.parse(JSON.stringify(drawingFrames)), // Also save drawingFrames
+      };
+      return [...prev, currentState];
+    });
     setRedoStack([]); // Clear redo stack when new action is performed
-  }, [frames]);
+  }, [layerStrokes, folderLayers, drawingFrames]);
+
+  // Update handleDrop to create frames and set image URLs
+  const handleDrop = useCallback(
+    async (rowId: string, frameIndex: number, e: React.DragEvent) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (!file || !file.type.startsWith("image/")) return;
+
+      const url = URL.createObjectURL(file);
+
+      // Check if a frame already exists at this position
+      const existingFrame = drawingFrames.find(
+        (df) => df.rowId === rowId && df.frameIndex === frameIndex
+      );
+
+      if (existingFrame) {
+        // Update existing frame
+        setDrawingFrames((prev) =>
+          prev.map((df) =>
+            df.rowId === rowId && df.frameIndex === frameIndex
+              ? { ...df, imageUrl: url, fileName: file.name }
+              : df
+          )
+        );
+      } else {
+        // Create new frame
+        setDrawingFrames((prev) => [
+          ...prev,
+          {
+            rowId,
+            frameIndex,
+            length: 1,
+            imageUrl: url,
+            fileName: file.name,
+          },
+        ]);
+      }
+
+      // Select the new frame
+      setSelectedLayerId(`${rowId}-${frameIndex}-main`);
+      setSelectedFrameNumber(frameIndex + 1);
+    },
+    [drawingFrames, setDrawingFrames]
+  );
 
   const undo = useCallback(() => {
     if (undoStack.length === 0) return;
 
     const previousState = undoStack[undoStack.length - 1];
-    const currentState = JSON.parse(JSON.stringify(frames));
+    // Save current state to redo stack
+    const currentState = {
+      layerStrokes: JSON.parse(JSON.stringify(layerStrokes)),
+      folderLayers: JSON.parse(JSON.stringify(folderLayers)),
+      drawingFrames: JSON.parse(JSON.stringify(drawingFrames)),
+    };
 
-    setFrames(previousState);
+    // Restore previous state
+    setLayerStrokes(previousState.layerStrokes);
+    setFolderLayers(previousState.folderLayers);
+    setDrawingFrames(previousState.drawingFrames);
+
+    // Update stacks
     setUndoStack((prev) => prev.slice(0, -1));
     setRedoStack((prev) => [...prev, currentState]);
-  }, [undoStack, frames]);
+  }, [undoStack, layerStrokes, folderLayers, drawingFrames]);
 
   const redo = useCallback(() => {
     if (redoStack.length === 0) return;
 
     const nextState = redoStack[redoStack.length - 1];
-    const currentState = JSON.parse(JSON.stringify(frames));
+    // Save current state to undo stack
+    const currentState = {
+      layerStrokes: JSON.parse(JSON.stringify(layerStrokes)),
+      folderLayers: JSON.parse(JSON.stringify(folderLayers)),
+      drawingFrames: JSON.parse(JSON.stringify(drawingFrames)),
+    };
 
-    setFrames(nextState);
+    // Restore next state
+    setLayerStrokes(nextState.layerStrokes);
+    setFolderLayers(nextState.folderLayers);
+    setDrawingFrames(nextState.drawingFrames);
+
+    // Update stacks
     setRedoStack((prev) => prev.slice(0, -1));
     setUndoStack((prev) => [...prev, currentState]);
-  }, [redoStack, frames]);
+  }, [redoStack, layerStrokes, folderLayers, drawingFrames]);
 
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
@@ -1034,8 +1128,6 @@ export function AnimationEditor({
     (l) => l.id === currentLayer
   );
 
-  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
-
   // Update current layer when selectedLayerId changes (from sidebar)
   useEffect(() => {
     if (selectedLayerId) {
@@ -1043,170 +1135,15 @@ export function AnimationEditor({
     }
   }, [selectedLayerId]);
 
-  const [layerOpacities, setLayerOpacities] = useState<{
-    [key: string]: number;
-  }>({});
-
-  // Drawing functions
-  const startDrawing = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!contextRef.current || (!selectedLayerId && !currentLayer)) return;
-
-      // Handle panning with middle mouse button or spacebar
-      if (e.button === 1 || isSpacePressed) {
-        setIsPanning(true);
-        setPanOffset({ x: e.clientX, y: e.clientY });
-        return;
-      }
-
-      const { x, y } = getCanvasCoords(e);
-
-      if (currentTool === "move") {
-        // Check if clicking inside existing lasso selection
-        if (lassoSelection && lassoSelection.isActive) {
-          if (isPointInPolygon({ x, y }, lassoSelection.points)) {
-            // Clicking inside lasso - start moving selected strokes
-            setIsDragging(true);
-            // Store the initial mouse position for drag offset calculation
-            setDragOffset({ x, y });
-            // Store original lasso points
-            setOriginalLassoPoints([...lassoSelection.points]);
-            // Store original stroke positions
-            const originalPositions: {
-              [strokeId: string]: { points: Point[] };
-            } = {};
-            lassoSelection.selectedStrokeIds.forEach((strokeId) => {
-              const stroke = frames
-                .find((f) => f.id === currentFrame)
-                ?.layers.find((l) => l.id === currentLayer)
-                ?.strokes.find((s) => s.id === strokeId);
-              if (stroke) {
-                originalPositions[strokeId] = {
-                  points: [...stroke.points],
-                };
-              }
-            });
-            setOriginalStrokePositions(originalPositions);
-            return;
-          } else {
-            // Clicking outside lasso - clear selection
-            setLassoSelection(null);
-            setOriginalLassoPoints([]);
-            setOriginalStrokePositions({});
-          }
-        }
-
-        // Start new lasso selection
-        setIsSelecting(true);
-        setLassoSelection({
-          points: [{ x, y }],
-          selectedStrokeIds: [],
-          isActive: false,
-        });
-        return;
-      }
-
-      setIsDrawing(true);
-
-      // For eraser tool, we'll handle stroke creation in the draw function
-      if (currentTool === "eraser") {
-        return;
-      }
-
-      contextRef.current.beginPath();
-      contextRef.current.moveTo(x, y);
-
-      const newStroke: DrawingStroke = {
-        id: generateStrokeId(),
-        points: [{ x, y }],
-        color,
-        brushSize: currentTool === "eraser" ? eraserSize : brushSize,
-        tool: currentTool,
-        layerId: selectedLayerId || currentLayer,
-      };
-      setCurrentStroke(newStroke);
-
-      // Store stroke in the new layer system if we have a selected layer
-      if (selectedLayerId) {
-        setLayerStrokes((prev) => ({
-          ...prev,
-          [selectedLayerId]: [...(prev[selectedLayerId] || []), newStroke],
-        }));
-      }
-    },
-    [
-      color,
-      brushSize,
-      currentTool,
-      currentLayer,
-      selectedLayerId,
-      zoom,
-      frames,
-      currentFrame,
-      lassoSelection,
-      eraserSize,
-    ]
-  );
-
-  // New stroke storage system for the sidebar layer system
-  const [layerStrokes, setLayerStrokes] = useState<{
-    [layerId: string]: DrawingStroke[];
-  }>({});
-
-  // Draw frame layers
-  const drawFrameLayers = useCallback(
-    (layers: Layer[], isOnionSkin = false) => {
-      layers.forEach((layer) => {
-        // Check visibility using the new layerVisibility system
-        const layerId = layer.id;
-        const isVisible = layerVisibility[layerId] !== false;
-        if (!isVisible) return;
-
-        const context = contextRef.current;
-        if (!context) return;
-
-        // Get opacity from the new layerOpacities system
-        const opacity = isOnionSkin
-          ? (layerOpacities[layerId] ?? 1) * 0.3
-          : layerOpacities[layerId] ?? 1;
-        context.globalAlpha = opacity;
-
-        drawStrokes(layer.strokes);
-      });
-
-      // Draw strokes from the new layer system
-      Object.entries(layerStrokes).forEach(([layerId, strokes]) => {
-        // Check visibility using the new layerVisibility system
-        const isVisible = layerVisibility[layerId] !== false;
-        if (!isVisible) return;
-
-        const context = contextRef.current;
-        if (!context) return;
-
-        // Get opacity from the new layerOpacities system
-        const opacity = isOnionSkin
-          ? (layerOpacities[layerId] ?? 1) * 0.3
-          : layerOpacities[layerId] ?? 1;
-        context.globalAlpha = opacity;
-
-        drawStrokes(strokes);
-      });
-
-      // Only reset globalAlpha if not drawing onion skin
-      if (contextRef.current && !isOnionSkin) {
-        contextRef.current.globalAlpha = 1;
-      }
-    },
-    [layerVisibility, layerOpacities, layerStrokes]
-  );
-
-  const [openFolders, setOpenFolders] = useState<{ [key: string]: boolean }>(
-    {}
-  );
-
-  const toggleFolder = (id: string) => {
-    setOpenFolders((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+  // Auto-select the first layer on new scene creation
+  useEffect(() => {
+    // If there's exactly one frame (the default background) and nothing is selected
+    if (drawingFrames.length === 1 && !selectedLayerId) {
+      const firstFrame = drawingFrames[0];
+      const firstLayerId = `${firstFrame.rowId}-${firstFrame.frameIndex}-main`;
+      setSelectedLayerId(firstLayerId);
+    }
+  }, [drawingFrames]); // Run only when drawingFrames array changes
 
   // Helper to get file name from imageUrl (handles blob/object URLs and real file names)
   function getFileName(url?: string) {
@@ -1257,42 +1194,8 @@ export function AnimationEditor({
     };
   });
 
-  const [folderLayers, setFolderLayers] = useState<{ [key: string]: string[] }>(
-    {}
-  );
-
-  const handleAddLayer = (selectedId: string) => {
-    // Extract the folder ID from the selected layer ID
-    const folderId = selectedId.includes("-extra-")
-      ? selectedId.split("-extra-")[0]
-      : selectedId;
-
-    setFolderLayers((prev) => {
-      const layers = prev[folderId] || [];
-      const nextNum = layers.length + 2; // Start from 2 since the main layer is Untitled.1
-      return { ...prev, [folderId]: [...layers, `Untitled.${nextNum}`] };
-    });
-  };
-
-  const handleDeleteLayer = (selectedId: string) => {
-    if (selectedId.includes("-extra-")) {
-      // Delete extra layer
-      const [folderId, extraPart] = selectedId.split("-extra-");
-      const extraIndex = parseInt(extraPart);
-
-      setFolderLayers((prev) => {
-        const layers = prev[folderId] || [];
-        const newLayers = layers.filter((_, index) => index !== extraIndex);
-        return { ...prev, [folderId]: newLayers };
-      });
-
-      // Clear selection if the deleted layer was selected
-      setSelectedLayerId(null);
-    } else {
-      // For main layers, we can't delete them as they represent the folder itself
-      // But we could clear their content or show a warning
-      console.log("Cannot delete main layer");
-    }
+  const toggleFolder = (id: string) => {
+    setOpenFolders((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   // Handler for opacity change
@@ -1338,97 +1241,39 @@ export function AnimationEditor({
     return match ? match[1] : selectedLayerId;
   }
 
-  // Draw current frame
-  const drawFrame = useCallback(() => {
-    const context = contextRef.current;
-    if (!context) return;
-    context.save();
-    // Clear canvas
-    context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-
-    // Only render if a frame folder is selected
-    const activeFolderId = getActiveFrameFolderId(selectedLayerId);
-    if (!activeFolderId) {
-      context.restore();
-      return;
-    }
-
-    // Gather all layers for this frame folder (main + extra), in order
-    // Main layer: `${activeFolderId}-main`, extra layers: `${activeFolderId}-extra-0`, `${activeFolderId}-extra-1`, ...
-    const layersToRender: { id: string; strokes: DrawingStroke[] }[] = [];
-    // Main layer first
-    if (layerStrokes[`${activeFolderId}-main`]) {
-      layersToRender.push({
-        id: `${activeFolderId}-main`,
-        strokes: layerStrokes[`${activeFolderId}-main`],
-      });
-    }
-    // Extra layers in order
-    if (folderLayers[activeFolderId]) {
-      folderLayers[activeFolderId].forEach((_, idx) => {
-        const lid = `${activeFolderId}-extra-${idx}`;
-        if (layerStrokes[lid]) {
-          layersToRender.push({ id: lid, strokes: layerStrokes[lid] });
-        }
-      });
-    }
-
-    // Render all layers in order (bottom to top)
-    layersToRender.forEach(({ id, strokes }) => {
-      // Respect opacity and visibility
-      const isVisible = layerVisibility[id] !== false;
-      if (!isVisible) return;
-      const opacity = layerOpacities[id] ?? 1;
-      context.globalAlpha = opacity;
-      drawStrokes(strokes);
-    });
-
-    // Draw eraser circle
-    if (eraserCircle && currentTool === "eraser") {
-      context.save();
-      context.fillStyle = "rgba(128, 128, 128, 0.3)"; // Light gray with transparency
-      context.beginPath();
-      context.arc(eraserCircle.x, eraserCircle.y, eraserSize, 0, 2 * Math.PI);
-      context.fill();
-      context.restore();
-    }
-
-    context.restore();
-  }, [
-    selectedLayerId,
-    layerStrokes,
-    folderLayers,
-    layerVisibility,
-    layerOpacities,
-    eraserCircle,
-    currentTool,
-    eraserSize,
-    drawStrokes,
-  ]);
-
-  // Update canvas when frame changes
-  useEffect(() => {
-    drawFrame();
-  }, [drawFrame, selectedLayerId]);
-
-  function moveRowUp(rowId: string) {
-    setRows((prev) => {
-      const idx = prev.findIndex((r) => r.id === rowId);
+  // This function will now reorder drawingFrames, not rows.
+  function moveFrameFolderUp(folderId: string) {
+    setDrawingFrames((prev) => {
+      const idx = prev.findIndex(
+        (df) => `${df.rowId}-${df.frameIndex}` === folderId
+      );
       if (idx > 0) {
-        const newRows = [...prev];
-        [newRows[idx - 1], newRows[idx]] = [newRows[idx], newRows[idx - 1]];
-        return newRows;
+        const newFrames = [...prev];
+        // Swap the elements
+        [newFrames[idx - 1], newFrames[idx]] = [
+          newFrames[idx],
+          newFrames[idx - 1],
+        ];
+        return newFrames;
       }
       return prev;
     });
   }
-  function moveRowDown(rowId: string) {
-    setRows((prev) => {
-      const idx = prev.findIndex((r) => r.id === rowId);
+
+  // This function will also reorder drawingFrames.
+  function moveFrameFolderDown(folderId: string) {
+    setDrawingFrames((prev) => {
+      const idx = prev.findIndex(
+        (df) => `${df.rowId}-${df.frameIndex}` === folderId
+      );
       if (idx < prev.length - 1 && idx !== -1) {
-        const newRows = [...prev];
-        [newRows[idx], newRows[idx + 1]] = [newRows[idx + 1], newRows[idx]];
-        return newRows;
+        const newFrames = [...prev];
+        // Swap the elements
+        [newFrames[idx], newFrames[idx + 1]] = [
+          newFrames[idx + 1],
+          newFrames[idx],
+        ];
+        return newFrames;
       }
       return prev;
     });
@@ -1570,13 +1415,17 @@ export function AnimationEditor({
               variant={onionSkin ? "default" : "ghost"}
               size="sm"
               className="w-12 h-12 p-0"
-              onClick={() => setOnionSkin(!onionSkin)}
+              onClick={() => {
+                console.log("Onion skin toggled:", !onionSkin);
+                setOnionSkin(!onionSkin);
+                drawFrame(); // Force redraw when toggling onion skin
+              }}
               title="Onion Skin"
             >
               {onionSkin ? (
                 <Eye className="w-5 h-5" />
               ) : (
-                <EyeOff className="w-5 h-5" />
+                <EyeOff className="w-s h-5" />
               )}
             </Button>
 
@@ -1800,6 +1649,17 @@ export function AnimationEditor({
               setSelectedRow={setSelectedRow}
               selectedLayerId={selectedLayerId}
               setSelectedLayerId={setSelectedLayerId}
+              selectedFrameNumber={selectedFrameNumber}
+              setSelectedFrameNumber={setSelectedFrameNumber}
+              onDrop={handleDrop}
+              isPlaying={isPlaying}
+              onPlayPause={handlePlayPause}
+              onPrevFrame={handlePrevFrame}
+              onNextFrame={handleNextFrame}
+              onFirstFrame={handleFirstFrame}
+              onLastFrame={handleLastFrame}
+              isLooping={isLooping}
+              onToggleLoop={handleToggleLoop}
             />
           </div>
         </div>
@@ -1822,9 +1682,32 @@ export function AnimationEditor({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() =>
-                  selectedLayerId && handleDeleteLayer(selectedLayerId)
-                }
+                onClick={() => {
+                  if (selectedLayerId) {
+                    // Delete the strokes for the layer
+                    setLayerStrokes((prev) => {
+                      const newStrokes = { ...prev };
+                      delete newStrokes[selectedLayerId];
+                      return newStrokes;
+                    });
+
+                    // If it's an extra layer, also remove it from folderLayers
+                    if (selectedLayerId.includes("-extra-")) {
+                      const [folderId, extraPart] =
+                        selectedLayerId.split("-extra-");
+                      const extraIndex = parseInt(extraPart);
+                      setFolderLayers((prev) => {
+                        const layers = prev[folderId] || [];
+                        const newLayers = layers.filter(
+                          (_, index) => index !== extraIndex
+                        );
+                        return { ...prev, [folderId]: newLayers };
+                      });
+                      setSelectedLayerId(null);
+                    }
+                    saveToUndoStack();
+                  }
+                }}
                 className="w-8 h-8 p-0 text-red-400 hover:text-red-300"
                 disabled={!selectedLayerId}
               >
@@ -1885,9 +1768,7 @@ export function AnimationEditor({
                   </div>
                   <div
                     className="flex items-center gap-2 cursor-pointer ml-2"
-                    onClick={() => {
-                      setSelectedLayerId(folder.id);
-                    }}
+                    onClick={() => handleSidebarSelection(folder.id)}
                   >
                     <Folder className="w-4 h-4 text-gray-400" />
                     <span className="font-medium text-xs">{folder.label}</span>
@@ -1901,7 +1782,7 @@ export function AnimationEditor({
                           <button
                             className="text-gray-400 hover:text-white px-1"
                             title="Move Up"
-                            onClick={() => moveRowUp(folder.id)}
+                            onClick={() => moveFrameFolderUp(folder.id)}
                           >
                             <ChevronUp className="w-4 h-4" />
                           </button>
@@ -1911,7 +1792,7 @@ export function AnimationEditor({
                           <button
                             className="text-gray-400 hover:text-white px-1"
                             title="Move Down"
-                            onClick={() => moveRowDown(folder.id)}
+                            onClick={() => moveFrameFolderDown(folder.id)}
                           >
                             <ChevronDown className="w-4 h-4" />
                           </button>
@@ -1930,7 +1811,9 @@ export function AnimationEditor({
                           ? "bg-blue-600"
                           : "bg-gray-600 hover:bg-gray-500"
                       }`}
-                      onClick={() => setSelectedLayerId(`${folder.id}-main`)}
+                      onClick={() =>
+                        handleSidebarSelection(`${folder.id}-main`)
+                      }
                     >
                       <div className="flex items-center gap-2 flex-1">
                         <Eye
@@ -1941,13 +1824,7 @@ export function AnimationEditor({
                           }`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setLayerVisibility((prev) => ({
-                              ...prev,
-                              [`${folder.id}-main`]:
-                                prev[`${folder.id}-main`] === false
-                                  ? true
-                                  : false,
-                            }));
+                            handleToggleVisibility(`${folder.id}-main`);
                           }}
                         />
                         {editingLayerName === `${folder.id}-main` ? (
@@ -2002,7 +1879,7 @@ export function AnimationEditor({
                             : "bg-gray-600 hover:bg-gray-500"
                         }`}
                         onClick={() =>
-                          setSelectedLayerId(`${folder.id}-extra-${idx}`)
+                          handleSidebarSelection(`${folder.id}-extra-${idx}`)
                         }
                       >
                         <div className="flex items-center gap-2 flex-1">
@@ -2015,13 +1892,9 @@ export function AnimationEditor({
                             }`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              setLayerVisibility((prev) => ({
-                                ...prev,
-                                [`${folder.id}-extra-${idx}`]:
-                                  prev[`${folder.id}-extra-${idx}`] === false
-                                    ? true
-                                    : false,
-                              }));
+                              handleToggleVisibility(
+                                `${folder.id}-extra-${idx}`
+                              );
                             }}
                           />
                           {editingLayerName === `${folder.id}-extra-${idx}` ? (
@@ -2058,7 +1931,13 @@ export function AnimationEditor({
                               );
                             }}
                           />
-                          <div className="text-xs text-gray-300">100%</div>
+                          <div className="text-xs text-gray-300">
+                            {Math.round(
+                              (layerOpacities[`${folder.id}-extra-${idx}`] ??
+                                1) * 100
+                            )}
+                            %
+                          </div>
                         </div>
                       </div>
                     ))}

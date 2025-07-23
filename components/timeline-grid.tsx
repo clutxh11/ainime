@@ -8,6 +8,16 @@ import {
   TableCell,
 } from "./ui/table";
 import { Button } from "./ui/button";
+import {
+  Trash2,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  ChevronLeft,
+  ChevronRight,
+  Repeat,
+} from "lucide-react";
 
 export interface DrawingFrame {
   rowId: string;
@@ -28,6 +38,17 @@ interface TimelineGridProps {
   setSelectedRow: (id: string) => void;
   selectedLayerId?: string | null;
   setSelectedLayerId?: (id: string) => void;
+  selectedFrameNumber?: number | null;
+  setSelectedFrameNumber?: (n: number | null) => void;
+  onDrop?: (rowId: string, frameIndex: number, e: React.DragEvent) => void;
+  isPlaying?: boolean;
+  onPlayPause?: () => void;
+  onPrevFrame?: () => void;
+  onNextFrame?: () => void;
+  onFirstFrame?: () => void;
+  onLastFrame?: () => void;
+  isLooping?: boolean;
+  onToggleLoop?: () => void;
 }
 
 export default function TimelineGrid({
@@ -41,6 +62,17 @@ export default function TimelineGrid({
   setSelectedRow,
   selectedLayerId,
   setSelectedLayerId,
+  selectedFrameNumber,
+  setSelectedFrameNumber,
+  onDrop,
+  isPlaying,
+  onPlayPause,
+  onPrevFrame,
+  onNextFrame,
+  onFirstFrame,
+  onLastFrame,
+  isLooping,
+  onToggleLoop,
 }: TimelineGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = React.useState<null | {
@@ -57,18 +89,29 @@ export default function TimelineGrid({
 
   const handleAddFrame = () => {
     if (!selectedRow) return;
-    // Find the first empty frame in the selected row
-    const rowFrames = drawingFrames
+
+    // Create a set of all occupied frame indices in the selected row
+    const occupiedFrames = new Set<number>();
+    drawingFrames
       .filter((df) => df.rowId === selectedRow)
-      .map((df) => df.frameIndex);
+      .forEach((df) => {
+        for (let i = 0; i < df.length; i++) {
+          occupiedFrames.add(df.frameIndex + i);
+        }
+      });
+
+    // Find the first empty frame
     let targetFrame = 0;
-    while (rowFrames.includes(targetFrame) && targetFrame < frames) {
+    while (occupiedFrames.has(targetFrame) && targetFrame < frames) {
       targetFrame++;
     }
+
     // If all frames are filled, grow the timeline
     if (targetFrame >= frames) {
       setFrames((prev) => prev + 1);
     }
+
+    // Add the new frame at the first available spot
     setDrawingFrames((prev) => [
       ...prev,
       { rowId: selectedRow, frameIndex: targetFrame, length: 1 },
@@ -83,16 +126,20 @@ export default function TimelineGrid({
 
   const handleDeleteFrame = () => {
     if (!selectedLayerId) return;
-    // selectedLayerId is in the format rowId-frameIndex
-    const [rowId, frameIndexStr] = selectedLayerId.split("-");
-    const frameIndex = parseInt(frameIndexStr, 10);
-    setDrawingFrames(
-      drawingFrames.filter(
-        (df) => !(df.rowId === rowId && df.frameIndex === frameIndex)
-      )
+    // Extract the row and frame index from the selectedLayerId
+    const parts = selectedLayerId.split("-");
+    const rowId = parts[0] + "-" + parts[1]; // e.g., "row-1"
+    const frameIndex = parseInt(parts[2], 10); // The frame number
+
+    // Remove the frame from drawingFrames
+    setDrawingFrames((prev) =>
+      prev.filter((df) => !(df.rowId === rowId && df.frameIndex === frameIndex))
     );
-    // Optionally, clear selection after delete
-    if (setSelectedLayerId) setSelectedLayerId(null);
+
+    // Clear selection
+    if (setSelectedLayerId) {
+      setSelectedLayerId(null);
+    }
   };
 
   // Drag logic for frame extension
@@ -158,12 +205,83 @@ export default function TimelineGrid({
     };
   }, [dragging, frames]);
 
+  // Modified cell click handler
+  const handleCellClick = (rowId: string, frameIndex: number) => {
+    if (setSelectedLayerId && setSelectedFrameNumber) {
+      const folderId = `${rowId}-${frameIndex}`;
+      setSelectedLayerId(folderId);
+      setSelectedFrameNumber(frameIndex + 1); // +1 because frameIndex is 0-based
+    }
+  };
+
   return (
     <div
       ref={gridRef}
       className="w-full bg-gray-900 border-t border-gray-700 p-2"
     >
       <div className="flex items-center gap-2 mb-2">
+        {/* Playback Controls */}
+        <div className="flex items-center gap-1 mr-4">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onFirstFrame}
+            className="px-2"
+            title="Go to First Frame"
+          >
+            <SkipBack className="w-4 h-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onPrevFrame}
+            className="px-2"
+            title="Previous Frame"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onPlayPause}
+            className="px-2"
+            title={isPlaying ? "Pause" : "Play"}
+          >
+            {isPlaying ? (
+              <Pause className="w-4 h-4" />
+            ) : (
+              <Play className="w-4 h-4" />
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onNextFrame}
+            className="px-2"
+            title="Next Frame"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onLastFrame}
+            className="px-2"
+            title="Go to Last Frame"
+          >
+            <SkipForward className="w-4 h-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant={isLooping ? "default" : "outline"}
+            onClick={onToggleLoop}
+            className="px-2 ml-2"
+            title={isLooping ? "Loop Enabled" : "Loop Disabled"}
+          >
+            <Repeat className="w-4 h-4" />
+          </Button>
+        </div>
+
         <Button size="sm" variant="outline" onClick={handleAddFrame}>
           + Add Frame
         </Button>
@@ -172,12 +290,13 @@ export default function TimelineGrid({
         </Button>
         <Button
           size="sm"
-          variant="destructive"
+          variant="outline"
           onClick={handleDeleteFrame}
           disabled={!selectedLayerId}
-          className="ml-2 flex items-center justify-center w-8 h-8 p-0"
+          className="ml-2 flex items-center gap-2 text-red-400 hover:text-red-300"
         >
-          🗑️
+          <Trash2 className="w-4 h-4" />
+          Delete Frame
         </Button>
       </div>
       <div className="overflow-y-auto max-h-48">
@@ -186,7 +305,14 @@ export default function TimelineGrid({
             <TableRow>
               <TableHead className="w-24">Frames</TableHead>
               {Array.from({ length: frames }).map((_, i) => (
-                <TableHead key={i} className="w-16 text-center">
+                <TableHead
+                  key={i}
+                  className={`w-16 text-center ${
+                    selectedFrameNumber === i + 1
+                      ? "bg-blue-600 text-white"
+                      : ""
+                  }`}
+                >
                   {i + 1}
                 </TableHead>
               ))}
@@ -243,9 +369,7 @@ export default function TimelineGrid({
                           fontSize: "0.75rem",
                           padding: 0,
                         }}
-                        onClick={() =>
-                          setSelectedLayerId && setSelectedLayerId(folderId)
-                        }
+                        onClick={() => handleCellClick(row.id, i)}
                         onDrop={(e) => handleDrop(row.id, i, e)}
                         onDragOver={handleDragOver}
                       >
@@ -383,23 +507,11 @@ export default function TimelineGrid({
                         key={row.id + "-" + i}
                         className="h-8 bg-gray-800 border border-gray-700 text-center align-middle"
                         onDrop={(e) => {
-                          handleDrop(row.id, i, e);
-                          // If dropped image, create a drawing frame at this cell
-                          const file = e.dataTransfer.files[0];
-                          if (file && file.type.startsWith("image/")) {
-                            setDrawingFrames((prev) => [
-                              ...prev,
-                              {
-                                rowId: row.id,
-                                frameIndex: i,
-                                length: 1,
-                                imageUrl: URL.createObjectURL(file),
-                                fileName: file.name,
-                              },
-                            ]);
+                          if (onDrop) {
+                            onDrop(row.id, i, e);
                           }
                         }}
-                        onDragOver={handleDragOver}
+                        onDragOver={(e) => e.preventDefault()}
                       ></TableCell>
                     );
                   }
