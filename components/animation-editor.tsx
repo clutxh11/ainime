@@ -102,6 +102,79 @@ interface SelectionArea {
   selectedStrokes: DrawingStroke[];
 }
 
+// Helper function to check if a point is inside a polygon
+const isPointInPolygon = (point: Point, polygon: Point[]): boolean => {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    if (
+      polygon[i].y > point.y !== polygon[j].y > point.y &&
+      point.x <
+        ((polygon[j].x - polygon[i].x) * (point.y - polygon[i].y)) /
+          (polygon[j].y - polygon[i].y) +
+          polygon[i].x
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
+};
+
+// Helper to get the active frame folder id from selectedLayerId
+function getActiveFrameFolderId(selectedLayerId: string | null) {
+  if (!selectedLayerId) return null;
+  // e.g. "row1-0-main" or "row1-0-extra-0" => "row1-0"
+  const match = selectedLayerId.match(/^(row-\d+-\d+)/);
+  return match ? match[1] : null; // Return null if no match
+}
+
+// Helper to get file name from imageUrl
+function getFileName(url?: string) {
+  if (!url) return "";
+  try {
+    const match = url.match(/([^/]+\.[a-zA-Z0-9]+)(\?|$)/);
+    if (match) return match[1];
+    return decodeURIComponent(url.split("/").pop() || "");
+  } catch {
+    return url;
+  }
+}
+
+// Helper to get file name before extension
+function getFileNameBase(url?: string) {
+  if (!url) return "";
+  try {
+    const match = url.match(/([^/]+)\.[a-zA-Z0-9]+(\?|$)/);
+    if (match) return match[1];
+    return decodeURIComponent(url.split("/").pop() || "").split(".")[0];
+  } catch {
+    return url;
+  }
+}
+
+// Helper to get file name before extension from a string
+function getFileNameBaseFromString(name?: string) {
+  if (!name) return "";
+  return name.split(".")[0];
+}
+
+const getLassoBoundingBox = (points: Point[]) => {
+  if (points.length === 0) {
+    return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  }
+  let minX = points[0].x;
+  let maxX = points[0].x;
+  let minY = points[0].y;
+  let maxY = points[0].y;
+
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    maxX = Math.max(maxX, point.x);
+    minY = Math.min(minY, point.y);
+    maxY = Math.max(maxY, point.y);
+  }
+  return { minX, maxX, minY, maxY };
+};
+
 export function AnimationEditor({
   onViewChange,
   sceneSettings,
@@ -178,8 +251,33 @@ export function AnimationEditor({
   const [folderLayers, setFolderLayers] = useState<{ [key: string]: string[] }>(
     {}
   );
+  const [layerOrder, setLayerOrder] = useState<Record<string, string[]>>({});
   const imageCache = useRef<Record<string, HTMLImageElement>>({});
   const [isLooping, setIsLooping] = useState(false);
+  const [contextMenu, setContextMenu] = useState({
+    visible: false,
+    x: 0,
+    y: 0,
+  });
+  const [clipboard, setClipboard] = useState<DrawingStroke[] | null>(null);
+  const [pastePreview, setPastePreview] = useState<DrawingStroke[] | null>(
+    null
+  );
+  const mousePosRef = useRef({ x: 0, y: 0 });
+  const longPressTimer = useRef<NodeJS.Timeout>();
+  const [isReadyToDrag, setIsReadyToDrag] = useState(false);
+  const mouseDownPos = useRef({ x: 0, y: 0 });
+  const [isResizing, setIsResizing] = useState(false);
+  const [activeHandle, setActiveHandle] = useState<string | null>(null);
+  const [isDraggingResizeBox, setIsDraggingResizeBox] = useState(false);
+  const [resizeBox, setResizeBox] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    strokes: DrawingStroke[];
+    originalStrokes: DrawingStroke[]; // To revert on cancel
+  } | null>(null);
 
   const [rows, setRows] = useState([
     { id: "row-1", name: "Row1" },
@@ -401,10 +499,14 @@ export function AnimationEditor({
 
     const frameNumber = selectedFrameNumber ? selectedFrameNumber - 1 : null;
 
-    // 1. Draw white background only for the first frame
-    if (frameNumber === 0) {
-      context.fillStyle = "white";
-      context.fillRect(0, 0, context.canvas.width, context.canvas.height);
+    // 1. Draw white background if specified
+    if (frameNumber !== null) {
+      const frame = drawingFrames.find((df) => df.frameIndex === 0);
+      if (frame) {
+        // Only for the background frame
+        context.fillStyle = "white";
+        context.fillRect(0, 0, context.canvas.width, context.canvas.height);
+      }
     }
 
     // 2. Draw grid on top of the background
@@ -464,23 +566,11 @@ export function AnimationEditor({
       }
     };
 
-    // 3. Render images for the current frame (underneath strokes)
-    drawingFrames
-      .filter(
-        (df) =>
-          df.imageUrl &&
-          frameNumber >= df.frameIndex &&
-          frameNumber < df.frameIndex + df.length
-      )
-      .forEach((frame) => drawImage(frame.imageUrl!));
-
-    // 4. Draw onion skin
+    // 3. Render images for onion skin (underneath strokes)
     if (onionSkin) {
       const prevFrameNumber = frameNumber - 1;
       if (prevFrameNumber >= 0) {
         context.globalAlpha = 0.3;
-
-        // Draw onion-skinned images
         drawingFrames
           .filter(
             (df) =>
@@ -489,54 +579,53 @@ export function AnimationEditor({
               prevFrameNumber < df.frameIndex + df.length
           )
           .forEach((frame) => drawImage(frame.imageUrl!));
+        context.globalAlpha = 1.0;
+      }
+    }
 
-        // Draw onion-skinned strokes
+    // 4. Draw onion-skinned strokes
+    if (onionSkin) {
+      const prevFrameNumber = frameNumber - 1;
+      if (prevFrameNumber >= 0) {
+        context.globalAlpha = 0.3;
         const prevFrameFolders = drawingFrames.filter(
           (df) => df.frameIndex === prevFrameNumber
         );
         for (const prevFrame of prevFrameFolders) {
           const prevFolderId = `${prevFrame.rowId}-${prevFrame.frameIndex}`;
-          const prevMainLayerId = `${prevFolderId}-main`;
-          if (
-            layerStrokes[prevMainLayerId] &&
-            layerVisibility[prevMainLayerId] !== false
-          ) {
-            drawStrokes(layerStrokes[prevMainLayerId]);
-          }
-          (folderLayers[prevFolderId] || []).forEach((_, idx) => {
-            const extraLayerId = `${prevFolderId}-extra-${idx}`;
-            if (
-              layerStrokes[extraLayerId] &&
-              layerVisibility[extraLayerId] !== false
-            ) {
-              drawStrokes(layerStrokes[extraLayerId]);
+          const orderedLayers = layerOrder[prevFolderId] || [];
+          for (const layerId of orderedLayers) {
+            if (layerStrokes[layerId] && layerVisibility[layerId] !== false) {
+              drawStrokes(layerStrokes[layerId]);
             }
-          });
+          }
         }
         context.globalAlpha = 1.0;
       }
     }
 
-    // 5. Draw current frame layers from all rows
+    // 5. Draw current frame layers from all rows in the correct order
     for (const frame of drawingFrames.filter(
       (df) => df.frameIndex === frameNumber
     )) {
       const folderId = `${frame.rowId}-${frame.frameIndex}`;
-      const mainLayerId = `${folderId}-main`;
-      if (layerVisibility[mainLayerId] !== false && layerStrokes[mainLayerId]) {
-        context.globalAlpha = layerOpacities[mainLayerId] ?? 1;
-        drawStrokes(layerStrokes[mainLayerId]);
-      }
-      (folderLayers[folderId] || []).forEach((_, idx) => {
-        const extraLayerId = `${folderId}-extra-${idx}`;
-        if (
-          layerVisibility[extraLayerId] !== false &&
-          layerStrokes[extraLayerId]
-        ) {
-          context.globalAlpha = layerOpacities[extraLayerId] ?? 1;
-          drawStrokes(layerStrokes[extraLayerId]);
+      const orderedLayers = layerOrder[folderId] || [];
+
+      for (const layerId of orderedLayers) {
+        if (layerVisibility[layerId] === false) continue;
+
+        context.globalAlpha = layerOpacities[layerId] ?? 1;
+
+        // If it's the main layer and has an image, draw it
+        if (layerId.endsWith("-main") && frame.imageUrl) {
+          drawImage(frame.imageUrl);
         }
-      });
+
+        // Draw strokes for the layer
+        if (layerStrokes[layerId]) {
+          drawStrokes(layerStrokes[layerId]);
+        }
+      }
     }
 
     // 6. Draw the current stroke on top
@@ -552,6 +641,85 @@ export function AnimationEditor({
       context.beginPath();
       context.arc(eraserCircle.x, eraserCircle.y, eraserSize, 0, 2 * Math.PI);
       context.fill();
+      context.restore();
+    }
+
+    // 8. Draw lasso selection if active
+    if (lassoSelection && lassoSelection.points.length > 0) {
+      context.save();
+      context.strokeStyle = "rgba(0, 150, 255, 0.8)";
+      context.lineWidth = 1;
+      context.setLineDash([4, 4]);
+      context.beginPath();
+      context.moveTo(lassoSelection.points[0].x, lassoSelection.points[0].y);
+      for (let i = 1; i < lassoSelection.points.length; i++) {
+        context.lineTo(lassoSelection.points[i].x, lassoSelection.points[i].y);
+      }
+      if (lassoSelection.isActive) {
+        context.closePath();
+      }
+      context.stroke();
+      context.restore();
+    }
+
+    // Draw paste preview
+    if (pastePreview) {
+      const { x: cursorX, y: cursorY } = mousePosRef.current;
+      const boundingBox = getStrokesBoundingBox(pastePreview);
+      const offsetX = cursorX - boundingBox.minX;
+      const offsetY = cursorY - boundingBox.minY;
+
+      pastePreview.forEach((stroke) => {
+        context.globalAlpha = 0.5; // Make preview semi-transparent
+        context.strokeStyle = stroke.color;
+        context.lineWidth = stroke.brushSize * zoom;
+        context.lineCap = "round";
+        context.lineJoin = "round";
+        context.beginPath();
+        stroke.points.forEach((point, index) => {
+          const newX = (point.x + offsetX - panOffset.x) * zoom;
+          const newY = (point.y + offsetY - panOffset.y) * zoom;
+          if (index === 0) {
+            context.moveTo(newX, newY);
+          } else {
+            context.lineTo(newX, newY);
+          }
+        });
+        context.stroke();
+      });
+      context.globalAlpha = 1; // Reset alpha
+    }
+
+    // Draw resize box if active
+    if (isResizing && resizeBox) {
+      context.save();
+      context.strokeStyle = "#007bff";
+      context.lineWidth = 1;
+      context.setLineDash([6, 3]);
+
+      const { x, y, width, height } = resizeBox;
+      const screenX = (x - panOffset.x) * zoom;
+      const screenY = (y - panOffset.y) * zoom;
+      const screenWidth = width * zoom;
+      const screenHeight = height * zoom;
+
+      // Draw box
+      context.strokeRect(screenX, screenY, screenWidth, screenHeight);
+
+      // Draw handles
+      const handles = getResizeHandles(resizeBox);
+      context.fillStyle = "#007bff";
+      Object.values(handles).forEach((handle) => {
+        const handleScreenX = (handle.x - panOffset.x) * zoom;
+        const handleScreenY = (handle.y - panOffset.y) * zoom;
+        context.fillRect(
+          handleScreenX,
+          handleScreenY,
+          handle.size,
+          handle.size
+        );
+      });
+
       context.restore();
     }
 
@@ -571,12 +739,54 @@ export function AnimationEditor({
     eraserSize,
     onionSkin,
     drawingFrames,
+    layerOrder,
+    lassoSelection,
+    zoom,
+    panOffset,
+    pastePreview,
+    isResizing,
+    resizeBox,
   ]);
 
   // Drawing functions
   const startDrawing = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!contextRef.current || !selectedLayerId) return;
+      const coords = getCanvasCoords(e);
+      const { x, y } = coords;
+
+      if (isResizing && resizeBox) {
+        // Check for handle clicks
+        const handles = getResizeHandles(resizeBox);
+        for (const [handleName, handle] of Object.entries(handles)) {
+          const handleScreenX = (handle.x - panOffset.x) * zoom;
+          const handleScreenY = (handle.y - panOffset.y) * zoom;
+          if (
+            x >= handleScreenX &&
+            x <= handleScreenX + handle.size &&
+            y >= handleScreenY &&
+            y <= handleScreenY + handle.size
+          ) {
+            setActiveHandle(handleName);
+            return;
+          }
+        }
+
+        // Check for clicking inside box to drag
+        const { x: boxX, y: boxY, width, height } = resizeBox;
+        if (x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height) {
+          setIsDraggingResizeBox(true);
+          setDragOffset({ x: x - boxX, y: y - boxY });
+          return;
+        }
+
+        // Clicking outside cancels resize
+        setIsResizing(false);
+        setResizeBox(null);
+        setActiveHandle(null);
+        setIsDraggingResizeBox(false);
+        return;
+      }
 
       // Handle panning with middle mouse button or spacebar
       if (e.button === 1 || isSpacePressed) {
@@ -585,33 +795,29 @@ export function AnimationEditor({
         return;
       }
 
-      const { x, y } = getCanvasCoords(e);
-
       if (currentTool === "move") {
         // Check if clicking inside existing lasso selection
         if (lassoSelection && lassoSelection.isActive) {
           if (isPointInPolygon({ x, y }, lassoSelection.points)) {
             // Clicking inside lasso - start moving selected strokes
             setIsDragging(true);
-            // Store the initial mouse position for drag offset calculation
             setDragOffset({ x, y });
-            // Store original lasso points
             setOriginalLassoPoints([...lassoSelection.points]);
-            // Store original stroke positions
+
             const originalPositions: {
               [strokeId: string]: { points: Point[] };
             } = {};
-            lassoSelection.selectedStrokeIds.forEach((strokeId) => {
-              const stroke = frames
-                .find((f) => f.id === currentFrame)
-                ?.layers.find((l) => l.id === currentLayer)
-                ?.strokes.find((s) => s.id === strokeId);
-              if (stroke) {
-                originalPositions[strokeId] = {
-                  points: [...stroke.points],
-                };
-              }
-            });
+            if (selectedLayerId) {
+              const allStrokesOnLayer = layerStrokes[selectedLayerId] || [];
+              lassoSelection.selectedStrokeIds.forEach((strokeId) => {
+                const stroke = allStrokesOnLayer.find((s) => s.id === strokeId);
+                if (stroke) {
+                  originalPositions[strokeId] = {
+                    points: JSON.parse(JSON.stringify(stroke.points)),
+                  };
+                }
+              });
+            }
             setOriginalStrokePositions(originalPositions);
             return;
           } else {
@@ -660,6 +866,11 @@ export function AnimationEditor({
       zoom,
       isSpacePressed,
       eraserSize,
+      lassoSelection,
+      layerStrokes,
+      isResizing,
+      resizeBox,
+      panOffset,
     ]
   );
 
@@ -687,19 +898,333 @@ export function AnimationEditor({
 
   const draw = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const coords = getCanvasCoords(e);
+      const { x, y } = coords;
+
+      if (isResizing && isDraggingResizeBox && resizeBox) {
+        // Moving the entire box
+        const newX = x - dragOffset.x;
+        const newY = y - dragOffset.y;
+
+        const deltaX = newX - resizeBox.x;
+        const deltaY = newY - resizeBox.y;
+
+        const movedStrokes = resizeBox.strokes.map((stroke) => ({
+          ...stroke,
+          points: stroke.points.map((p) => ({
+            x: p.x + deltaX,
+            y: p.y + deltaY,
+          })),
+        }));
+
+        setResizeBox({
+          ...resizeBox,
+          x: newX,
+          y: newY,
+          strokes: movedStrokes,
+        });
+
+        // Update main strokes for live preview
+        if (selectedLayerId) {
+          setLayerStrokes((prev) => {
+            const otherStrokes =
+              prev[selectedLayerId]?.filter(
+                (s) => !movedStrokes.some((ms) => ms.id === s.id)
+              ) || [];
+            return {
+              ...prev,
+              [selectedLayerId]: [...otherStrokes, ...movedStrokes],
+            };
+          });
+        }
+        return;
+      }
+
+      if (isResizing && activeHandle && resizeBox) {
+        // Resizing using handles
+        const { x: boxX, y: boxY, width, height } = resizeBox;
+        let newWidth = width;
+        let newHeight = height;
+        let newX = boxX;
+        let newY = boxY;
+
+        switch (activeHandle) {
+          case "topLeft":
+            newWidth = boxX + width - x;
+            newHeight = boxY + height - y;
+            newX = x;
+            newY = y;
+            break;
+          case "topRight":
+            newWidth = x - boxX;
+            newHeight = boxY + height - y;
+            newY = y;
+            break;
+          case "bottomLeft":
+            newWidth = boxX + width - x;
+            newHeight = y - boxY;
+            newX = x;
+            break;
+          case "bottomRight":
+            newWidth = x - boxX;
+            newHeight = y - boxY;
+            break;
+        }
+
+        // Ensure minimum size
+        if (newWidth < 10) {
+          newWidth = 10;
+          newX = activeHandle.includes("Left") ? boxX + width - 10 : boxX;
+        }
+        if (newHeight < 10) {
+          newHeight = 10;
+          newY = activeHandle.includes("top") ? boxY + height - 10 : boxY;
+        }
+
+        // Calculate scale factors
+        const scaleX = newWidth / width;
+        const scaleY = newHeight / height;
+
+        // Transform all points relative to the box's top-left corner
+        const transformedStrokes = resizeBox.originalStrokes.map((stroke) => {
+          const newPoints = stroke.points.map((p) => {
+            const relativeX = p.x - boxX;
+            const relativeY = p.y - boxY;
+            return {
+              x: newX + relativeX * scaleX,
+              y: newY + relativeY * scaleY,
+            };
+          });
+          return { ...stroke, points: newPoints };
+        });
+
+        setResizeBox({
+          ...resizeBox,
+          x: newX,
+          y: newY,
+          width: newWidth,
+          height: newHeight,
+          strokes: transformedStrokes,
+        });
+
+        // Update main strokes for live preview
+        if (selectedLayerId) {
+          setLayerStrokes((prev) => {
+            const otherStrokes =
+              prev[selectedLayerId]?.filter(
+                (s) => !transformedStrokes.some((ts) => ts.id === s.id)
+              ) || [];
+            return {
+              ...prev,
+              [selectedLayerId]: [...otherStrokes, ...transformedStrokes],
+            };
+          });
+        }
+        return;
+      }
+
+      // Check for clicking inside resize box to start dragging
+      if (isResizing && resizeBox && !activeHandle && !isDraggingResizeBox) {
+        const { x: boxX, y: boxY, width, height } = resizeBox;
+        if (x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height) {
+          setIsDraggingResizeBox(true);
+          setDragOffset({ x: x - boxX, y: y - boxY });
+          return;
+        }
+
+        // If clicking outside, cancel resize
+        if (
+          x < boxX - 5 ||
+          x > boxX + width + 5 ||
+          y < boxY - 5 ||
+          y > boxY + height + 5
+        ) {
+          setIsResizing(false);
+          setResizeBox(null);
+          setActiveHandle(null);
+          setIsDraggingResizeBox(false);
+        }
+        return;
+      }
+
+      if (isDragging && currentTool === "move" && lassoSelection) {
+        const deltaX = x - dragOffset.x;
+        const deltaY = y - dragOffset.y;
+
+        // Move the lasso points
+        const newLassoPoints = originalLassoPoints.map((p) => ({
+          x: p.x + deltaX,
+          y: p.y + deltaY,
+        }));
+        setLassoSelection((prev) =>
+          prev ? { ...prev, points: newLassoPoints } : null
+        );
+
+        // Move the strokes
+        if (selectedLayerId) {
+          const allStrokesOnLayer = layerStrokes[selectedLayerId] || [];
+          const newStrokesForLayer = allStrokesOnLayer.map((stroke) => {
+            if (lassoSelection.selectedStrokeIds.includes(stroke.id)) {
+              const originalStroke = originalStrokePositions[stroke.id];
+              if (originalStroke) {
+                const newPoints = originalStroke.points.map((p) => ({
+                  x: p.x + deltaX,
+                  y: p.y + deltaY,
+                }));
+                return { ...stroke, points: newPoints };
+              }
+            }
+            return stroke;
+          });
+
+          setLayerStrokes((prev) => ({
+            ...prev,
+            [selectedLayerId]: newStrokesForLayer,
+          }));
+        }
+
+        drawFrame();
+        return;
+      }
+
+      if (isSelecting && currentTool === "move" && lassoSelection) {
+        setLassoSelection({
+          ...lassoSelection,
+          points: [...lassoSelection.points, { x, y }],
+        });
+        drawFrame();
+        return;
+      }
+
       if (!isDrawing || !contextRef.current || !currentStroke) return;
-      const { x, y } = getCanvasCoords(e);
+
       setCurrentStroke((prev) =>
         prev ? { ...prev, points: [...prev.points, { x, y }] } : null
       );
       drawFrame();
     },
-    [isDrawing, currentStroke, getCanvasCoords, drawFrame]
+    [
+      color,
+      brushSize,
+      currentTool,
+      selectedLayerId,
+      zoom,
+      isSpacePressed,
+      eraserSize,
+      lassoSelection,
+      layerStrokes,
+      isResizing,
+      resizeBox,
+      activeHandle,
+      isDraggingResizeBox,
+      dragOffset,
+      originalLassoPoints,
+      originalStrokePositions,
+      drawFrame,
+      isDrawing,
+      currentStroke,
+      isSelecting,
+    ]
+  );
+
+  // Undo/Redo functions
+  const saveToUndoStack = useCallback(() => {
+    setUndoStack((prev) => {
+      // Create a deep copy of the current state
+      const currentState = {
+        layerStrokes: JSON.parse(JSON.stringify(layerStrokes)),
+        folderLayers: JSON.parse(JSON.stringify(folderLayers)),
+        drawingFrames: JSON.parse(JSON.stringify(drawingFrames)), // Also save drawingFrames
+        layerOrder: JSON.parse(JSON.stringify(layerOrder)), // Save layerOrder
+      };
+      return [...prev, currentState];
+    });
+    setRedoStack([]); // Clear redo stack when new action is performed
+  }, [layerStrokes, folderLayers, drawingFrames, layerOrder]);
+
+  const handleDrop = useCallback(
+    (rowId: string, frameIndex: number, e: React.DragEvent) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (!file || !file.type.startsWith("image/")) return;
+
+      const url = URL.createObjectURL(file);
+
+      setDrawingFrames((prev) => {
+        const existingFrame = prev.find(
+          (df) => df.rowId === rowId && df.frameIndex === frameIndex
+        );
+
+        if (existingFrame) {
+          return prev.map((df) =>
+            df.rowId === rowId && df.frameIndex === frameIndex
+              ? { ...df, imageUrl: url, fileName: file.name }
+              : df
+          );
+        } else {
+          return [
+            ...prev,
+            {
+              rowId,
+              frameIndex,
+              length: 1,
+              imageUrl: url,
+              fileName: file.name,
+            },
+          ];
+        }
+      });
+
+      // Select the new frame
+      setSelectedLayerId(`${rowId}-${frameIndex}-main`);
+      setSelectedFrameNumber(frameIndex + 1);
+
+      setTimeout(() => saveToUndoStack(), 0);
+    },
+    [saveToUndoStack]
   );
 
   const stopDrawing = useCallback(() => {
     if (isPanning) {
       setIsPanning(false);
+      return;
+    }
+
+    if (isDragging) {
+      setIsDragging(false);
+      setOriginalLassoPoints([]);
+      setOriginalStrokePositions({});
+      if (lassoSelection) {
+        showContextMenuForSelection(lassoSelection);
+      }
+      saveToUndoStack();
+      return;
+    }
+
+    if (isSelecting && currentTool === "move" && lassoSelection) {
+      setIsSelecting(false);
+      if (lassoSelection.points.length < 3) {
+        // Not a valid selection area, so clear it
+        setLassoSelection(null);
+        return;
+      }
+
+      const allStrokesOnLayer = layerStrokes[selectedLayerId || ""] || [];
+      const selectedStrokeIds = allStrokesOnLayer
+        .filter((stroke) =>
+          stroke.points.some((point) =>
+            isPointInPolygon(point, lassoSelection.points)
+          )
+        )
+        .map((stroke) => stroke.id);
+
+      const finalSelection = {
+        ...lassoSelection,
+        isActive: true,
+        selectedStrokeIds: selectedStrokeIds,
+      };
+      setLassoSelection(finalSelection);
+      showContextMenuForSelection(finalSelection); // Show menu on selection
       return;
     }
 
@@ -716,24 +1241,18 @@ export function AnimationEditor({
     setCurrentStroke(null);
 
     setTimeout(() => saveToUndoStack(), 0);
-  }, [isDrawing, isPanning, currentStroke, selectedLayerId]);
-
-  // Helper function to check if a point is inside a polygon
-  const isPointInPolygon = (point: Point, polygon: Point[]): boolean => {
-    let inside = false;
-    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      if (
-        polygon[i].y > point.y !== polygon[j].y > point.y &&
-        point.x <
-          ((polygon[j].x - polygon[i].x) * (point.y - polygon[i].y)) /
-            (polygon[j].y - polygon[i].y) +
-            polygon[i].x
-      ) {
-        inside = !inside;
-      }
-    }
-    return inside;
-  };
+  }, [
+    isDrawing,
+    isPanning,
+    currentStroke,
+    selectedLayerId,
+    isSelecting,
+    currentTool,
+    lassoSelection,
+    layerStrokes,
+    isDragging, // Added dependency
+    saveToUndoStack,
+  ]);
 
   // Animation playback
   const handlePlayPause = () => {
@@ -991,63 +1510,6 @@ export function AnimationEditor({
   };
 
   // Undo/Redo functions
-  const saveToUndoStack = useCallback(() => {
-    setUndoStack((prev) => {
-      // Create a deep copy of the current state
-      const currentState = {
-        layerStrokes: JSON.parse(JSON.stringify(layerStrokes)),
-        folderLayers: JSON.parse(JSON.stringify(folderLayers)),
-        drawingFrames: JSON.parse(JSON.stringify(drawingFrames)), // Also save drawingFrames
-      };
-      return [...prev, currentState];
-    });
-    setRedoStack([]); // Clear redo stack when new action is performed
-  }, [layerStrokes, folderLayers, drawingFrames]);
-
-  // Update handleDrop to create frames and set image URLs
-  const handleDrop = useCallback(
-    async (rowId: string, frameIndex: number, e: React.DragEvent) => {
-      e.preventDefault();
-      const file = e.dataTransfer.files[0];
-      if (!file || !file.type.startsWith("image/")) return;
-
-      const url = URL.createObjectURL(file);
-
-      // Check if a frame already exists at this position
-      const existingFrame = drawingFrames.find(
-        (df) => df.rowId === rowId && df.frameIndex === frameIndex
-      );
-
-      if (existingFrame) {
-        // Update existing frame
-        setDrawingFrames((prev) =>
-          prev.map((df) =>
-            df.rowId === rowId && df.frameIndex === frameIndex
-              ? { ...df, imageUrl: url, fileName: file.name }
-              : df
-          )
-        );
-      } else {
-        // Create new frame
-        setDrawingFrames((prev) => [
-          ...prev,
-          {
-            rowId,
-            frameIndex,
-            length: 1,
-            imageUrl: url,
-            fileName: file.name,
-          },
-        ]);
-      }
-
-      // Select the new frame
-      setSelectedLayerId(`${rowId}-${frameIndex}-main`);
-      setSelectedFrameNumber(frameIndex + 1);
-    },
-    [drawingFrames, setDrawingFrames]
-  );
-
   const undo = useCallback(() => {
     if (undoStack.length === 0) return;
 
@@ -1057,17 +1519,19 @@ export function AnimationEditor({
       layerStrokes: JSON.parse(JSON.stringify(layerStrokes)),
       folderLayers: JSON.parse(JSON.stringify(folderLayers)),
       drawingFrames: JSON.parse(JSON.stringify(drawingFrames)),
+      layerOrder: JSON.parse(JSON.stringify(layerOrder)),
     };
 
     // Restore previous state
     setLayerStrokes(previousState.layerStrokes);
     setFolderLayers(previousState.folderLayers);
     setDrawingFrames(previousState.drawingFrames);
+    setLayerOrder(previousState.layerOrder);
 
     // Update stacks
     setUndoStack((prev) => prev.slice(0, -1));
     setRedoStack((prev) => [...prev, currentState]);
-  }, [undoStack, layerStrokes, folderLayers, drawingFrames]);
+  }, [undoStack, layerStrokes, folderLayers, drawingFrames, layerOrder]);
 
   const redo = useCallback(() => {
     if (redoStack.length === 0) return;
@@ -1078,17 +1542,19 @@ export function AnimationEditor({
       layerStrokes: JSON.parse(JSON.stringify(layerStrokes)),
       folderLayers: JSON.parse(JSON.stringify(folderLayers)),
       drawingFrames: JSON.parse(JSON.stringify(drawingFrames)),
+      layerOrder: JSON.parse(JSON.stringify(layerOrder)),
     };
 
     // Restore next state
     setLayerStrokes(nextState.layerStrokes);
     setFolderLayers(nextState.folderLayers);
     setDrawingFrames(nextState.drawingFrames);
+    setLayerOrder(nextState.layerOrder);
 
     // Update stacks
     setRedoStack((prev) => prev.slice(0, -1));
     setUndoStack((prev) => [...prev, currentState]);
-  }, [redoStack, layerStrokes, folderLayers, drawingFrames]);
+  }, [redoStack, layerStrokes, folderLayers, drawingFrames, layerOrder]);
 
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
@@ -1145,36 +1611,19 @@ export function AnimationEditor({
     }
   }, [drawingFrames]); // Run only when drawingFrames array changes
 
-  // Helper to get file name from imageUrl (handles blob/object URLs and real file names)
-  function getFileName(url?: string) {
-    if (!url) return "";
-    try {
-      // Try to extract file name from URL or fallback to last segment
-      const match = url.match(/([^/]+\.[a-zA-Z0-9]+)(\?|$)/);
-      if (match) return match[1];
-      return decodeURIComponent(url.split("/").pop() || "");
-    } catch {
-      return url;
-    }
-  }
-
-  // Helper to get file name before extension
-  function getFileNameBase(url?: string) {
-    if (!url) return "";
-    try {
-      const match = url.match(/([^/]+)\.[a-zA-Z0-9]+(\?|$)/);
-      if (match) return match[1];
-      return decodeURIComponent(url.split("/").pop() || "").split(".")[0];
-    } catch {
-      return url;
-    }
-  }
-
-  // Helper to get file name before extension from a string
-  function getFileNameBaseFromString(name?: string) {
-    if (!name) return "";
-    return name.split(".")[0];
-  }
+  // When drawingFrames are updated (e.g., loaded, created), initialize layerOrder
+  useEffect(() => {
+    setLayerOrder((prevOrder) => {
+      const newOrder = { ...prevOrder };
+      drawingFrames.forEach((df) => {
+        const folderId = `${df.rowId}-${df.frameIndex}`;
+        if (!newOrder[folderId]) {
+          newOrder[folderId] = [`${folderId}-main`];
+        }
+      });
+      return newOrder;
+    });
+  }, [drawingFrames]);
 
   // Derived sidebar folders from drawingFrames
   const sidebarFolders = drawingFrames.map((df) => {
@@ -1233,51 +1682,456 @@ export function AnimationEditor({
     setEditingLayerValue("");
   };
 
-  // Helper to get the active frame folder id from selectedLayerId
-  function getActiveFrameFolderId(selectedLayerId: string | null) {
-    if (!selectedLayerId) return null;
-    // e.g. "row1-0-main" or "row1-0-extra-0" => "row1-0"
-    const match = selectedLayerId.match(/^(row\d+-\d+)/);
-    return match ? match[1] : selectedLayerId;
-  }
+  const handleAddLayer = (activeLayerId: string) => {
+    const folderId = getActiveFrameFolderId(activeLayerId);
+    if (!folderId) return;
 
-  // This function will now reorder drawingFrames, not rows.
-  function moveFrameFolderUp(folderId: string) {
-    setDrawingFrames((prev) => {
-      const idx = prev.findIndex(
-        (df) => `${df.rowId}-${df.frameIndex}` === folderId
-      );
-      if (idx > 0) {
-        const newFrames = [...prev];
-        // Swap the elements
-        [newFrames[idx - 1], newFrames[idx]] = [
-          newFrames[idx],
-          newFrames[idx - 1],
-        ];
-        return newFrames;
-      }
-      return prev;
-    });
-  }
+    const newLayerIndex = (folderLayers[folderId] || []).length;
+    const newLayerId = `${folderId}-extra-${newLayerIndex}`;
+    const newLayerName = `Untitled.${newLayerIndex + 2}`;
 
-  // This function will also reorder drawingFrames.
-  function moveFrameFolderDown(folderId: string) {
-    setDrawingFrames((prev) => {
-      const idx = prev.findIndex(
-        (df) => `${df.rowId}-${df.frameIndex}` === folderId
-      );
-      if (idx < prev.length - 1 && idx !== -1) {
-        const newFrames = [...prev];
-        // Swap the elements
-        [newFrames[idx], newFrames[idx + 1]] = [
-          newFrames[idx + 1],
-          newFrames[idx],
-        ];
-        return newFrames;
-      }
-      return prev;
+    setFolderLayers((prev) => ({
+      ...prev,
+      [folderId]: [...(prev[folderId] || []), newLayerName],
+    }));
+
+    setLayerOrder((prev) => ({
+      ...prev,
+      [folderId]: [...(prev[folderId] || []), newLayerId],
+    }));
+
+    saveToUndoStack();
+  };
+
+  const handleAddRow = () => {
+    setRows((prevRows) => {
+      const existingRowNumbers = prevRows.map((row) => {
+        const match = row.id.match(/row-(\d+)/);
+        return match ? parseInt(match[1], 10) : 0;
+      });
+      const maxRowNumber = Math.max(0, ...existingRowNumbers);
+      const newRowNumber = maxRowNumber + 1;
+      const newId = `row-${newRowNumber}`;
+      return [...prevRows, { id: newId, name: `Row ${newRowNumber}` }];
     });
-  }
+  };
+
+  const handleDeleteFrame = () => {
+    if (!selectedLayerId) return;
+
+    const frameFolderId = getActiveFrameFolderId(selectedLayerId);
+    if (!frameFolderId) return;
+
+    const [rowId, frameIndexStr] = frameFolderId.split("-");
+    const frameIndex = parseInt(frameIndexStr, 10);
+
+    // Remove the frame and its associated layers
+    setDrawingFrames((prev) =>
+      prev.filter((df) => !(df.rowId === rowId && df.frameIndex === frameIndex))
+    );
+    setLayerStrokes((prev) => {
+      const newStrokes = { ...prev };
+      Object.keys(newStrokes).forEach((key) => {
+        if (key.startsWith(frameFolderId)) {
+          delete newStrokes[key];
+        }
+      });
+      return newStrokes;
+    });
+    setFolderLayers((prev) => {
+      const newFolderLayers = { ...prev };
+      delete newFolderLayers[frameFolderId];
+      return newFolderLayers;
+    });
+
+    setLayerOrder((prev) => {
+      const newOrder = { ...prev };
+      delete newOrder[frameFolderId];
+      return newOrder;
+    });
+
+    setSelectedLayerId(null);
+    setSelectedFrameNumber(null);
+    saveToUndoStack();
+  };
+
+  const handleDeleteRow = () => {
+    if (!selectedRow) return;
+
+    // Remove all frames and layers associated with the row
+    setDrawingFrames((prev) => prev.filter((df) => df.rowId !== selectedRow));
+    setRows((prev) => prev.filter((row) => row.id !== selectedRow));
+    setLayerStrokes((prev) => {
+      const newStrokes = { ...prev };
+      Object.keys(newStrokes).forEach((key) => {
+        if (key.startsWith(selectedRow)) {
+          delete newStrokes[key];
+        }
+      });
+      return newStrokes;
+    });
+    setFolderLayers((prev) => {
+      const newFolderLayers = { ...prev };
+      Object.keys(newFolderLayers).forEach((key) => {
+        if (key.startsWith(selectedRow)) {
+          delete newFolderLayers[key];
+        }
+      });
+      return newFolderLayers;
+    });
+
+    setSelectedRow("");
+    setSelectedLayerId(null);
+    setSelectedFrameNumber(null);
+    saveToUndoStack();
+  };
+
+  const moveLayer = (
+    folderId: string,
+    layerId: string,
+    direction: "up" | "down"
+  ) => {
+    setLayerOrder((prev) => {
+      const order = prev[folderId];
+      if (!order) return prev;
+
+      const index = order.indexOf(layerId);
+      if (index === -1) return prev;
+
+      const newOrder = [...order];
+      if (direction === "up" && index > 0) {
+        [newOrder[index - 1], newOrder[index]] = [
+          newOrder[index],
+          newOrder[index - 1],
+        ];
+      } else if (direction === "down" && index < order.length - 1) {
+        [newOrder[index + 1], newOrder[index]] = [
+          newOrder[index],
+          newOrder[index + 1],
+        ];
+      }
+
+      return { ...prev, [folderId]: newOrder };
+    });
+  };
+
+  const handleCloseContextMenu = () => {
+    setContextMenu({ visible: false, x: 0, y: 0 });
+  };
+
+  const handleDeleteSelectedStrokes = () => {
+    if (!lassoSelection || !selectedLayerId) return;
+
+    setLayerStrokes((prev) => ({
+      ...prev,
+      [selectedLayerId]: (prev[selectedLayerId] || []).filter(
+        (stroke) => !lassoSelection.selectedStrokeIds.includes(stroke.id)
+      ),
+    }));
+
+    setLassoSelection(null);
+    handleCloseContextMenu();
+    saveToUndoStack();
+  };
+
+  const handleDuplicateSelectedStrokes = () => {
+    if (!lassoSelection || !selectedLayerId) return;
+    const strokesToDuplicate = (layerStrokes[selectedLayerId] || []).filter(
+      (stroke) => lassoSelection.selectedStrokeIds.includes(stroke.id)
+    );
+    const newStrokes = strokesToDuplicate.map((stroke) => ({
+      ...stroke,
+      id: generateStrokeId(),
+      points: stroke.points.map((p) => ({ x: p.x + 10, y: p.y + 10 })),
+    }));
+
+    setLayerStrokes((prev) => ({
+      ...prev,
+      [selectedLayerId]: [...prev[selectedLayerId], ...newStrokes],
+    }));
+
+    // Update selection to the new strokes
+    const newSelectionPoints = lassoSelection.points.map((p) => ({
+      x: p.x + 10,
+      y: p.y + 10,
+    }));
+    setLassoSelection({
+      points: newSelectionPoints,
+      isActive: true,
+      selectedStrokeIds: newStrokes.map((s) => s.id),
+    });
+
+    handleCloseContextMenu();
+    saveToUndoStack();
+  };
+
+  const handleCopySelectedStrokes = useCallback(() => {
+    if (!lassoSelection || !selectedLayerId) return;
+    const strokesToCopy = (layerStrokes[selectedLayerId] || [])
+      .filter((stroke) => lassoSelection.selectedStrokeIds.includes(stroke.id))
+      .map((s) => JSON.parse(JSON.stringify(s))); // Deep copy
+
+    setClipboard(strokesToCopy);
+    handleCloseContextMenu();
+  }, [lassoSelection, layerStrokes, selectedLayerId]);
+
+  const handleCutSelectedStrokes = useCallback(() => {
+    handleCopySelectedStrokes();
+    handleDeleteSelectedStrokes();
+    handleCloseContextMenu();
+  }, [
+    lassoSelection,
+    layerStrokes,
+    selectedLayerId,
+    handleDeleteSelectedStrokes,
+  ]);
+
+  const pasteFromClipboard = useCallback(() => {
+    if (clipboard && selectedLayerId) {
+      setPastePreview(clipboard);
+      setLassoSelection(null); // Clear any existing selection
+      handleCloseContextMenu();
+    }
+  }, [clipboard, selectedLayerId]);
+
+  const showContextMenuForSelection = (selection: { points: Point[] }) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const { minX, maxX, minY, maxY } = getLassoBoundingBox(selection.points);
+
+    // Convert canvas coords to screen coords for the menu
+    const scaleX = rect.width / canvas.width;
+    const scaleY = rect.height / canvas.height;
+
+    const menuX = rect.left + ((minX + maxX) / 2) * scaleX;
+    const menuY = rect.top + maxY * scaleY + 15; // 15px offset below
+
+    setContextMenu({ visible: true, x: menuX, y: menuY });
+  };
+
+  // Helper to get bounding box of multiple strokes
+  const getStrokesBoundingBox = (strokes: DrawingStroke[]) => {
+    if (strokes.length === 0) {
+      return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+    }
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
+
+    strokes.forEach((stroke) => {
+      stroke.points.forEach((point) => {
+        minX = Math.min(minX, point.x);
+        maxX = Math.max(maxX, point.x);
+        minY = Math.min(minY, point.y);
+        maxY = Math.max(maxY, point.y);
+      });
+    });
+    return { minX, maxX, minY, maxY };
+  };
+
+  const handleResizeClick = () => {
+    if (!lassoSelection || !selectedLayerId) return;
+
+    const selectedStrokes = (layerStrokes[selectedLayerId] || []).filter(
+      (stroke) => lassoSelection.selectedStrokeIds.includes(stroke.id)
+    );
+
+    if (selectedStrokes.length === 0) return;
+
+    // Calculate bounding box
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
+    selectedStrokes.forEach((stroke) => {
+      stroke.points.forEach((point) => {
+        minX = Math.min(minX, point.x);
+        maxX = Math.max(maxX, point.x);
+        minY = Math.min(minY, point.y);
+        maxY = Math.max(maxY, point.y);
+      });
+    });
+
+    // Create resize box with padding
+    const padding = 10;
+    setResizeBox({
+      x: minX - padding,
+      y: minY - padding,
+      width: maxX - minX + padding * 2,
+      height: maxY - minY + padding * 2,
+      strokes: selectedStrokes,
+      originalStrokes: JSON.parse(JSON.stringify(selectedStrokes)), // Deep copy for reverting
+    });
+
+    setIsResizing(true);
+    setLassoSelection(null);
+    handleCloseContextMenu();
+  };
+
+  const getResizeHandles = (box: typeof resizeBox) => {
+    if (!box) return {};
+    const handleSize = 8;
+    const { x, y, width, height } = box;
+    return {
+      topLeft: {
+        x: x - handleSize / 2,
+        y: y - handleSize / 2,
+        size: handleSize,
+        cursor: "nwse-resize",
+      },
+      topRight: {
+        x: x + width - handleSize / 2,
+        y: y - handleSize / 2,
+        size: handleSize,
+        cursor: "nesw-resize",
+      },
+      bottomLeft: {
+        x: x - handleSize / 2,
+        y: y + height - handleSize / 2,
+        size: handleSize,
+        cursor: "nesw-resize",
+      },
+      bottomRight: {
+        x: x + width - handleSize / 2,
+        y: y + height - handleSize / 2,
+        size: handleSize,
+        cursor: "nwse-resize",
+      },
+    };
+  };
+
+  const handleMouseUp = () => {
+    // Panning
+    if (isPanning) {
+      setIsPanning(false);
+      return;
+    }
+
+    // Resizing
+    if (isResizing) {
+      if (activeHandle) {
+        setActiveHandle(null);
+        if (resizeBox) {
+          setResizeBox((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  originalStrokes: JSON.parse(JSON.stringify(prev.strokes)),
+                }
+              : null
+          );
+        }
+        saveToUndoStack();
+      }
+      if (isDraggingResizeBox) {
+        setIsDraggingResizeBox(false);
+        if (resizeBox) {
+          setResizeBox((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  originalStrokes: JSON.parse(JSON.stringify(prev.strokes)),
+                }
+              : null
+          );
+        }
+        saveToUndoStack();
+      }
+      return;
+    }
+
+    // Move tool - finishing a drag
+    if (isDragging) {
+      setIsDragging(false);
+      setOriginalLassoPoints([]);
+      setOriginalStrokePositions({});
+      if (lassoSelection) {
+        showContextMenuForSelection(lassoSelection);
+      }
+      saveToUndoStack();
+      return;
+    }
+
+    // Move tool - finishing a lasso selection
+    if (isSelecting && currentTool === "move" && lassoSelection) {
+      setIsSelecting(false);
+      if (lassoSelection.points.length < 3) {
+        setLassoSelection(null);
+        return;
+      }
+      const allStrokesOnLayer = layerStrokes[selectedLayerId || ""] || [];
+      const selectedStrokeIds = allStrokesOnLayer
+        .filter((stroke) =>
+          stroke.points.some((point) =>
+            isPointInPolygon(point, lassoSelection.points)
+          )
+        )
+        .map((stroke) => stroke.id);
+
+      const finalSelection = {
+        ...lassoSelection,
+        isActive: true,
+        selectedStrokeIds: selectedStrokeIds,
+      };
+      setLassoSelection(finalSelection);
+      showContextMenuForSelection(finalSelection);
+      return;
+    }
+
+    // Regular drawing
+    if (isDrawing && currentStroke && selectedLayerId) {
+      setIsDrawing(false);
+      if (currentStroke.points.length > 1) {
+        setLayerStrokes((prevStrokes) => ({
+          ...prevStrokes,
+          [selectedLayerId]: [
+            ...(prevStrokes[selectedLayerId] || []),
+            currentStroke,
+          ],
+        }));
+        saveToUndoStack();
+      }
+      setCurrentStroke(null);
+    }
+  };
+
+  const handleConfirmResize = () => {
+    if (!isResizing) return;
+    setIsResizing(false);
+    setResizeBox(null);
+    setActiveHandle(null);
+    setIsDraggingResizeBox(false);
+    // Final state is already in layerStrokes, just need to save
+    saveToUndoStack();
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === " ") {
+      e.preventDefault();
+      undo();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+      e.preventDefault();
+      redo();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+      handleCopySelectedStrokes();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+      pasteFromClipboard();
+    } else if (e.key === "Enter" && isResizing) {
+      handleConfirmResize();
+    }
+  };
+
+  const handleKeyUp = (e: KeyboardEvent) => {
+    if (e.code === "Space") {
+      e.preventDefault();
+      setIsSpacePressed(false);
+    }
+  };
+
+  document.addEventListener("keydown", handleKeyDown);
+  document.addEventListener("keyup", handleKeyUp);
 
   return (
     <div className="h-screen bg-gray-900 text-white flex flex-col overflow-hidden">
@@ -1606,7 +2460,7 @@ export function AnimationEditor({
                   style={{ imageRendering: "pixelated" }}
                   onMouseDown={startDrawing}
                   onMouseMove={draw}
-                  onMouseUp={stopDrawing}
+                  onMouseUp={handleMouseUp}
                   onMouseLeave={() => {
                     stopDrawing();
                     setEraserCircle(null);
@@ -1636,6 +2490,61 @@ export function AnimationEditor({
             </Card>
           </div>
 
+          {/* Context Menu */}
+          {contextMenu.visible && lassoSelection?.isActive && (
+            <div
+              style={{
+                position: "fixed",
+                top: contextMenu.y,
+                left: contextMenu.x,
+                transform: "translateX(-50%)",
+                zIndex: 100,
+              }}
+              className="bg-gray-900 rounded-lg shadow-xl border border-gray-700 flex items-center p-1"
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-3"
+                onClick={handleCutSelectedStrokes}
+              >
+                Cut
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-3"
+                onClick={handleCopySelectedStrokes}
+              >
+                Copy
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-3 text-red-500 hover:text-red-400"
+                onClick={handleDeleteSelectedStrokes}
+              >
+                Delete
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-3"
+                onClick={handleDuplicateSelectedStrokes}
+              >
+                Duplicate
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-3"
+                onClick={handleResizeClick}
+              >
+                Resize
+              </Button>
+            </div>
+          )}
+
           {/* Timeline - Fixed at bottom of viewport */}
           <div className="fixed bottom-0 left-20 right-80 z-20 bg-gray-800 border-t border-gray-700">
             <TimelineGrid
@@ -1660,62 +2569,83 @@ export function AnimationEditor({
               onLastFrame={handleLastFrame}
               isLooping={isLooping}
               onToggleLoop={handleToggleLoop}
+              onDeleteFrame={handleDeleteFrame}
+              onDeleteRow={handleDeleteRow}
+              onAddRow={handleAddRow}
             />
           </div>
         </div>
 
         {/* Right Sidebar (Layer Panel) */}
-        <div className="w-80 bg-gray-800 border-l border-gray-700 p-4">
-          {/* Top row: Add/Delete Layer buttons and Opacity slider */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  selectedLayerId && handleAddLayer(selectedLayerId)
-                }
-                className="w-8 h-8 p-0"
-              >
-                +
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  if (selectedLayerId) {
-                    // Delete the strokes for the layer
-                    setLayerStrokes((prev) => {
-                      const newStrokes = { ...prev };
-                      delete newStrokes[selectedLayerId];
-                      return newStrokes;
-                    });
-
-                    // If it's an extra layer, also remove it from folderLayers
-                    if (selectedLayerId.includes("-extra-")) {
-                      const [folderId, extraPart] =
-                        selectedLayerId.split("-extra-");
-                      const extraIndex = parseInt(extraPart);
-                      setFolderLayers((prev) => {
-                        const layers = prev[folderId] || [];
-                        const newLayers = layers.filter(
-                          (_, index) => index !== extraIndex
-                        );
-                        return { ...prev, [folderId]: newLayers };
-                      });
-                      setSelectedLayerId(null);
-                    }
-                    saveToUndoStack();
+        <div className="w-80 bg-gray-800 border-l border-gray-700 p-4 flex flex-col">
+          {/* Top Controls Area */}
+          <div className="flex-shrink-0">
+            {/* Header: Layers Title + Action Buttons */}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Layers</h2>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() =>
+                    selectedLayerId && handleAddLayer(selectedLayerId)
                   }
-                }}
-                className="w-8 h-8 p-0 text-red-400 hover:text-red-300"
-                disabled={!selectedLayerId}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
+                  className="w-8 h-8"
+                  title="Add Layer"
+                >
+                  <Plus className="w-5 h-5" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    if (selectedLayerId) {
+                      // Delete logic...
+                      setLayerStrokes((prev) => {
+                        const newStrokes = { ...prev };
+                        delete newStrokes[selectedLayerId];
+                        return newStrokes;
+                      });
+                      if (selectedLayerId.includes("-extra-")) {
+                        const [folderId, extraPart] =
+                          selectedLayerId.split("-extra-");
+                        const extraIndex = parseInt(extraPart);
+                        setFolderLayers((prev) => {
+                          const layers = prev[folderId] || [];
+                          const newLayers = layers.filter(
+                            (_, index) => index !== extraIndex
+                          );
+                          return { ...prev, [folderId]: newLayers };
+                        });
+                        setSelectedLayerId(null);
+                      }
+                      saveToUndoStack();
+                    }
+                  }}
+                  className="w-8 h-8 text-red-500 hover:text-red-400"
+                  disabled={!selectedLayerId}
+                  title="Delete Layer"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </Button>
+              </div>
             </div>
-            <div className="flex flex-col items-end flex-1 ml-2">
+
+            {/* Opacity Control */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm font-medium">
+                <Label htmlFor="opacity-slider">Opacity</Label>
+                <span className="text-gray-300">
+                  {Math.round(
+                    (selectedLayerId
+                      ? layerOpacities[selectedLayerId] ?? 1
+                      : 1) * 100
+                  )}
+                  %
+                </span>
+              </div>
               <Slider
+                id="opacity-slider"
                 value={[
                   (selectedLayerId ? layerOpacities[selectedLayerId] ?? 1 : 1) *
                     100,
@@ -1727,225 +2657,195 @@ export function AnimationEditor({
                 min={0}
                 max={100}
                 step={1}
-                className="w-32"
+                className="w-full"
               />
-              <span className="text-xs text-gray-400 mt-1">
-                Opacity:{" "}
-                {Math.round(
-                  (selectedLayerId ? layerOpacities[selectedLayerId] ?? 1 : 1) *
-                    100
-                )}
-                %
-              </span>
             </div>
           </div>
+
           {/* Thin Separator */}
-          <div className="border-b border-gray-600 mb-4" />
-          {/* Tools Section */}
-          <div className="space-y-2">
-            {sidebarFolders.map((folder) => (
-              <div key={folder.id} className="bg-gray-700 rounded shadow">
-                {/* Folder Header */}
-                <div
-                  className={`flex items-center p-2 border-b border-gray-600 rounded-t ${
-                    selectedLayerId === folder.id
-                      ? "bg-blue-600 text-white"
-                      : ""
-                  }`}
-                >
+          <div className="border-b border-gray-600 my-4 flex-shrink-0" />
+
+          {/* Scrollable Layers List */}
+          <ScrollArea className="flex-1 pr-2">
+            <div className="space-y-2">
+              {sidebarFolders.map((folder) => (
+                <div key={folder.id} className="bg-gray-700 rounded shadow">
+                  {/* Folder Header */}
                   <div
-                    className="flex items-center gap-2 cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFolder(folder.id);
-                    }}
+                    className={`flex items-center p-2 border-b border-gray-600 rounded-t ${
+                      selectedLayerId === folder.id
+                        ? "bg-blue-600 text-white"
+                        : ""
+                    }`}
                   >
-                    {openFolders[folder.id] ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                  </div>
-                  <div
-                    className="flex items-center gap-2 cursor-pointer ml-2"
-                    onClick={() => handleSidebarSelection(folder.id)}
-                  >
-                    <Folder className="w-4 h-4 text-gray-400" />
-                    <span className="font-medium text-xs">{folder.label}</span>
-                  </div>
-                  {/* Up/Down arrows for reordering */}
-                  <div className="flex items-center gap-1 ml-auto">
-                    {sidebarFolders.length > 1 && (
-                      <>
-                        {sidebarFolders.findIndex((f) => f.id === folder.id) >
-                          0 && (
-                          <button
-                            className="text-gray-400 hover:text-white px-1"
-                            title="Move Up"
-                            onClick={() => moveFrameFolderUp(folder.id)}
-                          >
-                            <ChevronUp className="w-4 h-4" />
-                          </button>
-                        )}
-                        {sidebarFolders.findIndex((f) => f.id === folder.id) <
-                          sidebarFolders.length - 1 && (
-                          <button
-                            className="text-gray-400 hover:text-white px-1"
-                            title="Move Down"
-                            onClick={() => moveFrameFolderDown(folder.id)}
-                          >
-                            <ChevronDown className="w-4 h-4" />
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-                {/* Folder Content (Layer) */}
-                {openFolders[folder.id] && (
-                  <div className="pl-2 py-2 flex flex-col gap-1 rounded-b">
-                    {/* Render image or drawing layer */}
                     <div
-                      className={`flex items-center justify-between px-3 py-2 rounded cursor-pointer ${
-                        selectedLayerId === `${folder.id}-main`
-                          ? "bg-blue-600"
-                          : "bg-gray-600 hover:bg-gray-500"
-                      }`}
-                      onClick={() =>
-                        handleSidebarSelection(`${folder.id}-main`)
-                      }
+                      className="flex items-center gap-2 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFolder(folder.id);
+                      }}
                     >
-                      <div className="flex items-center gap-2 flex-1">
-                        <Eye
-                          className={`w-4 h-4 ${
-                            layerVisibility[`${folder.id}-main`] !== false
-                              ? "text-white"
-                              : "text-gray-500"
-                          }`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleVisibility(`${folder.id}-main`);
-                          }}
-                        />
-                        {editingLayerName === `${folder.id}-main` ? (
-                          <input
-                            value={editingLayerValue}
-                            onChange={(e) =>
-                              setEditingLayerValue(e.target.value)
-                            }
-                            onBlur={() => handleSaveRename(`${folder.id}-main`)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter")
-                                handleSaveRename(`${folder.id}-main`);
-                              if (e.key === "Escape") handleCancelRename();
-                            }}
-                            className="text-sm bg-gray-800 text-white px-2 py-1 rounded border border-gray-600 flex-1"
-                            autoFocus
-                          />
-                        ) : (
-                          <span className="text-sm text-white flex-1">
-                            {folder.fileName
-                              ? getFileNameBaseFromString(folder.fileName)
-                              : "Untitled.1"}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Edit3
-                          className="w-3 h-3 text-gray-400 hover:text-white cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const currentName = folder.fileName
-                              ? getFileNameBaseFromString(folder.fileName)
-                              : "Untitled.1";
-                            handleStartRename(`${folder.id}-main`, currentName);
-                          }}
-                        />
-                        <div className="text-xs text-gray-300">
-                          {Math.round(
-                            (layerOpacities[`${folder.id}-main`] ?? 1) * 100
-                          )}
-                          %
-                        </div>
-                      </div>
+                      {openFolders[folder.id] ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
                     </div>
-                    {/* Render additional layers if any */}
-                    {(folderLayers[folder.id] || []).map((layerName, idx) => (
-                      <div
-                        key={layerName}
-                        className={`flex items-center justify-between px-3 py-2 rounded cursor-pointer ${
-                          selectedLayerId === `${folder.id}-extra-${idx}`
-                            ? "bg-blue-600"
-                            : "bg-gray-600 hover:bg-gray-500"
-                        }`}
-                        onClick={() =>
-                          handleSidebarSelection(`${folder.id}-extra-${idx}`)
-                        }
-                      >
-                        <div className="flex items-center gap-2 flex-1">
-                          <Eye
-                            className={`w-4 h-4 ${
-                              layerVisibility[`${folder.id}-extra-${idx}`] !==
-                              false
-                                ? "text-white"
-                                : "text-gray-500"
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleVisibility(
-                                `${folder.id}-extra-${idx}`
-                              );
-                            }}
-                          />
-                          {editingLayerName === `${folder.id}-extra-${idx}` ? (
-                            <input
-                              value={editingLayerValue}
-                              onChange={(e) =>
-                                setEditingLayerValue(e.target.value)
-                              }
-                              onBlur={() =>
-                                handleSaveRename(`${folder.id}-extra-${idx}`)
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter")
-                                  handleSaveRename(`${folder.id}-extra-${idx}`);
-                                if (e.key === "Escape") handleCancelRename();
-                              }}
-                              className="text-sm bg-gray-800 text-white px-2 py-1 rounded border border-gray-600 flex-1"
-                              autoFocus
-                            />
-                          ) : (
-                            <span className="text-sm text-white flex-1">
-                              {layerName}
-                            </span>
+                    <div
+                      className="flex items-center gap-2 cursor-pointer ml-2"
+                      onClick={() => handleSidebarSelection(folder.id)}
+                    >
+                      <Folder className="w-4 h-4 text-gray-400" />
+                      <span className="font-medium text-xs">
+                        {folder.label}
+                      </span>
+                    </div>
+                    {/* Up/Down arrows for reordering */}
+                    <div className="flex items-center gap-1 ml-auto">
+                      {sidebarFolders.length > 1 && (
+                        <>
+                          {sidebarFolders.findIndex((f) => f.id === folder.id) >
+                            0 && (
+                            <button
+                              className="text-gray-400 hover:text-white px-1"
+                              title="Move Up"
+                              onClick={() => moveFrameFolderUp(folder.id)}
+                            >
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
                           )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Edit3
-                            className="w-3 h-3 text-gray-400 hover:text-white cursor-pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartRename(
-                                `${folder.id}-extra-${idx}`,
-                                layerName
-                              );
-                            }}
-                          />
-                          <div className="text-xs text-gray-300">
-                            {Math.round(
-                              (layerOpacities[`${folder.id}-extra-${idx}`] ??
-                                1) * 100
-                            )}
-                            %
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                          {sidebarFolders.findIndex((f) => f.id === folder.id) <
+                            sidebarFolders.length - 1 && (
+                            <button
+                              className="text-gray-400 hover:text-white px-1"
+                              title="Move Down"
+                              onClick={() => moveFrameFolderDown(folder.id)}
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  {/* Folder Content (Layer) */}
+                  {openFolders[folder.id] && (
+                    <div className="pl-2 py-2 flex flex-col gap-1 rounded-b">
+                      {(layerOrder[folder.id] || []).map(
+                        (layerId, layerIndex) => {
+                          const isMain = layerId.endsWith("-main");
+                          const extraLayerIndex = isMain
+                            ? -1
+                            : parseInt(layerId.split("-extra-")[1], 10);
+                          const layerName = isMain
+                            ? folder.fileName
+                              ? getFileNameBaseFromString(folder.fileName)
+                              : "Untitled.1"
+                            : folderLayers[folder.id]?.[extraLayerIndex] ||
+                              `Untitled.${extraLayerIndex + 2}`;
+
+                          return (
+                            <div
+                              key={layerId}
+                              className={`flex items-center justify-between px-3 py-2 rounded cursor-pointer ${
+                                selectedLayerId === layerId
+                                  ? "bg-blue-600"
+                                  : "bg-gray-600 hover:bg-gray-500"
+                              }`}
+                              onClick={() => handleSidebarSelection(layerId)}
+                            >
+                              <div className="flex items-center gap-2 flex-1">
+                                <Eye
+                                  className={`w-4 h-4 ${
+                                    layerVisibility[layerId] !== false
+                                      ? "text-white"
+                                      : "text-gray-500"
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleVisibility(layerId);
+                                  }}
+                                />
+                                {editingLayerName === layerId ? (
+                                  <input
+                                    value={editingLayerValue}
+                                    onChange={(e) =>
+                                      setEditingLayerValue(e.target.value)
+                                    }
+                                    onBlur={() => handleSaveRename(layerId)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter")
+                                        handleSaveRename(layerId);
+                                      if (e.key === "Escape")
+                                        handleCancelRename();
+                                    }}
+                                    className="text-sm bg-gray-800 text-white px-2 py-1 rounded border border-gray-600 flex-1"
+                                    autoFocus
+                                  />
+                                ) : (
+                                  <span className="text-sm text-white flex-1">
+                                    {layerName}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Edit3
+                                  className="w-3 h-3 text-gray-400 hover:text-white cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const currentName = folder.fileName
+                                      ? getFileNameBaseFromString(
+                                          folder.fileName
+                                        )
+                                      : "Untitled.1";
+                                    handleStartRename(layerId, currentName);
+                                  }}
+                                />
+                                <div className="text-xs text-gray-300">
+                                  {Math.round(
+                                    (layerOpacities[layerId] ?? 1) * 100
+                                  )}
+                                  %
+                                </div>
+                                {/* Up/Down arrows for reordering layers */}
+                                <div className="flex flex-col">
+                                  <button
+                                    className="text-gray-400 hover:text-white disabled:opacity-25"
+                                    title="Move Up"
+                                    disabled={layerIndex === 0}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      moveLayer(folder.id, layerId, "up");
+                                    }}
+                                  >
+                                    <ChevronUp className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    className="text-gray-400 hover:text-white disabled:opacity-25"
+                                    title="Move Down"
+                                    disabled={
+                                      layerIndex ===
+                                      (layerOrder[folder.id]?.length || 0) - 1
+                                    }
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      moveLayer(folder.id, layerId, "down");
+                                    }}
+                                  >
+                                    <ChevronDown className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
         </div>
       </div>
     </div>

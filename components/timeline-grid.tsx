@@ -49,6 +49,9 @@ interface TimelineGridProps {
   onLastFrame?: () => void;
   isLooping?: boolean;
   onToggleLoop?: () => void;
+  onDeleteFrame: () => void;
+  onDeleteRow: () => void;
+  onAddRow: () => void;
 }
 
 export default function TimelineGrid({
@@ -73,6 +76,9 @@ export default function TimelineGrid({
   onLastFrame,
   isLooping,
   onToggleLoop,
+  onDeleteFrame,
+  onDeleteRow,
+  onAddRow,
 }: TimelineGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = React.useState<null | {
@@ -81,11 +87,6 @@ export default function TimelineGrid({
     startX: number;
     origLength: number;
   }>(null);
-
-  const handleAddRow = () => {
-    const newId = `row-${rows.length + 1}`;
-    setRows([...rows, { id: newId, name: `Row${rows.length + 1}` }]);
-  };
 
   const handleAddFrame = () => {
     if (!selectedRow) return;
@@ -116,30 +117,6 @@ export default function TimelineGrid({
       ...prev,
       { rowId: selectedRow, frameIndex: targetFrame, length: 1 },
     ]);
-  };
-
-  const handleDeleteRow = () => {
-    if (!selectedRow) return;
-    setRows(rows.filter((row) => row.id !== selectedRow));
-    setDrawingFrames(drawingFrames.filter((df) => df.rowId !== selectedRow));
-  };
-
-  const handleDeleteFrame = () => {
-    if (!selectedLayerId) return;
-    // Extract the row and frame index from the selectedLayerId
-    const parts = selectedLayerId.split("-");
-    const rowId = parts[0] + "-" + parts[1]; // e.g., "row-1"
-    const frameIndex = parseInt(parts[2], 10); // The frame number
-
-    // Remove the frame from drawingFrames
-    setDrawingFrames((prev) =>
-      prev.filter((df) => !(df.rowId === rowId && df.frameIndex === frameIndex))
-    );
-
-    // Clear selection
-    if (setSelectedLayerId) {
-      setSelectedLayerId(null);
-    }
   };
 
   // Drag logic for frame extension
@@ -221,7 +198,7 @@ export default function TimelineGrid({
     >
       <div className="flex items-center gap-2 mb-2">
         {/* Playback Controls */}
-        <div className="flex items-center gap-1 mr-4">
+        <div className="flex items-center gap-1">
           <Button
             size="sm"
             variant="outline"
@@ -282,22 +259,39 @@ export default function TimelineGrid({
           </Button>
         </div>
 
-        <Button size="sm" variant="outline" onClick={handleAddFrame}>
-          + Add Frame
-        </Button>
-        <Button size="sm" variant="outline" onClick={handleAddRow}>
-          + Add Row
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleDeleteFrame}
-          disabled={!selectedLayerId}
-          className="ml-2 flex items-center gap-2 text-red-400 hover:text-red-300"
-        >
-          <Trash2 className="w-4 h-4" />
-          Delete Frame
-        </Button>
+        <div className="flex items-center gap-2 ml-4">
+          <Button size="sm" variant="outline" onClick={handleAddFrame}>
+            + Add Frame
+          </Button>
+          <Button size="sm" variant="outline" onClick={onAddRow}>
+            + Add Row
+          </Button>
+        </div>
+
+        <div className="flex-grow" />
+
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onDeleteFrame}
+            disabled={!selectedLayerId}
+            className="flex items-center gap-2 text-red-400 hover:text-red-300"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Frame
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onDeleteRow}
+            disabled={!selectedRow}
+            className="flex items-center gap-2 text-red-400 hover:text-red-300"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Row
+          </Button>
+        </div>
       </div>
       <div className="overflow-y-auto max-h-48">
         <Table>
