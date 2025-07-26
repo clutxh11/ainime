@@ -7,7 +7,8 @@ export type CurrentView =
   | "manga"
   | "content-explorer"
   | "animation-editor"
-  | "project-dashboard";
+  | "project-dashboard"
+  | "project-detail";
 
 // Content Types
 export interface ContentItem {

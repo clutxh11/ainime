@@ -277,7 +277,20 @@ export function AnimationEditor({
     height: number;
     strokes: DrawingStroke[];
     originalStrokes: DrawingStroke[]; // To revert on cancel
+    initialX: number;
+    initialY: number;
+    initialWidth: number;
+    initialHeight: number;
   } | null>(null);
+  const lastErasePointRef = useRef<Point | null>(null);
+
+  // Custom color sets state
+  const [customColorSets, setCustomColorSets] = useState<{
+    [key: string]: string[];
+  }>({});
+  const [newSetName, setNewSetName] = useState("");
+  const [isCreatingSet, setIsCreatingSet] = useState(false);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
   const [rows, setRows] = useState([
     { id: "row-1", name: "Row1" },
@@ -842,6 +855,10 @@ export function AnimationEditor({
 
       // For eraser tool, we'll handle stroke creation in the draw function
       if (currentTool === "eraser") {
+        const coords = getCanvasCoords(e);
+        lastErasePointRef.current = coords;
+        // Trigger erase on initial click
+        draw(e);
         return;
       }
 
@@ -899,12 +916,11 @@ export function AnimationEditor({
   const draw = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const coords = getCanvasCoords(e);
-      const { x, y } = coords;
+      const { x: currentX, y: currentY } = coords;
 
       if (isResizing && isDraggingResizeBox && resizeBox) {
-        // Moving the entire box
-        const newX = x - dragOffset.x;
-        const newY = y - dragOffset.y;
+        const newX = currentX - dragOffset.x;
+        const newY = currentY - dragOffset.y;
 
         const deltaX = newX - resizeBox.x;
         const deltaY = newY - resizeBox.y;
@@ -924,7 +940,6 @@ export function AnimationEditor({
           strokes: movedStrokes,
         });
 
-        // Update main strokes for live preview
         if (selectedLayerId) {
           setLayerStrokes((prev) => {
             const otherStrokes =
@@ -937,59 +952,71 @@ export function AnimationEditor({
             };
           });
         }
+        drawFrame();
         return;
       }
 
       if (isResizing && activeHandle && resizeBox) {
-        // Resizing using handles
-        const { x: boxX, y: boxY, width, height } = resizeBox;
-        let newWidth = width;
-        let newHeight = height;
-        let newX = boxX;
-        let newY = boxY;
+        // Use the stable initial dimensions for scaling calculations
+        const {
+          initialX,
+          initialY,
+          initialWidth,
+          initialHeight,
+          originalStrokes,
+        } = resizeBox;
+
+        let newWidth = initialWidth;
+        let newHeight = initialHeight;
+        let newX = initialX;
+        let newY = initialY;
 
         switch (activeHandle) {
           case "topLeft":
-            newWidth = boxX + width - x;
-            newHeight = boxY + height - y;
-            newX = x;
-            newY = y;
+            newWidth = initialX + initialWidth - currentX;
+            newHeight = initialY + initialHeight - currentY;
+            newX = currentX;
+            newY = currentY;
             break;
           case "topRight":
-            newWidth = x - boxX;
-            newHeight = boxY + height - y;
-            newY = y;
+            newWidth = currentX - initialX;
+            newHeight = initialY + initialHeight - currentY;
+            newY = currentY;
             break;
           case "bottomLeft":
-            newWidth = boxX + width - x;
-            newHeight = y - boxY;
-            newX = x;
+            newWidth = initialX + initialWidth - currentX;
+            newHeight = currentY - initialY;
+            newX = currentX;
             break;
           case "bottomRight":
-            newWidth = x - boxX;
-            newHeight = y - boxY;
+            newWidth = currentX - initialX;
+            newHeight = currentY - initialY;
             break;
         }
 
-        // Ensure minimum size
+        // Enforce minimum size
         if (newWidth < 10) {
           newWidth = 10;
-          newX = activeHandle.includes("Left") ? boxX + width - 10 : boxX;
+          if (activeHandle.includes("Left")) {
+            newX = initialX + initialWidth - 10;
+          }
         }
         if (newHeight < 10) {
           newHeight = 10;
-          newY = activeHandle.includes("top") ? boxY + height - 10 : boxY;
+          if (activeHandle.includes("top")) {
+            newY = initialY + initialHeight - 10;
+          }
         }
 
-        // Calculate scale factors
-        const scaleX = newWidth / width;
-        const scaleY = newHeight / height;
+        // Calculate scale factors based on the stable INITIAL dimensions
+        const scaleX = initialWidth === 0 ? 1 : newWidth / initialWidth;
+        const scaleY = initialHeight === 0 ? 1 : newHeight / initialHeight;
 
-        // Transform all points relative to the box's top-left corner
-        const transformedStrokes = resizeBox.originalStrokes.map((stroke) => {
+        // Transform strokes based on their relation to the initial box
+        const transformedStrokes = originalStrokes.map((stroke) => {
           const newPoints = stroke.points.map((p) => {
-            const relativeX = p.x - boxX;
-            const relativeY = p.y - boxY;
+            const relativeX = p.x - initialX;
+            const relativeY = p.y - initialY;
             return {
               x: newX + relativeX * scaleX,
               y: newY + relativeY * scaleY,
@@ -1007,7 +1034,6 @@ export function AnimationEditor({
           strokes: transformedStrokes,
         });
 
-        // Update main strokes for live preview
         if (selectedLayerId) {
           setLayerStrokes((prev) => {
             const otherStrokes =
@@ -1020,38 +1046,14 @@ export function AnimationEditor({
             };
           });
         }
-        return;
-      }
-
-      // Check for clicking inside resize box to start dragging
-      if (isResizing && resizeBox && !activeHandle && !isDraggingResizeBox) {
-        const { x: boxX, y: boxY, width, height } = resizeBox;
-        if (x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height) {
-          setIsDraggingResizeBox(true);
-          setDragOffset({ x: x - boxX, y: y - boxY });
-          return;
-        }
-
-        // If clicking outside, cancel resize
-        if (
-          x < boxX - 5 ||
-          x > boxX + width + 5 ||
-          y < boxY - 5 ||
-          y > boxY + height + 5
-        ) {
-          setIsResizing(false);
-          setResizeBox(null);
-          setActiveHandle(null);
-          setIsDraggingResizeBox(false);
-        }
+        drawFrame();
         return;
       }
 
       if (isDragging && currentTool === "move" && lassoSelection) {
-        const deltaX = x - dragOffset.x;
-        const deltaY = y - dragOffset.y;
+        const deltaX = currentX - dragOffset.x;
+        const deltaY = currentY - dragOffset.y;
 
-        // Move the lasso points
         const newLassoPoints = originalLassoPoints.map((p) => ({
           x: p.x + deltaX,
           y: p.y + deltaY,
@@ -1060,7 +1062,6 @@ export function AnimationEditor({
           prev ? { ...prev, points: newLassoPoints } : null
         );
 
-        // Move the strokes
         if (selectedLayerId) {
           const allStrokesOnLayer = layerStrokes[selectedLayerId] || [];
           const newStrokesForLayer = allStrokesOnLayer.map((stroke) => {
@@ -1090,8 +1091,128 @@ export function AnimationEditor({
       if (isSelecting && currentTool === "move" && lassoSelection) {
         setLassoSelection({
           ...lassoSelection,
-          points: [...lassoSelection.points, { x, y }],
+          points: [...lassoSelection.points, { x: currentX, y: currentY }],
         });
+        drawFrame();
+        return;
+      }
+
+      // Handle eraser tool
+      if (currentTool === "eraser" && isDrawing && selectedLayerId) {
+        const lastPoint = lastErasePointRef.current;
+        const pointsToErase: Point[] = [coords];
+
+        if (lastPoint) {
+          const dist = Math.sqrt(
+            Math.pow(currentX - lastPoint.x, 2) +
+              Math.pow(currentY - lastPoint.y, 2)
+          );
+          // Interpolate points for smoother, more consistent erasing
+          const step = 2; // Check every 2 pixels
+          const numSteps = Math.ceil(dist / step);
+
+          if (numSteps > 1) {
+            for (let i = 1; i < numSteps; i++) {
+              const t = i / numSteps;
+              pointsToErase.push({
+                x: lastPoint.x * (1 - t) + currentX * t,
+                y: lastPoint.y * (1 - t) + currentY * t,
+              });
+            }
+          }
+        }
+
+        let currentLayerStrokes = layerStrokes[selectedLayerId] || [];
+        let hasChanged = false;
+
+        pointsToErase.forEach((erasePoint) => {
+          if (eraserStyle === "stroke") {
+            const initialCount = currentLayerStrokes.length;
+            currentLayerStrokes = currentLayerStrokes.filter((stroke) => {
+              const isIntersecting = stroke.points.some((point) => {
+                const distance = Math.sqrt(
+                  Math.pow(point.x - erasePoint.x, 2) +
+                    Math.pow(point.y - erasePoint.y, 2)
+                );
+                return distance <= eraserSize;
+              });
+              return !isIntersecting;
+            });
+            if (currentLayerStrokes.length < initialCount) {
+              hasChanged = true;
+            }
+          } else {
+            // Precision eraser
+            const strokesAfterErasing: DrawingStroke[] = [];
+            let layerModifiedInPass = false;
+
+            currentLayerStrokes.forEach((stroke) => {
+              const segments: Point[][] = [];
+              let currentSegment: Point[] = [];
+
+              for (const point of stroke.points) {
+                const distance = Math.sqrt(
+                  Math.pow(point.x - erasePoint.x, 2) +
+                    Math.pow(point.y - erasePoint.y, 2)
+                );
+
+                if (distance <= Math.max(2.5, eraserSize)) {
+                  // Point is erased, end the current segment
+                  if (currentSegment.length > 1) {
+                    segments.push(currentSegment);
+                  }
+                  currentSegment = [];
+                } else {
+                  // Point is kept, add to segment
+                  currentSegment.push(point);
+                }
+              }
+
+              // Add the last running segment
+              if (currentSegment.length > 1) {
+                segments.push(currentSegment);
+              }
+
+              // If the stroke was split, replace it with new segments
+              if (
+                segments.length > 1 ||
+                (segments.length === 1 &&
+                  segments[0].length < stroke.points.length)
+              ) {
+                layerModifiedInPass = true;
+                segments.forEach((segPoints) => {
+                  strokesAfterErasing.push({
+                    ...stroke,
+                    id: generateStrokeId(),
+                    points: segPoints,
+                  });
+                });
+              } else if (
+                segments.length === 1 &&
+                segments[0].length === stroke.points.length
+              ) {
+                // Stroke was untouched in this pass
+                strokesAfterErasing.push(stroke);
+              }
+              // If segments is empty, the whole stroke was erased.
+            });
+
+            if (layerModifiedInPass) {
+              hasChanged = true;
+              currentLayerStrokes = strokesAfterErasing;
+            }
+          }
+        });
+
+        if (hasChanged) {
+          setLayerStrokes((prev) => ({
+            ...prev,
+            [selectedLayerId]: currentLayerStrokes,
+          }));
+        }
+
+        lastErasePointRef.current = coords;
+        setEraserCircle(coords);
         drawFrame();
         return;
       }
@@ -1099,31 +1220,34 @@ export function AnimationEditor({
       if (!isDrawing || !contextRef.current || !currentStroke) return;
 
       setCurrentStroke((prev) =>
-        prev ? { ...prev, points: [...prev.points, { x, y }] } : null
+        prev
+          ? { ...prev, points: [...prev.points, { x: currentX, y: currentY }] }
+          : null
       );
       drawFrame();
     },
     [
-      color,
-      brushSize,
-      currentTool,
-      selectedLayerId,
-      zoom,
-      isSpacePressed,
-      eraserSize,
-      lassoSelection,
-      layerStrokes,
+      getCanvasCoords,
       isResizing,
-      resizeBox,
-      activeHandle,
       isDraggingResizeBox,
+      resizeBox,
       dragOffset,
+      selectedLayerId,
+      activeHandle,
+      isDragging,
+      currentTool,
+      lassoSelection,
       originalLassoPoints,
       originalStrokePositions,
-      drawFrame,
-      isDrawing,
-      currentStroke,
+      layerStrokes,
       isSelecting,
+      isDrawing,
+      contextRef,
+      currentStroke,
+      drawFrame,
+      eraserStyle,
+      eraserSize,
+      generateStrokeId,
     ]
   );
 
@@ -1312,7 +1436,7 @@ export function AnimationEditor({
   // Tools
   const tools = [
     { id: "pencil", icon: Pencil, label: "Pencil" },
-    { id: "brush", icon: Palette, label: "Brush" },
+    { id: "palette", icon: Palette, label: "Palette" },
     { id: "eraser", icon: Eraser, label: "Eraser" },
     { id: "move", icon: Move, label: "Move" },
   ];
@@ -1956,13 +2080,22 @@ export function AnimationEditor({
 
     // Create resize box with padding
     const padding = 10;
+    const boxX = minX - padding;
+    const boxY = minY - padding;
+    const boxWidth = maxX - minX + padding * 2;
+    const boxHeight = maxY - minY + padding * 2;
+
     setResizeBox({
-      x: minX - padding,
-      y: minY - padding,
-      width: maxX - minX + padding * 2,
-      height: maxY - minY + padding * 2,
+      x: boxX,
+      y: boxY,
+      width: boxWidth,
+      height: boxHeight,
       strokes: selectedStrokes,
       originalStrokes: JSON.parse(JSON.stringify(selectedStrokes)), // Deep copy for reverting
+      initialX: boxX,
+      initialY: boxY,
+      initialWidth: boxWidth,
+      initialHeight: boxHeight,
     });
 
     setIsResizing(true);
@@ -2080,6 +2213,13 @@ export function AnimationEditor({
       return;
     }
 
+    // Eraser tool - save changes to undo stack
+    if (currentTool === "eraser" && selectedLayerId) {
+      saveToUndoStack();
+      lastErasePointRef.current = null; // Clear ref on mouse up
+      return;
+    }
+
     // Regular drawing
     if (isDrawing && currentStroke && selectedLayerId) {
       setIsDrawing(false);
@@ -2105,6 +2245,40 @@ export function AnimationEditor({
     setIsDraggingResizeBox(false);
     // Final state is already in layerStrokes, just need to save
     saveToUndoStack();
+  };
+
+  // Custom color set functions
+  const createColorSet = () => {
+    if (newSetName.trim()) {
+      setCustomColorSets((prev) => ({
+        ...prev,
+        [newSetName.trim()]: [],
+      }));
+      setNewSetName("");
+      setIsCreatingSet(false);
+    }
+  };
+
+  const addColorToSet = (setName: string, color: string) => {
+    setCustomColorSets((prev) => ({
+      ...prev,
+      [setName]: [...(prev[setName] || []), color],
+    }));
+  };
+
+  const removeColorFromSet = (setName: string, colorIndex: number) => {
+    setCustomColorSets((prev) => ({
+      ...prev,
+      [setName]: prev[setName].filter((_, index) => index !== colorIndex),
+    }));
+  };
+
+  const deleteColorSet = (setName: string) => {
+    setCustomColorSets((prev) => {
+      const newSets = { ...prev };
+      delete newSets[setName];
+      return newSets;
+    });
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -2297,31 +2471,15 @@ export function AnimationEditor({
           {/* Sliding Settings Panel */}
           <div
             className={`bg-gray-800 border-r border-gray-700 transition-all duration-300 ease-in-out overflow-hidden ${
-              isHoveringToolbar && currentTool !== "move" ? "w-64" : "w-0"
+              (isHoveringToolbar || isColorPickerOpen) && currentTool !== "move"
+                ? "w-64"
+                : "w-0"
             }`}
           >
             <div className="p-4 space-y-4 min-w-64">
-              {/* Pencil/Brush Settings */}
-              {(currentTool === "pencil" || currentTool === "brush") && (
+              {/* Pencil Settings */}
+              {currentTool === "pencil" && (
                 <>
-                  <div>
-                    <Label className="text-sm font-medium">Color</Label>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Input
-                        type="color"
-                        value={color}
-                        onChange={(e) => setColor(e.target.value)}
-                        className="w-12 h-8 p-1 border-gray-600"
-                      />
-                      <Input
-                        value={color}
-                        onChange={(e) => setColor(e.target.value)}
-                        className="flex-1"
-                        placeholder="#000000"
-                      />
-                    </div>
-                  </div>
-
                   <div>
                     <Label className="text-sm font-medium">
                       Brush Size: {brushSize}px
@@ -2334,6 +2492,31 @@ export function AnimationEditor({
                       step={1}
                       className="mt-2"
                     />
+                  </div>
+                </>
+              )}
+
+              {/* Palette Settings */}
+              {currentTool === "palette" && (
+                <>
+                  <div>
+                    <Label className="text-sm font-medium">Color</Label>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Input
+                        type="color"
+                        value={color}
+                        onChange={(e) => setColor(e.target.value)}
+                        onFocus={() => setIsColorPickerOpen(true)}
+                        onBlur={() => setIsColorPickerOpen(false)}
+                        className="w-12 h-8 p-1 border-gray-600"
+                      />
+                      <Input
+                        value={color}
+                        onChange={(e) => setColor(e.target.value)}
+                        className="flex-1"
+                        placeholder="#000000"
+                      />
+                    </div>
                   </div>
 
                   <Separator />
@@ -2359,6 +2542,103 @@ export function AnimationEditor({
                         />
                       ))}
                     </div>
+                  </div>
+
+                  {/* Custom Color Sets */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-sm font-medium">Custom Sets</Label>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsCreatingSet(true)}
+                        className="h-6 px-2 text-xs"
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        New Set
+                      </Button>
+                    </div>
+
+                    {/* Create New Set */}
+                    {isCreatingSet && (
+                      <div className="flex items-center gap-2 mb-3 p-2 border border-gray-600 rounded">
+                        <Input
+                          value={newSetName}
+                          onChange={(e) => setNewSetName(e.target.value)}
+                          placeholder="Set name"
+                          className="flex-1 h-6 text-xs"
+                          onKeyPress={(e) =>
+                            e.key === "Enter" && createColorSet()
+                          }
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={createColorSet}
+                          className="h-6 px-2 text-xs"
+                        >
+                          Create
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setIsCreatingSet(false);
+                            setNewSetName("");
+                          }}
+                          className="h-6 px-2 text-xs"
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Display Custom Sets */}
+                    {Object.entries(customColorSets).map(
+                      ([setName, colors]) => (
+                        <div key={setName} className="mb-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <Label className="text-sm font-medium">
+                              {setName}
+                            </Label>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => deleteColorSet(setName)}
+                              className="h-6 px-2 text-xs text-red-400 hover:text-red-300"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2">
+                            {colors.map((c, index) => (
+                              <button
+                                key={index}
+                                className="w-8 h-8 rounded border-2 border-gray-600 hover:border-white relative group"
+                                style={{ backgroundColor: c }}
+                                onClick={() => setColor(c)}
+                              >
+                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 flex items-center justify-center">
+                                  <X
+                                    className="w-3 h-3 text-white opacity-0 group-hover:opacity-100"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeColorFromSet(setName, index);
+                                    }}
+                                  />
+                                </div>
+                              </button>
+                            ))}
+                            <button
+                              className="w-8 h-8 rounded border-2 border-dashed border-gray-600 hover:border-white flex items-center justify-center"
+                              onClick={() => addColorToSet(setName, color)}
+                            >
+                              <Plus className="w-3 h-3 text-gray-400" />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    )}
                   </div>
                 </>
               )}

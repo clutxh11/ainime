@@ -28,6 +28,11 @@ const AnimationEditor = lazy(() =>
     default: m.AnimationEditor,
   }))
 );
+const ProjectDetail = lazy(() =>
+  import("@/components/project-detail").then((m) => ({
+    default: m.ProjectDetail,
+  }))
+);
 
 // Loading component for better UX
 function LoadingSpinner() {
@@ -142,6 +147,16 @@ export default function Home() {
             <AnimationEditor
               onViewChange={handleViewChange}
               sceneSettings={sceneSettings}
+            />
+          </Suspense>
+        );
+
+      case "project-detail":
+        return (
+          <Suspense fallback={<LoadingSpinner />}>
+            <ProjectDetail
+              onViewChange={handleViewChange}
+              projectId={selectedContent?.id}
             />
           </Suspense>
         );

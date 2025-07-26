@@ -1,6 +1,92 @@
 # AI-Nime: Application Development Blueprint (MVP-First Approach)
 
-This document outlines the complete technical specifications for the AI-Nime platform, a collaborative manga-to-animation web application. It is structured to prioritize a Minimum Viable Product (MVP) that can be built and launched with little to no initial cost.
+## 🚨 Current Codebase State & Restructuring Plan
+
+### **Critical Issues Identified:**
+
+Your current codebase has several structural problems that need to be addressed **before** implementing Supabase:
+
+#### **1. Massive Component Files (CRITICAL)**
+
+- `creator-hub.tsx` (2,467 lines) - **Monolith that needs breakdown**
+- `animation-editor.tsx` (3,133 lines) - **Extremely large component**
+- These violate the single responsibility principle and are unmaintainable
+
+#### **2. Poor File Organization**
+
+```
+Current Structure (PROBLEMATIC):
+components/
+├── creator-hub.tsx (2,467 lines) ❌
+├── animation-editor.tsx (3,133 lines) ❌
+├── project-detail.tsx (1,133 lines) ❌
+├── viewer-hub.tsx (838 lines) ❌
+└── ui/ (well organized) ✅
+```
+
+#### **3. Hardcoded Data Everywhere**
+
+- Mock data scattered throughout components
+- No centralized data management
+- No API layer structure
+- No proper state management
+
+#### **4. Missing Architecture Patterns**
+
+- No error boundaries
+- No loading states
+- No proper TypeScript interfaces
+- No separation of concerns
+
+### **🎯 Restructuring Strategy (BEFORE Supabase)**
+
+#### **Phase 1: Break Down Monoliths (Week 1)**
+
+```typescript
+// TARGET STRUCTURE:
+components/features/creator/
+├── CreatorDashboard.tsx          # Main dashboard (200 lines)
+├── ProjectSetup.tsx              # Project creation (150 lines)
+├── MangaManager.tsx              # Manga management (300 lines)
+├── TeamManagement.tsx            # Team features (250 lines)
+└── ForumSection.tsx              # Forum integration (200 lines)
+
+components/features/animation/
+├── AnimationEditor.tsx           # Main editor (400 lines)
+├── Canvas.tsx                    # Drawing canvas (300 lines)
+├── Timeline.tsx                  # Timeline component (250 lines)
+├── Toolbar.tsx                   # Tools panel (200 lines)
+├── LayerPanel.tsx                # Layer management (200 lines)
+└── PlaybackControls.tsx          # Playback controls (150 lines)
+```
+
+#### **Phase 2: Implement Supabase Integration (Week 2)**
+
+- Set up Supabase project and database
+- Create API layer to replace hardcoded data
+- Implement authentication
+- Add real-time features
+
+#### **Phase 3: State Management & Optimization (Week 3)**
+
+- Implement proper state management
+- Add error boundaries and loading states
+- Optimize performance
+- Add comprehensive testing
+
+### **📋 Pre-Supabase Checklist:**
+
+- [ ] Break down `creator-hub.tsx` into smaller components
+- [ ] Break down `animation-editor.tsx` into modules
+- [ ] Create proper TypeScript interfaces
+- [ ] Implement error boundaries
+- [ ] Add loading states
+- [ ] Create reusable hooks
+- [ ] Set up proper file structure
+
+**⚠️ IMPORTANT:** Complete Phase 1 restructuring before implementing Supabase to avoid technical debt and ensure a solid foundation.
+
+---
 
 ## 1. Low-Cost MVP Strategy
 
