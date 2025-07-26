@@ -52,12 +52,15 @@ export default function Home() {
     ContentItem | Project | null
   >(null);
   const [explorerCategory, setExplorerCategory] = useState<string>("");
-  const [sceneSettings, setSceneSettings] = useState<{
-    sceneName: string;
-    canvasWidth: number;
-    canvasHeight: number;
-    frameRate: number;
-  } | null>(null);
+  const [sceneSettings, setSceneSettings] = useState<
+    | {
+        sceneName: string;
+        canvasWidth: number;
+        canvasHeight: number;
+        frameRate: number;
+      }
+    | undefined
+  >(undefined);
 
   const handleViewChange = (
     view: CurrentView,

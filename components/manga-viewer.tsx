@@ -16,7 +16,7 @@ import {
   MessageCircle,
   ThumbsUp,
 } from "lucide-react"
-import type { CurrentView } from "@/app/page"
+import type { CurrentView } from "@/types"
 
 interface MangaViewerProps {
   content: any

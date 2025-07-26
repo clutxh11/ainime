@@ -1,23 +1,27 @@
 export interface Team {
-  id: string
-  name: string
-  memberCount: number
-  leadName: string
-  description: string
-  upvotes: number
-  views: number
+  id: string;
+  name: string;
+  memberCount: number;
+  leadName: string;
+  description: string;
+  upvotes: number;
+  views: number;
   members: Array<{
-    name: string
-    role: string
-  }>
+    name: string;
+    role: string;
+  }>;
 }
 
 export interface Project {
-  id: string
-  title: string
-  teams: Team[]
-  progress: number
-  image: string
+  id: string;
+  title: string;
+  description: string;
+  genre: string;
+  status: string;
+  views: number;
+  teams: Team[];
+  progress: number;
+  image: string;
 }
 
 // Centralized team data - this ensures consistency across all components
@@ -28,7 +32,8 @@ export const mockTeamsByProject: Record<string, Team[]> = {
       name: "Dragon Animators",
       memberCount: 8,
       leadName: "SakuraArt",
-      description: "Passionate team focused on bringing epic fantasy scenes to life",
+      description:
+        "Passionate team focused on bringing epic fantasy scenes to life",
       upvotes: 156,
       views: 2340,
       members: [
@@ -84,7 +89,8 @@ export const mockTeamsByProject: Record<string, Team[]> = {
       name: "Digital Samurai",
       memberCount: 3,
       leadName: "CodeBlade",
-      description: "Merging traditional samurai aesthetics with cyberpunk elements",
+      description:
+        "Merging traditional samurai aesthetics with cyberpunk elements",
       upvotes: 67,
       views: 1200,
       members: [
@@ -93,12 +99,16 @@ export const mockTeamsByProject: Record<string, Team[]> = {
       ],
     },
   ],
-}
+};
 
 export const mockProjects: Project[] = [
   {
     id: "dragons-legacy",
     title: "Dragon's Legacy",
+    description: "An epic fantasy animation about dragons and magic",
+    genre: "Fantasy",
+    status: "Active",
+    views: 5000,
     teams: mockTeamsByProject["dragons-legacy"],
     progress: 65,
     image: "/placeholder.svg?height=200&width=300",
@@ -106,16 +116,20 @@ export const mockProjects: Project[] = [
   {
     id: "cyber-samurai",
     title: "Cyber Samurai",
+    description: "A cyberpunk samurai action animation",
+    genre: "Sci-Fi",
+    status: "Active",
+    views: 3200,
     teams: mockTeamsByProject["cyber-samurai"],
     progress: 30,
     image: "/placeholder.svg?height=200&width=300",
   },
-]
+];
 
 export function getTeamCountForProject(projectId: string): number {
-  return mockTeamsByProject[projectId]?.length || 0
+  return mockTeamsByProject[projectId]?.length || 0;
 }
 
 export function getTeamsForProject(projectId: string): Team[] {
-  return mockTeamsByProject[projectId] || []
+  return mockTeamsByProject[projectId] || [];
 }

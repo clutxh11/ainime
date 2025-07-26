@@ -31,7 +31,7 @@ interface TimelineGridProps {
   rows: { id: string; name: string }[];
   setRows: (rows: { id: string; name: string }[]) => void;
   frames: number;
-  setFrames: (n: number) => void;
+  setFrames: React.Dispatch<React.SetStateAction<number>>;
   drawingFrames: DrawingFrame[];
   setDrawingFrames: React.Dispatch<React.SetStateAction<DrawingFrame[]>>;
   selectedRow: string | null;
@@ -518,4 +518,3 @@ export default function TimelineGrid({
     </div>
   );
 }
- 

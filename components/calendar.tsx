@@ -1,25 +1,33 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, ChevronLeft, ChevronRight, CalendarIcon, Clock, Users, Play } from "lucide-react"
-import type { CurrentView } from "@/app/page"
-import { ProfileModal } from "@/components/profile-modal"
-import { ProfileDropdown } from "@/components/shared/profile-dropdown"
-import { SettingsModal } from "@/components/settings-modal"
-import { ContributionsModal } from "@/components/contributions-modal"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  CalendarIcon,
+  Clock,
+  Users,
+  Play,
+} from "lucide-react";
+import type { CurrentView } from "@/types";
+import { ProfileModal } from "@/components/profile-modal";
+import { ProfileDropdown } from "@/components/shared/profile-dropdown";
+import { SettingsModal } from "@/components/settings-modal";
+import { ContributionsModal } from "@/components/contributions-modal";
 
 interface CalendarEvent {
-  id: string
-  title: string
-  type: "release" | "deadline" | "meeting" | "community"
-  time: string
-  description: string
-  participants?: number
-  status: "upcoming" | "live" | "completed"
-  contentType?: "manga" | "animated"
+  id: string;
+  title: string;
+  type: "release" | "deadline" | "meeting" | "community";
+  time: string;
+  description: string;
+  participants?: number;
+  status: "upcoming" | "live" | "completed";
+  contentType?: "manga" | "animated";
 }
 
 const mockEvents: Record<string, CalendarEvent[]> = {
@@ -78,60 +86,67 @@ const mockEvents: Record<string, CalendarEvent[]> = {
   ],
   SAT: [],
   SUN: [],
-}
+};
 
 interface CalendarProps {
-  onViewChange: (view: CurrentView, data?: any) => void
+  onViewChange: (view: CurrentView, data?: any) => void;
 }
 
 export function Calendar({ onViewChange }: CalendarProps) {
-  const [currentWeek, setCurrentWeek] = useState(0)
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
-  const [isContributionsModalOpen, setIsContributionsModalOpen] = useState(false)
+  const [currentWeek, setCurrentWeek] = useState(0);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isContributionsModalOpen, setIsContributionsModalOpen] =
+    useState(false);
 
-  const days = ["TODAY", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
-  const dates = ["7/15", "7/16", "7/17", "7/18", "7/19", "7/20", "7/21"]
+  const days = ["TODAY", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+  const dates = ["7/15", "7/16", "7/17", "7/18", "7/19", "7/20", "7/21"];
 
   const getEventTypeColor = (type: string) => {
     switch (type) {
       case "release":
-        return "bg-green-600"
+        return "bg-green-600";
       case "deadline":
-        return "bg-red-600"
+        return "bg-red-600";
       case "meeting":
-        return "bg-blue-600"
+        return "bg-blue-600";
       case "community":
-        return "bg-purple-600"
+        return "bg-purple-600";
       default:
-        return "bg-gray-600"
+        return "bg-gray-600";
     }
-  }
+  };
 
   const getEventTypeIcon = (type: string) => {
     switch (type) {
       case "release":
-        return <Play className="w-3 h-3" />
+        return <Play className="w-3 h-3" />;
       case "deadline":
-        return <Clock className="w-3 h-3" />
+        return <Clock className="w-3 h-3" />;
       case "meeting":
-        return <Users className="w-3 h-3" />
+        return <Users className="w-3 h-3" />;
       case "community":
-        return <CalendarIcon className="w-3 h-3" />
+        return <CalendarIcon className="w-3 h-3" />;
       default:
-        return <CalendarIcon className="w-3 h-3" />
+        return <CalendarIcon className="w-3 h-3" />;
     }
-  }
+  };
 
   const handleEventClick = (event: CalendarEvent) => {
     if (event.type === "release" && event.contentType) {
       if (event.contentType === "animated") {
-        onViewChange("video", { title: event.title, selectedEpisode: "Episode 1" })
+        onViewChange("video", {
+          title: event.title,
+          selectedEpisode: "Episode 1",
+        });
       } else if (event.contentType === "manga") {
-        onViewChange("manga", { title: event.title, selectedChapter: "Chapter 1" })
+        onViewChange("manga", {
+          title: event.title,
+          selectedChapter: "Chapter 1",
+        });
       }
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -140,14 +155,24 @@ export function Calendar({ onViewChange }: CalendarProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-8">
-              <Button variant="ghost" onClick={() => onViewChange("viewer")} className="text-gray-300 hover:text-white">
+              <Button
+                variant="ghost"
+                onClick={() => onViewChange("viewer")}
+                className="text-gray-300 hover:text-white"
+              >
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to Viewer
               </Button>
-              <div className="text-2xl font-bold text-red-500">Production Calendar</div>
+              <div className="text-2xl font-bold text-red-500">
+                Production Calendar
+              </div>
             </div>
             <div className="flex items-center gap-4">
-              <Button variant="ghost" className="text-white hover:text-red-400" onClick={() => onViewChange("creator")}>
+              <Button
+                variant="ghost"
+                className="text-white hover:text-red-400"
+                onClick={() => onViewChange("creator")}
+              >
                 Creator Hub
               </Button>
               <ProfileDropdown
@@ -164,8 +189,12 @@ export function Calendar({ onViewChange }: CalendarProps) {
         {/* Calendar Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Release Calendar</h1>
-            <p className="text-gray-400">Track releases, deadlines, and community events</p>
+            <h1 className="text-3xl font-bold text-white mb-2">
+              Release Calendar
+            </h1>
+            <p className="text-gray-400">
+              Track releases, deadlines, and community events
+            </p>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex gap-2">
@@ -188,13 +217,24 @@ export function Calendar({ onViewChange }: CalendarProps) {
         {/* Filter Options */}
         <div className="flex items-center gap-4 mb-6">
           <div className="flex items-center gap-2">
-            <input type="radio" id="premium" name="filter" defaultChecked className="text-blue-600" />
+            <input
+              type="radio"
+              id="premium"
+              name="filter"
+              defaultChecked
+              className="text-blue-600"
+            />
             <label htmlFor="premium" className="text-white text-sm">
               Premium Episodes
             </label>
           </div>
           <div className="flex items-center gap-2">
-            <input type="radio" id="free" name="filter" className="text-blue-600" />
+            <input
+              type="radio"
+              id="free"
+              name="filter"
+              className="text-blue-600"
+            />
             <label htmlFor="free" className="text-white text-sm">
               Free New Episodes
             </label>
@@ -206,7 +246,13 @@ export function Calendar({ onViewChange }: CalendarProps) {
           {days.map((day, index) => (
             <div key={day} className="min-h-[400px]">
               <div className="text-center mb-4">
-                <h3 className={`font-bold text-lg ${day === "TODAY" ? "text-orange-400" : "text-white"}`}>{day}</h3>
+                <h3
+                  className={`font-bold text-lg ${
+                    day === "TODAY" ? "text-orange-400" : "text-white"
+                  }`}
+                >
+                  {day}
+                </h3>
                 <p className="text-gray-400 text-sm">{dates[index]}</p>
               </div>
 
@@ -218,21 +264,37 @@ export function Calendar({ onViewChange }: CalendarProps) {
                       className={`bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors ${
                         event.type === "release" ? "cursor-pointer" : ""
                       }`}
-                      onClick={() => (event.type === "release" ? handleEventClick(event) : undefined)}
+                      onClick={() =>
+                        event.type === "release"
+                          ? handleEventClick(event)
+                          : undefined
+                      }
                     >
                       <CardContent className="p-3">
                         <div className="flex items-start gap-2 mb-2">
-                          <Badge className={`${getEventTypeColor(event.type)} text-xs px-1 py-0.5`}>
+                          <Badge
+                            className={`${getEventTypeColor(
+                              event.type
+                            )} text-xs px-1 py-0.5`}
+                          >
                             {getEventTypeIcon(event.type)}
                           </Badge>
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs text-gray-400 mb-1">{event.time}</p>
-                            <h4 className="font-semibold text-white text-sm leading-tight mb-1">{event.title}</h4>
-                            <p className="text-xs text-gray-400 line-clamp-2">{event.description}</p>
+                            <p className="text-xs text-gray-400 mb-1">
+                              {event.time}
+                            </p>
+                            <h4 className="font-semibold text-white text-sm leading-tight mb-1">
+                              {event.title}
+                            </h4>
+                            <p className="text-xs text-gray-400 line-clamp-2">
+                              {event.description}
+                            </p>
                             {event.participants && (
                               <div className="flex items-center gap-1 mt-2">
                                 <Users className="w-3 h-3 text-gray-400" />
-                                <span className="text-xs text-gray-400">{event.participants}</span>
+                                <span className="text-xs text-gray-400">
+                                  {event.participants}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -251,7 +313,9 @@ export function Calendar({ onViewChange }: CalendarProps) {
                   ))
                 ) : (
                   <div className="text-center py-8">
-                    <p className="text-gray-500 text-sm">Schedule Coming Soon</p>
+                    <p className="text-gray-500 text-sm">
+                      Schedule Coming Soon
+                    </p>
                   </div>
                 )}
               </div>
@@ -279,9 +343,18 @@ export function Calendar({ onViewChange }: CalendarProps) {
           </div>
         </div>
       </div>
-      <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
-      <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
-      <ContributionsModal isOpen={isContributionsModalOpen} onClose={() => setIsContributionsModalOpen(false)} />
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
+      <SettingsModal
+        open={isSettingsModalOpen}
+        onOpenChange={setIsSettingsModalOpen}
+      />
+      <ContributionsModal
+        open={isContributionsModalOpen}
+        onOpenChange={setIsContributionsModalOpen}
+      />
     </div>
-  )
+  );
 }

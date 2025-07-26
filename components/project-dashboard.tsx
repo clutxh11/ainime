@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ArrowLeft, Users, MessageCircle, ThumbsUp, Upload, Eye, Crown, UserPlus, Plus, FileText } from "lucide-react"
-import type { CurrentView } from "@/app/page"
+import type { CurrentView } from "@/types"
 
 interface ProjectDashboardProps {
   project: any

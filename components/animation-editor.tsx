@@ -183,7 +183,7 @@ export function AnimationEditor({
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentTool, setCurrentTool] = useState<
-    "pencil" | "eraser" | "brush" | "move"
+    "pencil" | "eraser" | "brush" | "move" | "palette"
   >("pencil");
   const [brushSize, setBrushSize] = useState(5);
   const [color, setColor] = useState("#000000");
@@ -348,8 +348,8 @@ export function AnimationEditor({
   const [currentStroke, setCurrentStroke] = useState<DrawingStroke | null>(
     null
   );
-  const [undoStack, setUndoStack] = useState<Frame[][]>([]);
-  const [redoStack, setRedoStack] = useState<Frame[][]>([]);
+  const [undoStack, setUndoStack] = useState<any[]>([]);
+  const [redoStack, setRedoStack] = useState<any[]>([]);
 
   // Set initial current layer
 
@@ -869,7 +869,8 @@ export function AnimationEditor({
         id: generateStrokeId(),
         points: [{ x, y }],
         color,
-        brushSize: currentTool === "eraser" ? eraserSize : brushSize,
+        brushSize:
+          (currentTool as string) === "eraser" ? eraserSize : brushSize,
         tool: currentTool,
         layerId: selectedLayerId,
       };
@@ -1625,7 +1626,7 @@ export function AnimationEditor({
   // Export
   const exportAnimation = () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || typeof window === 'undefined') return;
 
     const link = document.createElement("a");
     link.download = "animation.png";
@@ -1682,6 +1683,9 @@ export function AnimationEditor({
 
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
+    // Only add event listeners on the client side
+    if (typeof window === 'undefined') return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -1937,6 +1941,18 @@ export function AnimationEditor({
 
       return { ...prev, [folderId]: newOrder };
     });
+  };
+
+  const moveFrameFolderUp = (folderId: string) => {
+    // This function would move a frame folder up in the timeline
+    // For now, we'll implement a placeholder that saves to undo stack
+    saveToUndoStack();
+  };
+
+  const moveFrameFolderDown = (folderId: string) => {
+    // This function would move a frame folder down in the timeline
+    // For now, we'll implement a placeholder that saves to undo stack
+    saveToUndoStack();
   };
 
   const handleCloseContextMenu = () => {
@@ -2304,8 +2320,19 @@ export function AnimationEditor({
     }
   };
 
-  document.addEventListener("keydown", handleKeyDown);
-  document.addEventListener("keyup", handleKeyUp);
+  // Add event listeners for keyboard shortcuts
+  useEffect(() => {
+    // Only add event listeners on the client side
+    if (typeof window === 'undefined') return;
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keyup", handleKeyUp);
+    
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
 
   return (
     <div className="h-screen bg-gray-900 text-white flex flex-col overflow-hidden">

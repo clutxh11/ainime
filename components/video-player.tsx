@@ -18,7 +18,7 @@ import {
   Share,
   MessageCircle,
 } from "lucide-react"
-import type { CurrentView } from "@/app/page"
+import type { CurrentView } from "@/types"
 
 interface VideoPlayerProps {
   content: any

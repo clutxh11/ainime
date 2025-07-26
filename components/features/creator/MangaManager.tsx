@@ -26,9 +26,10 @@ import {
   Check,
   X,
 } from "lucide-react";
+import type { CurrentView } from "@/types";
 
 interface MangaManagerProps {
-  onViewChange: (view: string, params?: any) => void;
+  onViewChange: (view: CurrentView, params?: any) => void;
 }
 
 export function MangaManager({ onViewChange }: MangaManagerProps) {
