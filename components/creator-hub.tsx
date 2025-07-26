@@ -192,6 +192,13 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
   // Scene creation settings
   const [sceneName, setSceneName] = useState("New Scene");
 
+  // Project setup state
+  const [projectName, setProjectName] = useState("");
+  const [canvasWidth, setCanvasWidth] = useState(1920);
+  const [canvasHeight, setCanvasHeight] = useState(1080);
+  const [frameRate, setFrameRate] = useState(24);
+  const [units, setUnits] = useState("pixel");
+
   // Manga management state
   const [mangaActiveTab, setMangaActiveTab] = useState("dashboard");
   const [isNewSeriesDialogOpen, setIsNewSeriesDialogOpen] = useState(false);
@@ -1510,13 +1517,6 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
 
   // Forum state
   const [isNewTopicModalOpen, setIsNewTopicModalOpen] = useState(false);
-
-  // Project setup state
-  const [projectName, setProjectName] = useState("");
-  const [canvasWidth, setCanvasWidth] = useState(1920);
-  const [canvasHeight, setCanvasHeight] = useState(1080);
-  const [frameRate, setFrameRate] = useState(24);
-  const [units, setUnits] = useState("pixel");
 
   const renderForum = () => {
     return (
