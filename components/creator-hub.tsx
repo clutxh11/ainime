@@ -428,7 +428,7 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
       {error && (
         <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-4">
           <p className="text-red-400">Error loading teams: {error}</p>
-          <Button 
+          <Button
             onClick={fetchData}
             variant="outline"
             size="sm"
@@ -454,14 +454,17 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
           {teams.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {teams.map((team) => (
-                <div key={team.id} className="bg-gray-800 rounded-2xl p-6 shadow-sm">
+                <div
+                  key={team.id}
+                  className="bg-gray-800 rounded-2xl p-6 shadow-sm"
+                >
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <h3 className="text-lg font-semibold text-white">
                         {team.name}
                       </h3>
                       <p className="text-sm text-gray-400">
-                        {team.users?.username || 'Unknown Leader'}
+                        {team.users?.username || "Unknown Leader"}
                       </p>
                     </div>
                     <Badge className="bg-green-600">Active</Badge>
@@ -473,7 +476,9 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-300">
                       <CalendarIcon className="w-4 h-4" />
-                      <span>Started {new Date(team.created_at).toLocaleDateString()}</span>
+                      <span>
+                        Started {new Date(team.created_at).toLocaleDateString()}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-300">
                       <Eye className="w-4 h-4" />
@@ -485,7 +490,9 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
                     </div>
                   </div>
                   {team.description && (
-                    <p className="text-sm text-gray-400 mb-4">{team.description}</p>
+                    <p className="text-sm text-gray-400 mb-4">
+                      {team.description}
+                    </p>
                   )}
                   <div className="flex gap-2">
                     <Button
@@ -510,8 +517,12 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
           ) : (
             <div className="text-center py-12">
               <Users className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-white mb-2">No teams found</h3>
-              <p className="text-gray-400 mb-4">Create your first team to start collaborating</p>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                No teams found
+              </h3>
+              <p className="text-gray-400 mb-4">
+                Create your first team to start collaborating
+              </p>
               <Button className="bg-red-600 hover:bg-red-700">
                 <Plus className="w-4 h-4 mr-2" />
                 Create Team
@@ -520,59 +531,6 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
           )}
         </div>
       )}
-              <div className="flex items-center gap-2 text-sm text-gray-300">
-                <BarChart3 className="w-4 h-4" />
-                <span>75% complete</span>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" className="flex-1 bg-red-600 hover:bg-red-700">
-                <Play className="w-4 h-4 mr-1" />
-                Join Session
-              </Button>
-              <Button size="sm" variant="outline" className="border-gray-600">
-                <Settings className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Team Card 2 */}
-          <div className="bg-gray-800 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-white">
-                  Cyberpunk Dreams
-                </h3>
-                <p className="text-sm text-gray-400">Digital Animators</p>
-              </div>
-              <Badge className="bg-yellow-600">Planning</Badge>
-            </div>
-            <div className="space-y-3 mb-4">
-              <div className="flex items-center gap-2 text-sm text-gray-300">
-                <Users className="w-4 h-4" />
-                <span>5 members</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-300">
-                <CalendarIcon className="w-4 h-4" />
-                <span>Started 1 week ago</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-300">
-                <BarChart3 className="w-4 h-4" />
-                <span>25% complete</span>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" className="flex-1 bg-red-600 hover:bg-red-700">
-                <Play className="w-4 h-4 mr-1" />
-                Join Session
-              </Button>
-              <Button size="sm" variant="outline" className="border-gray-600">
-                <Settings className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 
