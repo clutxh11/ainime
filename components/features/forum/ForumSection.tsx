@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -18,79 +18,99 @@ import {
   BarChart3,
   Edit,
   ImageIcon,
+  Loader2,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 interface ForumPost {
   id: string;
   title: string;
-  author: string;
-  tags: string[];
-  replies: number;
-  likes: number;
-  timeAgo: string;
   content: string;
+  author_id: string;
+  category: string;
+  tags: string[];
+  likes: number;
+  views: number;
+  created_at: string;
+  updated_at: string;
+  users?: {
+    username: string;
+    avatar_url?: string;
+  };
 }
-
-const mockForumPosts: ForumPost[] = [
-  {
-    id: "1",
-    title: "Looking for experienced storyboard artists for Dragon's Legacy",
-    author: "SakuraArt",
-    tags: ["Team Recruiting", "Storyboard"],
-    replies: 23,
-    likes: 45,
-    timeAgo: "2h ago",
-    content:
-      "We're working on Chapter 3 and need help with complex action sequences...",
-  },
-  {
-    id: "2",
-    title: "Best practices for frame-by-frame animation in digital format",
-    author: "AnimatorPro",
-    tags: ["Tutorial", "Animation"],
-    replies: 156,
-    likes: 342,
-    timeAgo: "1d ago",
-    content:
-      "I've been working on digital animation for 5 years and here are my top tips...",
-  },
-  {
-    id: "3",
-    title: "Showcase: My latest animation project - 'The Last Samurai'",
-    author: "CreativeMind",
-    tags: ["Showcase", "Completed"],
-    replies: 89,
-    likes: 567,
-    timeAgo: "3d ago",
-    content:
-      "After 6 months of hard work, I'm excited to share my latest project...",
-  },
-  {
-    id: "4",
-    title: "Collaboration request: Voice actors needed for fantasy series",
-    author: "VoiceDirector",
-    tags: ["Collaboration", "Voice Acting"],
-    replies: 34,
-    likes: 78,
-    timeAgo: "5d ago",
-    content:
-      "We're looking for talented voice actors for our upcoming fantasy series...",
-  },
-  {
-    id: "5",
-    title: "Technical question: How to optimize animation files for web",
-    author: "TechAnimator",
-    tags: ["Technical", "Optimization"],
-    replies: 67,
-    likes: 123,
-    timeAgo: "1w ago",
-    content:
-      "I'm having trouble with file sizes when exporting animations for web...",
-  },
-];
 
 export function ForumSection() {
   const [isNewTopicModalOpen, setIsNewTopicModalOpen] = useState(false);
+  const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState({
+    totalTopics: 0,
+    totalPosts: 0,
+    activeMembers: 0,
+    onlineNow: 0,
+  });
+
+  // Fetch forum data from Supabase
+  useEffect(() => {
+    fetchForumData();
+  }, []);
+
+  const fetchForumData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch forum posts with author information
+      const { data: postsData, error: postsError } = await supabase
+        .from("forum_posts")
+        .select(
+          `
+          *,
+          users!forum_posts_author_id_fkey(username, avatar_url)
+        `
+        )
+        .order("created_at", { ascending: false });
+
+      if (postsError) throw postsError;
+
+      // Fetch statistics
+      const { count: totalTopics } = await supabase
+        .from("forum_posts")
+        .select("*", { count: "exact", head: true });
+
+      const { count: totalUsers } = await supabase
+        .from("users")
+        .select("*", { count: "exact", head: true });
+
+      setPosts(postsData || []);
+      setStats({
+        totalTopics: totalTopics || 0,
+        totalPosts: totalTopics || 0, // For now, same as topics
+        activeMembers: totalUsers || 0,
+        onlineNow: Math.floor((totalUsers || 0) * 0.1), // Estimate 10% online
+      });
+    } catch (err: any) {
+      setError(err.message);
+      console.error("Error fetching forum data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (diffInSeconds < 60) return "Just now";
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400)
+      return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 604800)
+      return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    return `${Math.floor(diffInSeconds / 604800)}w ago`;
+  };
 
   return (
     <div className="max-w-7xl mx-auto py-10 px-4">
@@ -112,7 +132,9 @@ export function ForumSection() {
               <div className="flex items-center gap-2">
                 <MessageCircle className="w-5 h-5 text-blue-500" />
                 <div>
-                  <div className="text-2xl font-bold text-white">3,852</div>
+                  <div className="text-2xl font-bold text-white">
+                    {stats.totalTopics}
+                  </div>
                   <div className="text-sm text-gray-400">Total Topics</div>
                 </div>
               </div>
@@ -121,7 +143,9 @@ export function ForumSection() {
               <div className="flex items-center gap-2">
                 <Reply className="w-5 h-5 text-green-500" />
                 <div>
-                  <div className="text-2xl font-bold text-white">22,553</div>
+                  <div className="text-2xl font-bold text-white">
+                    {stats.totalPosts}
+                  </div>
                   <div className="text-sm text-gray-400">Total Posts</div>
                 </div>
               </div>
@@ -130,7 +154,9 @@ export function ForumSection() {
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-purple-500" />
                 <div>
-                  <div className="text-2xl font-bold text-white">1,247</div>
+                  <div className="text-2xl font-bold text-white">
+                    {stats.activeMembers}
+                  </div>
                   <div className="text-sm text-gray-400">Active Members</div>
                 </div>
               </div>
@@ -139,7 +165,9 @@ export function ForumSection() {
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-orange-500" />
                 <div>
-                  <div className="text-2xl font-bold text-white">156</div>
+                  <div className="text-2xl font-bold text-white">
+                    {stats.onlineNow}
+                  </div>
                   <div className="text-sm text-gray-400">Online Now</div>
                 </div>
               </div>
@@ -183,70 +211,110 @@ export function ForumSection() {
             </div>
           </div>
 
-          {/* Forum Posts */}
-          <div className="space-y-4">
-            {mockForumPosts.map((post) => (
-              <div
-                key={post.id}
-                className="bg-gray-800 rounded-2xl p-6 shadow-sm hover:bg-gray-750 transition-colors"
+          {/* Loading State */}
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              <span className="ml-2 text-gray-400">Loading forum posts...</span>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-4">
+              <p className="text-red-400">Error loading forum posts: {error}</p>
+              <Button
+                onClick={fetchForumData}
+                variant="outline"
+                size="sm"
+                className="mt-2 border-red-500 text-red-400 hover:bg-red-500/10"
               >
-                <div className="flex items-start gap-4">
-                  <Avatar className="w-12 h-12">
-                    <AvatarFallback className="bg-gray-600 text-white">
-                      {post.author.charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="text-lg font-semibold text-white hover:text-red-400 cursor-pointer">
-                        {post.title}
-                      </h3>
-                      {post.tags.includes("Showcase") && (
-                        <Star className="w-4 h-4 text-yellow-500" />
-                      )}
-                      {post.tags.includes("Tutorial") && (
-                        <Award className="w-4 h-4 text-blue-500" />
-                      )}
-                      {post.likes > 100 && (
-                        <Flame className="w-4 h-4 text-orange-500" />
-                      )}
-                      {post.tags.includes("Team Recruiting") && (
-                        <Pin className="w-4 h-4 text-red-500" />
-                      )}
-                    </div>
-                    <p className="text-gray-300 text-sm mb-3 line-clamp-2">
-                      {post.content}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 text-sm text-gray-400">
-                        <span>by {post.author}</span>
-                        <span>{post.timeAgo}</span>
-                        <div className="flex items-center gap-1">
-                          <Reply className="w-3 h-3" />
-                          {post.replies}
+                Try Again
+              </Button>
+            </div>
+          )}
+
+          {/* Forum Posts */}
+          {!loading && !error && (
+            <div className="space-y-4">
+              {posts.map((post) => (
+                <div
+                  key={post.id}
+                  className="bg-gray-800 rounded-2xl p-6 shadow-sm hover:bg-gray-750 transition-colors"
+                >
+                  <div className="flex items-start gap-4">
+                    <Avatar className="w-12 h-12">
+                      <AvatarFallback className="bg-gray-600 text-white">
+                        {post.users?.username?.charAt(0).toUpperCase() || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h3 className="text-lg font-semibold text-white mb-1">
+                            {post.title}
+                          </h3>
+                          <div className="flex items-center gap-2 text-sm text-gray-400">
+                            <span>
+                              by {post.users?.username || "Unknown User"}
+                            </span>
+                            <span>•</span>
+                            <span>{formatTimeAgo(post.created_at)}</span>
+                            <span>•</span>
+                            <span>{post.category}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Star className="w-3 h-3" />
-                          {post.likes}
+                        <div className="flex items-center gap-2">
+                          {post.tags && post.tags.length > 0 && (
+                            <Badge variant="secondary" className="text-xs">
+                              {post.tags[0]}
+                            </Badge>
+                          )}
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        {post.tags.map((tag) => (
-                          <Badge
-                            key={tag}
-                            variant="secondary"
-                            className="text-xs bg-gray-700 text-gray-300"
-                          >
-                            {tag}
-                          </Badge>
-                        ))}
+                      <p className="text-gray-300 mb-4 line-clamp-2">
+                        {post.content}
+                      </p>
+                      <div className="flex items-center gap-6 text-sm text-gray-400">
+                        <div className="flex items-center gap-1">
+                          <MessageCircle className="w-4 h-4" />
+                          <span>0 replies</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Star className="w-4 h-4" />
+                          <span>{post.likes} likes</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <BarChart3 className="w-4 h-4" />
+                          <span>{post.views} views</span>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!loading && !error && posts.length === 0 && (
+            <div className="text-center py-12">
+              <MessageCircle className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-white mb-2">
+                No forum posts found
+              </h3>
+              <p className="text-gray-400 mb-4">
+                Be the first to start a discussion!
+              </p>
+              <Button
+                onClick={() => setIsNewTopicModalOpen(true)}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create First Post
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -257,69 +325,165 @@ export function ForumSection() {
               Active Users
             </h3>
             <div className="space-y-3">
-              {[
-                { name: "SakuraArt", status: "online" },
-                { name: "AnimatorPro", status: "online" },
-                { name: "CreativeMind", status: "away" },
-                { name: "VoiceDirector", status: "online" },
-                { name: "TechAnimator", status: "offline" },
-              ].map((user) => (
-                <div key={user.name} className="flex items-center gap-3">
-                  <div
-                    className={`w-2 h-2 rounded-full ${
-                      user.status === "online"
-                        ? "bg-green-500"
-                        : user.status === "away"
-                        ? "bg-yellow-500"
-                        : "bg-gray-500"
-                    }`}
-                  />
-                  <span className="text-sm text-gray-300">{user.name}</span>
+              {loading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                  <span className="ml-2 text-sm text-gray-400">
+                    Loading users...
+                  </span>
                 </div>
-              ))}
+              ) : posts.length > 0 ? (
+                // Show unique users from recent posts
+                Array.from(
+                  new Set(
+                    posts.map((post) => post.users?.username).filter(Boolean)
+                  )
+                )
+                  .slice(0, 5)
+                  .map((username) => (
+                    <div key={username} className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-sm text-gray-300">{username}</span>
+                    </div>
+                  ))
+              ) : (
+                <div className="text-sm text-gray-400">No active users</div>
+              )}
             </div>
           </div>
 
-          {/* Forum Guidelines */}
+          {/* Popular Tags */}
           <div className="bg-gray-800 rounded-2xl p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-white mb-4">
-              Forum Guidelines
+              Popular Tags
             </h3>
-            <div className="space-y-3 text-sm text-gray-300">
-              <div>• Be respectful and constructive</div>
-              <div>• Share your work and get feedback</div>
-              <div>• Ask questions and help others</div>
-              <div>• No spam or self-promotion</div>
-              <div>• Keep discussions on-topic</div>
+            <div className="flex flex-wrap gap-2">
+              {loading ? (
+                <div className="flex items-center justify-center py-4 w-full">
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                  <span className="ml-2 text-sm text-gray-400">
+                    Loading tags...
+                  </span>
+                </div>
+              ) : posts.length > 0 ? (
+                // Extract unique tags from posts
+                Array.from(new Set(posts.flatMap((post) => post.tags || [])))
+                  .slice(0, 8)
+                  .map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="secondary"
+                      className="text-xs bg-gray-700 text-gray-300 hover:bg-gray-600 cursor-pointer"
+                    >
+                      {tag}
+                    </Badge>
+                  ))
+              ) : (
+                <div className="text-sm text-gray-400">No tags available</div>
+              )}
             </div>
           </div>
 
-          {/* User Stats */}
+          {/* Quick Actions */}
           <div className="bg-gray-800 rounded-2xl p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-white mb-4">
-              Your Activity
+              Quick Actions
             </h3>
             <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-gray-300">Topics Created</span>
-                <span className="text-white font-semibold">12</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Replies Posted</span>
-                <span className="text-white font-semibold">89</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Likes Received</span>
-                <span className="text-white font-semibold">234</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Member Since</span>
-                <span className="text-white font-semibold">Mar 2024</span>
-              </div>
+              <Button
+                onClick={() => setIsNewTopicModalOpen(true)}
+                className="w-full bg-red-600 hover:bg-red-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create New Topic
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full border-gray-600 text-gray-200 hover:bg-gray-700"
+              >
+                <Search className="w-4 h-4 mr-2" />
+                Search Topics
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full border-gray-600 text-gray-200 hover:bg-gray-700"
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Find Collaborators
+              </Button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* New Topic Modal */}
+      {isNewTopicModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-2xl p-6 w-full max-w-2xl mx-4">
+            <h2 className="text-2xl font-bold text-white mb-4">
+              Create New Topic
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter your topic title..."
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Category
+                </label>
+                <select className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-red-500">
+                  <option value="">Select a category</option>
+                  <option value="general">General Discussion</option>
+                  <option value="showcase">Creator Showcase</option>
+                  <option value="collaboration">Collaboration Hub</option>
+                  <option value="tutorials">Tutorials & Tips</option>
+                  <option value="feedback">Feedback & Critique</option>
+                  <option value="technical">Technical Support</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Content
+                </label>
+                <textarea
+                  placeholder="Write your post content..."
+                  rows={6}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Tags (comma separated)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., animation, tutorial, collaboration"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button
+                onClick={() => setIsNewTopicModalOpen(false)}
+                variant="outline"
+                className="flex-1 border-gray-600 text-gray-200 hover:bg-gray-700"
+              >
+                Cancel
+              </Button>
+              <Button className="flex-1 bg-red-600 hover:bg-red-700">
+                Create Topic
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
