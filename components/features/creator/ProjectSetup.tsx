@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { CurrentView } from "@/types";
+import { supabase } from "@/lib/supabase";
+import { Loader2 } from "lucide-react";
 
 interface ProjectSetupProps {
   onViewChange: (view: CurrentView, params?: any) => void;
@@ -10,28 +12,62 @@ interface ProjectSetupProps {
 
 export function ProjectSetup({ onViewChange }: ProjectSetupProps) {
   const [projectName, setProjectName] = useState("");
+  const [projectDescription, setProjectDescription] = useState("");
+  const [projectGenre, setProjectGenre] = useState("Fantasy");
   const [canvasWidth, setCanvasWidth] = useState(1920);
   const [canvasHeight, setCanvasHeight] = useState(1080);
   const [frameRate, setFrameRate] = useState(24);
   const [units, setUnits] = useState("pixel");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleCreateProject = () => {
-    // Here you would typically save the project settings and then open the editor
-    console.log("Creating project:", {
-      name: projectName,
-      width: canvasWidth,
-      height: canvasHeight,
-      frameRate,
-      units,
-    });
+  const handleCreateProject = async () => {
+    if (!projectName.trim()) return;
 
-    // Open the animation editor with the configured settings
-    onViewChange("animation-editor", {
-      sceneName: projectName,
-      canvasWidth,
-      canvasHeight,
-      frameRate,
-    });
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Create new project in Supabase
+      const { data: project, error: projectError } = await supabase
+        .from("projects")
+        .insert([
+          {
+            title: projectName,
+            description:
+              projectDescription || `Animation project: ${projectName}`,
+            genre: projectGenre,
+            status: "Planning",
+            views: 0,
+            progress: 0,
+            creator_id: "1", // TODO: Replace with actual user ID when auth is implemented
+            canvas_width: canvasWidth,
+            canvas_height: canvasHeight,
+            frame_rate: frameRate,
+            units: units,
+          },
+        ])
+        .select()
+        .single();
+
+      if (projectError) throw projectError;
+
+      console.log("Project created successfully:", project);
+
+      // Open the animation editor with the configured settings
+      onViewChange("animation-editor", {
+        projectId: project.id,
+        sceneName: projectName,
+        canvasWidth,
+        canvasHeight,
+        frameRate,
+      });
+    } catch (err: any) {
+      setError(err.message);
+      console.error("Error creating project:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -46,12 +82,19 @@ export function ProjectSetup({ onViewChange }: ProjectSetupProps) {
         </p>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-4 mb-6">
+          <p className="text-red-400">Error creating project: {error}</p>
+        </div>
+      )}
+
       {/* Project Configuration Form */}
       <div className="bg-gray-800 rounded-2xl p-8 shadow-sm space-y-8">
         {/* Project Name */}
         <div>
           <label className="text-lg font-semibold text-white mb-3 block">
-            Project Name
+            Project Name *
           </label>
           <input
             type="text"
@@ -60,6 +103,43 @@ export function ProjectSetup({ onViewChange }: ProjectSetupProps) {
             placeholder="Enter project name..."
             className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
           />
+        </div>
+
+        {/* Project Description */}
+        <div>
+          <label className="text-lg font-semibold text-white mb-3 block">
+            Description
+          </label>
+          <textarea
+            value={projectDescription}
+            onChange={(e) => setProjectDescription(e.target.value)}
+            placeholder="Describe your animation project..."
+            rows={3}
+            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+          />
+        </div>
+
+        {/* Project Genre */}
+        <div>
+          <label className="text-lg font-semibold text-white mb-3 block">
+            Genre
+          </label>
+          <select
+            value={projectGenre}
+            onChange={(e) => setProjectGenre(e.target.value)}
+            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+          >
+            <option value="Fantasy">Fantasy</option>
+            <option value="Action">Action</option>
+            <option value="Romance">Romance</option>
+            <option value="Comedy">Comedy</option>
+            <option value="Drama">Drama</option>
+            <option value="Sci-Fi">Sci-Fi</option>
+            <option value="Horror">Horror</option>
+            <option value="Adventure">Adventure</option>
+            <option value="Mystery">Mystery</option>
+            <option value="Slice of Life">Slice of Life</option>
+          </select>
         </div>
 
         {/* Canvas Size */}
@@ -178,6 +258,9 @@ export function ProjectSetup({ onViewChange }: ProjectSetupProps) {
               {projectName || "Untitled Project"}
             </div>
             <div>
+              <span className="text-gray-400">Genre:</span> {projectGenre}
+            </div>
+            <div>
               <span className="text-gray-400">Canvas Size:</span> {canvasWidth}{" "}
               x {canvasHeight} {units}
             </div>
@@ -195,14 +278,22 @@ export function ProjectSetup({ onViewChange }: ProjectSetupProps) {
         <div className="flex gap-4 pt-6">
           <Button
             onClick={handleCreateProject}
-            disabled={!projectName.trim()}
+            disabled={!projectName.trim() || loading}
             className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-3 text-lg"
           >
-            Create Project & Open Editor
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Creating Project...
+              </>
+            ) : (
+              "Create Project & Open Editor"
+            )}
           </Button>
           <Button
             variant="outline"
             onClick={() => onViewChange("creator")}
+            disabled={loading}
             className="border-gray-600 text-gray-300 hover:bg-gray-700 py-3 text-lg"
           >
             Cancel

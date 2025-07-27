@@ -30,24 +30,44 @@ import {
   ChevronRight,
   ThumbsUp,
   BookOpen,
+  Loader2,
 } from "lucide-react";
 import type {
   CurrentView,
   ContentItem,
   ComponentWithViewChange,
 } from "@/types";
-import { mockContent, mockHeroContent } from "@/lib/mockData";
 import { useModalStates } from "@/hooks/useModalStates";
 import { APP_CONFIG } from "@/lib/constants";
 import { ProfileModal } from "@/components/profile-modal";
 import { SettingsModal } from "@/components/settings-modal";
 import { ContributionsModal } from "@/components/contributions-modal";
 import { ProfileDropdown } from "@/components/shared/profile-dropdown";
+import { supabase } from "@/lib/supabase";
 import React from "react";
 
 interface ViewerHubProps extends ComponentWithViewChange {}
 
-// Mock comments for discussion
+interface Project {
+  id: string;
+  title: string;
+  description: string;
+  genre: string;
+  status: string;
+  views: number;
+  progress: number;
+  image_url?: string;
+  creator_id: string;
+  created_at: string;
+  updated_at: string;
+  users?: {
+    username: string;
+    avatar_url?: string;
+  };
+  chapters?: any[];
+}
+
+// Mock comments for discussion (will be replaced with real data later)
 const mockComments = [
   {
     id: "1",
@@ -79,20 +99,89 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Data states
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // Use centralized modal state management
   const { modalStates, openModal, closeModal } = useModalStates();
 
+  // Fetch projects from Supabase
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data: projectsData, error: projectsError } = await supabase
+        .from("projects")
+        .select(
+          `
+          *,
+          users!projects_creator_id_fkey(username, avatar_url),
+          chapters(*)
+        `
+        )
+        .order("views", { ascending: false });
+
+      if (projectsError) throw projectsError;
+
+      setProjects(projectsData || []);
+    } catch (err: any) {
+      setError(err.message);
+      console.error("Error fetching projects:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Convert projects to ContentItem format for compatibility
+  const contentItems: ContentItem[] = useMemo(() => {
+    return projects.map((project) => ({
+      id: project.id,
+      title: project.title,
+      description: project.description,
+      type: "animated" as const,
+      genre: project.genre,
+      status: project.status,
+      rating: 4.5,
+      views: project.views,
+      progress: project.progress,
+      image: project.image_url || "/placeholder.jpg",
+      creator: project.users?.username || "Unknown Creator",
+      tags: [project.genre, project.status],
+      episodes:
+        project.chapters?.map((chapter, index) => ({
+          id: chapter.id,
+          title: `Chapter ${chapter.chapter_number}`,
+          duration: "24 min",
+          thumbnail: "/placeholder.jpg",
+        })) || [],
+      chapters:
+        project.chapters?.map((chapter) => ({
+          id: chapter.id,
+          title: `Chapter ${chapter.chapter_number}`,
+          pages: 20,
+          thumbnail: "/placeholder.jpg",
+        })) || [],
+    }));
+  }, [projects]);
+
   // Memoize filtered content to improve performance
   const filteredContent = useMemo(() => {
-    if (!searchTerm) return mockContent;
-    return mockContent.filter(
+    if (!searchTerm) return contentItems;
+    return contentItems.filter(
       (item) =>
         item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.tags.some((tag) =>
           tag.toLowerCase().includes(searchTerm.toLowerCase())
         )
     );
-  }, [searchTerm]);
+  }, [contentItems, searchTerm]);
 
   // Stable callback functions to prevent re-renders
   const handleContentSelect = useCallback((content: ContentItem) => {
@@ -131,27 +220,41 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
     const [autoPlay, setAutoPlay] = useState(true);
 
     useEffect(() => {
-      if (!autoPlay) return;
+      if (!autoPlay || contentItems.length === 0) return;
 
       const interval = setInterval(() => {
-        setCurrentHeroIndex((prev) => (prev + 1) % mockHeroContent.length);
+        setCurrentHeroIndex((prev) => (prev + 1) % contentItems.length);
       }, 6000);
       return () => clearInterval(interval);
-    }, [autoPlay]);
+    }, [autoPlay, contentItems.length]);
 
     const goToPrevious = useCallback(() => {
       setAutoPlay(false);
       setCurrentHeroIndex(
-        (prev) => (prev - 1 + mockHeroContent.length) % mockHeroContent.length
+        (prev) => (prev - 1 + contentItems.length) % contentItems.length
       );
-    }, []);
+    }, [contentItems.length]);
 
     const goToNext = useCallback(() => {
       setAutoPlay(false);
-      setCurrentHeroIndex((prev) => (prev + 1) % mockHeroContent.length);
-    }, []);
+      setCurrentHeroIndex((prev) => (prev + 1) % contentItems.length);
+    }, [contentItems.length]);
 
-    const currentHero = mockHeroContent[currentHeroIndex];
+    if (contentItems.length === 0) {
+      return (
+        <div className="relative h-[500px] overflow-hidden bg-gray-800 flex items-center justify-center">
+          <div className="text-center">
+            <BookOpen className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-white mb-2">
+              No Featured Content
+            </h2>
+            <p className="text-gray-400">Check back later for new animations</p>
+          </div>
+        </div>
+      );
+    }
+
+    const currentHero = contentItems[currentHeroIndex];
 
     return (
       <div className="relative h-[500px] overflow-hidden group">
@@ -184,70 +287,57 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
           <ChevronRight className="w-6 h-6" />
         </button>
 
-        <div className="absolute inset-0 z-20 flex items-center">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-            <div className="max-w-2xl">
-              <h1 className="text-4xl md:text-6xl font-bold text-white mb-4">
-                {currentHero.title}
-              </h1>
-              <p className="text-lg text-gray-300 mb-6">
-                {currentHero.description}
-              </p>
-              <div className="flex items-center gap-4 mb-6">
-                <div className="flex items-center gap-1">
-                  <Star className="w-5 h-5 text-yellow-400 fill-current" />
-                  <span className="text-white font-medium">
-                    {currentHero.rating}
-                  </span>
-                </div>
-                <div className="flex gap-2">
-                  {currentHero.tags.map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="secondary"
-                      className="bg-gray-800 text-gray-300"
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-4">
-                <Button
-                  size="lg"
-                  className="bg-red-600 hover:bg-red-700"
-                  onClick={() => handlePlayContent(currentHero)}
-                >
-                  <Play className="w-5 h-5 mr-2" />
-                  {currentHero.type === "animated" ? "Watch Now" : "Read Now"}
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="border-gray-600 text-white hover:bg-gray-800"
-                  onClick={() => handleContentSelect(currentHero)}
-                >
-                  More Info
-                </Button>
-              </div>
+        {/* Content */}
+        <div className="absolute bottom-0 left-0 right-0 p-8 z-20">
+          <div className="max-w-4xl">
+            <div className="flex items-center gap-2 mb-4">
+              <Badge className="bg-red-600">{currentHero.genre}</Badge>
+              <Badge variant="secondary" className="bg-gray-700 text-gray-300">
+                {currentHero.status}
+              </Badge>
+            </div>
+            <h1 className="text-4xl font-bold text-white mb-4">
+              {currentHero.title}
+            </h1>
+            <p className="text-gray-300 mb-6 max-w-2xl">
+              {currentHero.description}
+            </p>
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={() => handlePlayContent(currentHero)}
+                className="bg-red-600 hover:bg-red-700 px-8 py-3 text-lg"
+              >
+                <Play className="w-5 h-5 mr-2" />
+                Watch Now
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleContentSelect(currentHero)}
+                className="border-white text-white hover:bg-white/10 px-8 py-3 text-lg"
+              >
+                <MessageCircle className="w-5 h-5 mr-2" />
+                Learn More
+              </Button>
             </div>
           </div>
         </div>
 
-        {/* Simple progress indicator (NO clickable circles) */}
-        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-20">
-          <div className="flex gap-2">
-            {mockHeroContent.map((_, index) => (
-              <div
-                key={index}
-                className={`h-1 transition-all duration-300 ${
-                  index === currentHeroIndex
-                    ? "w-8 bg-red-500 rounded-full"
-                    : "w-6 bg-gray-500 rounded-full"
-                }`}
-              />
-            ))}
-          </div>
+        {/* Progress indicators */}
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2 z-30">
+          {contentItems.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => {
+                setAutoPlay(false);
+                setCurrentHeroIndex(index);
+              }}
+              className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                index === currentHeroIndex
+                  ? "bg-white"
+                  : "bg-white/50 hover:bg-white/75"
+              }`}
+            />
+          ))}
         </div>
       </div>
     );
@@ -543,21 +633,41 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
 
   // Better content distribution for scrolling - MEMOIZED to prevent re-renders
   const continueWatchingItems = useMemo(
-    () => mockContent.filter((item) => item.progress && item.progress > 0),
-    []
+    () => filteredContent.filter((item) => item.progress && item.progress > 0),
+    [filteredContent]
   );
   const trendingAnimeItems = useMemo(
-    () => mockContent.filter((item) => item.type === "animated"),
-    []
+    () => filteredContent.filter((item) => item.type === "animated"),
+    [filteredContent]
   );
   const newMangaItems = useMemo(
-    () => mockContent.filter((item) => item.type === "manga"),
-    []
+    () => filteredContent.filter((item) => item.type === "manga"),
+    [filteredContent]
   );
   const fanFavoriteItems = useMemo(
-    () => [...mockContent].sort((a, b) => b.rating - a.rating),
-    []
+    () => [...filteredContent].sort((a, b) => b.rating - a.rating),
+    [filteredContent]
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-red-500 animate-spin" />
+        <p className="text-white ml-4">Loading content...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <p className="text-red-500 text-lg">{error}</p>
+        <Button onClick={fetchProjects} className="ml-4">
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900">
