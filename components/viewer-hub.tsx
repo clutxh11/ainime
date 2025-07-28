@@ -64,7 +64,15 @@ interface Project {
     username: string;
     avatar_url?: string;
   };
-  chapters?: any[];
+  chapters?: {
+    id: string;
+    title: string;
+    status: string;
+    thumbnail_url?: string;
+    release_date?: string;
+    created_at: string;
+    updated_at: string;
+  }[];
 }
 
 // Forum posts interface
@@ -137,6 +145,11 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
 
       if (forumError) throw forumError;
 
+      // Debug: Log the first project's chapters to see the structure
+      if (projectsData && projectsData.length > 0) {
+        console.log("First project chapters:", projectsData[0].chapters);
+      }
+
       setProjects(projectsData || []);
       setForumPosts(forumData || []);
     } catch (err: any) {
@@ -165,14 +178,14 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
       episodes:
         project.chapters?.map((chapter, index) => ({
           id: chapter.id,
-          title: `Chapter ${chapter.chapter_number}`,
+          title: chapter.title || `Chapter ${index + 1}`,
           duration: "24 min",
           thumbnail: "/placeholder.jpg",
         })) || [],
       chapters:
-        project.chapters?.map((chapter) => ({
+        project.chapters?.map((chapter, index) => ({
           id: chapter.id,
-          title: `Chapter ${chapter.chapter_number}`,
+          title: chapter.title || `Chapter ${index + 1}`,
           pages: 20,
           thumbnail: "/placeholder.jpg",
         })) || [],
