@@ -236,6 +236,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
 
   const handleWatchEpisode = useCallback(
     (content: ContentItem, episode: string) => {
+      console.log("handleWatchEpisode called with:", { content, episode });
       onViewChange("video", { ...content, selectedEpisode: episode });
     },
     [onViewChange]
@@ -243,6 +244,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
 
   const handleReadChapter = useCallback(
     (content: ContentItem, chapter: string) => {
+      console.log("handleReadChapter called with:", { content, chapter });
       onViewChange("manga", { ...content, selectedChapter: chapter });
     },
     [onViewChange]
@@ -871,7 +873,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                           <DropdownMenuItem
                             key={index}
                             onClick={() =>
-                              handleReadChapter(selectedContent, chapter)
+                              handleReadChapter(selectedContent, chapter.title)
                             }
                             className="text-white hover:bg-gray-600"
                           >
@@ -901,7 +903,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                           <DropdownMenuItem
                             key={index}
                             onClick={() =>
-                              handleWatchEpisode(selectedContent, episode)
+                              handleWatchEpisode(selectedContent, episode.title)
                             }
                             className="text-white hover:bg-gray-600"
                           >
