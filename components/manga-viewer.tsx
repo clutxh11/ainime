@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Input } from "@/components/ui/input"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -15,45 +15,29 @@ import {
   Settings,
   MessageCircle,
   ThumbsUp,
-} from "lucide-react"
-import type { CurrentView } from "@/types"
+} from "lucide-react";
+import type { CurrentView } from "@/types";
+import { CommentSection } from "@/components/ui/comment-section";
 
 interface MangaViewerProps {
-  content: any
-  onViewChange: (view: CurrentView) => void
+  content: any;
+  onViewChange: (view: CurrentView) => void;
 }
 
-const mockComments = [
-  {
-    id: "1",
-    author: "MangaReader",
-    content: "The art style in this chapter is incredible! Love the character expressions.",
-    timeAgo: "1h ago",
-    likes: 32,
-  },
-  {
-    id: "2",
-    author: "StoryLover",
-    content: "Plot twist at the end! Didn't see that coming at all.",
-    timeAgo: "3h ago",
-    likes: 18,
-  },
-]
-
 export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
-  const [currentPage, setCurrentPage] = useState(1)
-  const [zoom, setZoom] = useState(100)
-  const [showComments, setShowComments] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [zoom, setZoom] = useState(100);
+  const [showComments, setShowComments] = useState(true);
 
-  const totalPages = 20 // Mock total pages
+  const totalPages = 20; // Mock total pages
 
   const handlePrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1)
-  }
+    if (currentPage > 1) setCurrentPage(currentPage - 1);
+  };
 
   const handleNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1)
-  }
+    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+  };
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -62,7 +46,11 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" onClick={() => onViewChange("viewer")} className="text-gray-300 hover:text-white">
+              <Button
+                variant="ghost"
+                onClick={() => onViewChange("viewer")}
+                className="text-gray-300 hover:text-white"
+              >
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back
               </Button>
@@ -116,7 +104,9 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
                 >
                   <ZoomOut className="w-4 h-4" />
                 </Button>
-                <span className="text-sm text-gray-400 min-w-[60px] text-center">{zoom}%</span>
+                <span className="text-sm text-gray-400 min-w-[60px] text-center">
+                  {zoom}%
+                </span>
                 <Button
                   variant="outline"
                   size="sm"
@@ -133,7 +123,11 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
                 >
                   <RotateCcw className="w-4 h-4" />
                 </Button>
-                <Button variant="outline" size="sm" className="bg-transparent border-gray-600 text-white">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-transparent border-gray-600 text-white"
+                >
                   <Settings className="w-4 h-4" />
                 </Button>
               </div>
@@ -145,7 +139,10 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
                 <div className="flex justify-center">
                   <div
                     className="relative max-w-full"
-                    style={{ transform: `scale(${zoom / 100})`, transformOrigin: "top center" }}
+                    style={{
+                      transform: `scale(${zoom / 100})`,
+                      transformOrigin: "top center",
+                    }}
                   >
                     <img
                       src="/placeholder.svg?height=800&width=600"
@@ -170,19 +167,23 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
               </Button>
               <div className="flex items-center gap-2">
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const pageNum = Math.max(1, currentPage - 2) + i
-                  if (pageNum > totalPages) return null
+                  const pageNum = Math.max(1, currentPage - 2) + i;
+                  if (pageNum > totalPages) return null;
                   return (
                     <Button
                       key={pageNum}
                       variant={pageNum === currentPage ? "default" : "outline"}
                       size="sm"
                       onClick={() => setCurrentPage(pageNum)}
-                      className={pageNum === currentPage ? "bg-red-600" : "bg-transparent border-gray-600 text-white"}
+                      className={
+                        pageNum === currentPage
+                          ? "bg-red-600"
+                          : "bg-transparent border-gray-600 text-white"
+                      }
                     >
                       {pageNum}
                     </Button>
-                  )
+                  );
                 })}
               </div>
               <Button
@@ -199,7 +200,9 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
             {/* Comments Section */}
             <div>
               <div className="flex items-center gap-4 mb-4">
-                <h3 className="text-lg font-semibold text-white">Comments ({mockComments.length})</h3>
+                <h3 className="text-lg font-semibold text-white">
+                  Chapter Comments
+                </h3>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -212,42 +215,11 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
               </div>
 
               {showComments && (
-                <>
-                  <div className="flex gap-3 mb-6">
-                    <Avatar>
-                      <AvatarFallback>U</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <Input placeholder="Add a comment..." className="bg-gray-800 border-gray-700 text-white" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    {mockComments.map((comment) => (
-                      <div key={comment.id} className="flex gap-3">
-                        <Avatar>
-                          <AvatarFallback>{comment.author[0]}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-white text-sm">{comment.author}</span>
-                            <span className="text-xs text-gray-400">{comment.timeAgo}</span>
-                          </div>
-                          <p className="text-gray-300 text-sm mb-2">{comment.content}</p>
-                          <div className="flex items-center gap-4">
-                            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white p-0">
-                              <ThumbsUp className="w-3 h-3 mr-1" />
-                              {comment.likes}
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white p-0">
-                              Reply
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
+                <CommentSection
+                  contentType="chapter"
+                  contentId={content?.selectedChapterId || content?.id || ""}
+                  title={content?.selectedChapter}
+                />
               )}
             </div>
           </div>
@@ -256,64 +228,109 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
           <div className="lg:col-span-1">
             <Card className="bg-gray-800 border-gray-700 mb-6">
               <CardContent className="p-4">
-                <h3 className="font-semibold text-white mb-3">Chapter Navigation</h3>
+                <h3 className="font-semibold text-white mb-3">
+                  Chapter Navigation
+                </h3>
                 <div className="space-y-2">
-                  {["Chapter 1: The Awakening", "Chapter 2: First Flight", "Chapter 3: The Ancient Temple"].map(
-                    (chapter, index) => (
-                      <Button
-                        key={index}
-                        variant={chapter === content?.selectedChapter ? "default" : "ghost"}
-                        className={`w-full justify-start text-sm ${
-                          chapter === content?.selectedChapter
-                            ? "bg-red-600 hover:bg-red-700"
-                            : "text-gray-300 hover:text-white hover:bg-gray-700"
-                        }`}
-                      >
-                        {chapter}
-                      </Button>
-                    ),
-                  )}
+                  {[
+                    "Chapter 1: The Awakening",
+                    "Chapter 2: First Flight",
+                    "Chapter 3: The Ancient Temple",
+                  ].map((chapter, index) => (
+                    <Button
+                      key={index}
+                      variant={
+                        chapter === content?.selectedChapter
+                          ? "default"
+                          : "ghost"
+                      }
+                      className={`w-full justify-start text-sm ${
+                        chapter === content?.selectedChapter
+                          ? "bg-red-600 hover:bg-red-700"
+                          : "text-gray-300 hover:text-white hover:bg-gray-700"
+                      }`}
+                    >
+                      {chapter}
+                    </Button>
+                  ))}
                 </div>
               </CardContent>
             </Card>
 
             <Card className="bg-gray-800 border-gray-700">
               <CardContent className="p-4">
-                <h3 className="font-semibold text-white mb-3">Reading Settings</h3>
+                <h3 className="font-semibold text-white mb-3">
+                  Reading Settings
+                </h3>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm text-gray-400 mb-2 block">Reading Mode</label>
+                    <label className="text-sm text-gray-400 mb-2 block">
+                      Reading Mode
+                    </label>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <input type="radio" id="single" name="mode" defaultChecked className="text-red-600" />
+                        <input
+                          type="radio"
+                          id="single"
+                          name="mode"
+                          defaultChecked
+                          className="text-red-600"
+                        />
                         <label htmlFor="single" className="text-white text-sm">
                           Single Page
                         </label>
                       </div>
                       <div className="flex items-center gap-2">
-                        <input type="radio" id="double" name="mode" className="text-red-600" />
+                        <input
+                          type="radio"
+                          id="double"
+                          name="mode"
+                          className="text-red-600"
+                        />
                         <label htmlFor="double" className="text-white text-sm">
                           Double Page
                         </label>
                       </div>
                       <div className="flex items-center gap-2">
-                        <input type="radio" id="vertical" name="mode" className="text-red-600" />
-                        <label htmlFor="vertical" className="text-white text-sm">
+                        <input
+                          type="radio"
+                          id="vertical"
+                          name="mode"
+                          className="text-red-600"
+                        />
+                        <label
+                          htmlFor="vertical"
+                          className="text-white text-sm"
+                        >
                           Vertical Scroll
                         </label>
                       </div>
                     </div>
                   </div>
                   <div>
-                    <label className="text-sm text-gray-400 mb-2 block">Background</label>
+                    <label className="text-sm text-gray-400 mb-2 block">
+                      Background
+                    </label>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="bg-white text-black border-gray-600">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-white text-black border-gray-600"
+                      >
                         White
                       </Button>
-                      <Button size="sm" variant="outline" className="bg-gray-800 text-white border-gray-600">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-gray-800 text-white border-gray-600"
+                      >
                         Dark
                       </Button>
-                      <Button size="sm" variant="outline" className="bg-black text-white border-gray-600">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-black text-white border-gray-600"
+                      >
                         Black
                       </Button>
                     </div>
@@ -325,5 +342,5 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -273,3 +273,56 @@ export async function deleteAnimationProject(id: string) {
 
   return { error };
 }
+
+// Content Comments (Chapter/Episode specific)
+export async function getContentComments(
+  contentType: "chapter" | "episode",
+  contentId: string
+) {
+  const { data, error } = await supabase
+    .from("content_comments")
+    .select(
+      `
+      *,
+      users!content_comments_author_id_fkey(username, avatar_url)
+    `
+    )
+    .eq("content_type", contentType)
+    .eq("content_id", contentId)
+    .order("created_at", { ascending: false });
+
+  return { data, error };
+}
+
+export async function createContentComment(comment: ContentCommentInsert) {
+  const { data, error } = await supabase
+    .from("content_comments")
+    .insert(comment)
+    .select()
+    .single();
+
+  return { data, error };
+}
+
+export async function updateContentComment(
+  id: string,
+  updates: ContentCommentUpdate
+) {
+  const { data, error } = await supabase
+    .from("content_comments")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  return { data, error };
+}
+
+export async function deleteContentComment(id: string) {
+  const { error } = await supabase
+    .from("content_comments")
+    .delete()
+    .eq("id", id);
+
+  return { error };
+}

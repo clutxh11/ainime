@@ -45,6 +45,7 @@ import { ContributionsModal } from "@/components/contributions-modal";
 import { ProfileDropdown } from "@/components/shared/profile-dropdown";
 import { supabase } from "@/lib/supabase";
 import React from "react";
+import { CommentSection } from "@/components/ui/comment-section";
 
 interface ViewerHubProps extends ComponentWithViewChange {}
 
@@ -75,24 +76,6 @@ interface Project {
   }[];
 }
 
-// Forum posts interface
-interface ForumPost {
-  id: string;
-  title: string;
-  content: string;
-  author_id: string;
-  category: string;
-  tags: string[];
-  likes: number;
-  views: number;
-  created_at: string;
-  updated_at: string;
-  users?: {
-    username: string;
-    avatar_url?: string;
-  };
-}
-
 export function ViewerHub({ onViewChange }: ViewerHubProps) {
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(
     null
@@ -102,7 +85,6 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
 
   // Data states
   const [projects, setProjects] = useState<Project[]>([]);
-  const [forumPosts, setForumPosts] = useState<ForumPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,26 +114,12 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
 
       if (projectsError) throw projectsError;
 
-      const { data: forumData, error: forumError } = await supabase
-        .from("forum_posts")
-        .select(
-          `
-          *,
-          users!forum_posts_author_id_fkey(username, avatar_url)
-        `
-        )
-        .order("created_at", { ascending: false })
-        .limit(5);
-
-      if (forumError) throw forumError;
-
       // Debug: Log the first project's chapters to see the structure
       if (projectsData && projectsData.length > 0) {
         console.log("First project chapters:", projectsData[0].chapters);
       }
 
       setProjects(projectsData || []);
-      setForumPosts(forumData || []);
     } catch (err: any) {
       setError(err.message);
       console.error("Error fetching data:", err);
@@ -191,19 +159,6 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
         })) || [],
     }));
   }, [projects]);
-
-  // Utility function to format time ago
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400)
-      return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  };
 
   // Memoize filtered content to improve performance
   const filteredContent = useMemo(() => {
@@ -917,73 +872,11 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                 )}
 
                 {/* Community Discussion */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-2">
-                    Community Discussion
-                  </h3>
-                  <div className="bg-gray-700 rounded-lg p-4 mb-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <MessageCircle className="w-4 h-4" />
-                      <span className="text-sm text-gray-300">
-                        Join the conversation
-                      </span>
-                    </div>
-                    <Input
-                      placeholder="Share your thoughts..."
-                      className="bg-gray-600 border-gray-500"
-                    />
-                  </div>
-
-                  <div className="space-y-3 max-h-40 overflow-y-auto pr-2">
-                    {loading ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                        <span className="text-gray-400 text-sm ml-2">
-                          Loading discussions...
-                        </span>
-                      </div>
-                    ) : forumPosts.length === 0 ? (
-                      <div className="text-center py-4">
-                        <MessageCircle className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-                        <p className="text-gray-400 text-sm">
-                          No discussions yet
-                        </p>
-                        <p className="text-gray-500 text-xs">
-                          Be the first to start a conversation!
-                        </p>
-                      </div>
-                    ) : (
-                      forumPosts.map((post) => (
-                        <div
-                          key={post.id}
-                          className="bg-gray-700 rounded-lg p-3 mr-2"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-semibold text-white text-sm">
-                              {post.users?.username || "Anonymous"}
-                            </span>
-                            <span className="text-xs text-gray-400">
-                              {formatTimeAgo(post.created_at)}
-                            </span>
-                          </div>
-                          <p className="text-gray-300 text-sm mb-2">
-                            {post.content}
-                          </p>
-                          <div className="flex items-center gap-4 text-xs text-gray-400">
-                            <div className="flex items-center gap-1">
-                              <ThumbsUp className="w-3 h-3" />
-                              <span>{post.likes}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <MessageCircle className="w-3 h-3" />
-                              <span>Reply</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
+                <CommentSection
+                  contentType="project"
+                  contentId={selectedContent?.id || ""}
+                  title={selectedContent?.title}
+                />
               </div>
             </div>
           </ScrollArea>

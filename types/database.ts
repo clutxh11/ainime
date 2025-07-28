@@ -243,3 +243,31 @@ export interface Database {
     };
   };
 }
+
+export interface ContentComment {
+  id: string;
+  content_type: "chapter" | "episode";
+  content_id: string;
+  author_id: string;
+  content: string;
+  likes: number;
+  created_at: string;
+  updated_at: string;
+  users?: {
+    username: string;
+    avatar_url?: string;
+  };
+}
+
+export interface ContentCommentInsert {
+  content_type: "chapter" | "episode";
+  content_id: string;
+  author_id: string;
+  content: string;
+  likes?: number;
+}
+
+export interface ContentCommentUpdate {
+  content?: string;
+  likes?: number;
+}

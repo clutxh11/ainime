@@ -68,8 +68,21 @@ CREATE TABLE forum_posts (
   title TEXT NOT NULL,
   content TEXT NOT NULL,
   author_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  category VARCHAR NOT NULL,
   tags TEXT[] DEFAULT '{}',
-  replies INTEGER DEFAULT 0,
+  likes INTEGER DEFAULT 0,
+  views INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Chapter/Episode comments table for specific content comments
+CREATE TABLE content_comments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  content_type VARCHAR NOT NULL CHECK (content_type IN ('chapter', 'episode')),
+  content_id UUID NOT NULL, -- References chapters.id or animation_projects.id
+  author_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
   likes INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -99,6 +112,9 @@ CREATE INDEX idx_team_members_user_id ON team_members(user_id);
 CREATE INDEX idx_chapters_project_id ON chapters(project_id);
 CREATE INDEX idx_forum_posts_author_id ON forum_posts(author_id);
 CREATE INDEX idx_forum_posts_tags ON forum_posts USING GIN(tags);
+CREATE INDEX idx_content_comments_content_id ON content_comments(content_id);
+CREATE INDEX idx_content_comments_author_id ON content_comments(author_id);
+CREATE INDEX idx_content_comments_content_type ON content_comments(content_type);
 CREATE INDEX idx_animation_projects_creator_id ON animation_projects(creator_id);
 
 -- Create updated_at trigger function
@@ -116,6 +132,7 @@ CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects FOR EACH ROW
 CREATE TRIGGER update_teams_updated_at BEFORE UPDATE ON teams FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_chapters_updated_at BEFORE UPDATE ON chapters FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_forum_posts_updated_at BEFORE UPDATE ON forum_posts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_content_comments_updated_at BEFORE UPDATE ON content_comments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_animation_projects_updated_at BEFORE UPDATE ON animation_projects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Enable Row Level Security (RLS)
@@ -125,6 +142,7 @@ ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE team_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chapters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE forum_posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE content_comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE animation_projects ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policies
@@ -176,4 +194,10 @@ CREATE POLICY "Users can delete own forum posts" ON forum_posts FOR DELETE USING
 CREATE POLICY "Anyone can read animation projects" ON animation_projects FOR SELECT USING (true);
 CREATE POLICY "Users can insert animation projects" ON animation_projects FOR INSERT WITH CHECK (auth.uid() = creator_id);
 CREATE POLICY "Users can update own animation projects" ON animation_projects FOR UPDATE USING (auth.uid() = creator_id);
-CREATE POLICY "Users can delete own animation projects" ON animation_projects FOR DELETE USING (auth.uid() = creator_id); 
+CREATE POLICY "Users can delete own animation projects" ON animation_projects FOR DELETE USING (auth.uid() = creator_id);
+
+-- Content comments policies
+CREATE POLICY "Anyone can read content comments" ON content_comments FOR SELECT USING (true);
+CREATE POLICY "Users can insert content comments" ON content_comments FOR INSERT WITH CHECK (auth.uid() = author_id);
+CREATE POLICY "Users can update own content comments" ON content_comments FOR UPDATE USING (auth.uid() = author_id);
+CREATE POLICY "Users can delete own content comments" ON content_comments FOR DELETE USING (auth.uid() = author_id); 
