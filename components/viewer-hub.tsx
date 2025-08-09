@@ -119,7 +119,6 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
       genre: result.genre,
       status: result.status,
       rating: result.rating,
-      views: result.views,
       progress: result.progress || 0,
       image: result.image_url || "/placeholder.jpg",
       creator: result.users?.username || "Unknown Creator",
@@ -249,7 +248,6 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
       status: project.status,
       rating: project.average_rating || 0,
       totalRatings: project.total_ratings || 0,
-      views: project.views,
       progress: project.progress,
       seriesType: project.series_type, // Added for series type display
       image:
@@ -657,20 +655,16 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                 <div className="flex items-center gap-1 mb-2">
                   <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                   <span className="text-sm text-gray-300">
-                    {item.rating.toFixed(2)} ({item.totalRatings || 0})
+                    {(item.rating || 0).toFixed(2)} ({item.totalRatings || 0})
                   </span>
                 </div>
                 {item.authors && item.authors.length > 0 && (
                   <div className="text-xs text-gray-400 mb-2">
-                    by{" "}
-                    {item.authors
-                      .filter((author) => author.is_primary)
-                      .map((author) => author.name)
-                      .join(", ") || item.authors[0]?.name}
+                    by {item.authors.map((author) => author.name).join(", ")}
                   </div>
                 )}
                 <div className="flex flex-wrap gap-1">
-                  {item.tags.slice(0, 2).map((tag) => (
+                  {(item.tags || []).slice(0, 2).map((tag) => (
                     <Badge key={tag} variant="secondary" className="text-xs">
                       {tag}
                     </Badge>

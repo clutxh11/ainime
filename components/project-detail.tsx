@@ -291,9 +291,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
           } else {
             // Fetch all user profiles for teams
             const allUserIds = new Set<string>();
-            teamsData?.forEach((team) => {
+            teamsData?.forEach((team: any) => {
               if (team.leader_id) allUserIds.add(team.leader_id);
-              team.animation_team_members?.forEach((member) => {
+              team.animation_team_members?.forEach((member: any) => {
                 if (member.user_id) allUserIds.add(member.user_id);
               });
             });
@@ -315,12 +315,12 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
 
             // Transform team data
             const transformedTeams =
-              teamsData?.map((team) => ({
+              teamsData?.map((team: any) => ({
                 ...team,
                 leader_display_name:
                   userProfiles[team.leader_id] || "Unknown Leader",
                 members:
-                  team.animation_team_members?.map((member) => ({
+                  team.animation_team_members?.map((member: any) => ({
                     ...member,
                     user_display_name:
                       userProfiles[member.user_id] || "Unknown User",
@@ -333,9 +333,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
             const currentUser1 = getUserRes1.data.user;
             if (currentUser1) {
               currentUsersTeam =
-                transformedTeams.find((team) =>
+                transformedTeams.find((team: any) =>
                   team.members.some(
-                    (member) => member.user_id === currentUser1.id
+                    (member: any) => member.user_id === currentUser1.id
                   )
                 ) || null;
             }
@@ -410,9 +410,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
             const getUserRes2 = await supabase.auth.getUser();
             const currentUser2 = getUserRes2.data.user;
             if (currentUser2) {
-              const userTeam = transformedTeams.find((team) =>
+              const userTeam = transformedTeams.find((team: any) =>
                 team.members.some(
-                  (member) => member.user_id === currentUser2.id
+                  (member: any) => member.user_id === currentUser2.id
                 )
               );
 
@@ -431,8 +431,8 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
         } else {
           setError("Project not found.");
         }
-      } catch (err) {
-        setError(err.message);
+      } catch (err: any) {
+        setError(err?.message || "Failed to load project");
       } finally {
         setLoading(false);
       }
@@ -795,8 +795,8 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     }
   };
 
-  const handleTeamClick = (team: Team) => {
-    setSelectedTeam(team);
+  const handleTeamClick = (team: any) => {
+    setSelectedTeam(team as AnimationTeam);
     setIsTeamModalOpen(true);
   };
 
@@ -1661,7 +1661,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                       Team Members
                     </h4>
                     <div className="space-y-2">
-                      {selectedTeam.members.map((member) => (
+                      {(selectedTeam.members || []).map((member: any) => (
                         <div
                           key={member.id}
                           className="flex items-center gap-3"
