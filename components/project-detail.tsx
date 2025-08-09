@@ -28,6 +28,8 @@ import {
   Hash,
   User,
   Loader2,
+    ChevronRight,
+    ChevronDown,
 } from "lucide-react";
 import type { CurrentView } from "@/types";
 import { supabase } from "@/lib/supabase";
@@ -1037,7 +1039,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
           <CardContent className="space-y-4">
             {project?.volumes?.map((volume) => (
               <div key={volume.id} className="space-y-4">
-                <h4 className="text-white font-semibold text-lg">
+                <h4 className="text-white font-semibold text-lg tracking-wide">
                   Volume {volume.volume_number}
                 </h4>
                 <div className="grid gap-4">
@@ -1075,7 +1077,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                       {/* Sequences & Shots */}
                       <div className="mt-3 border-t border-gray-700 pt-3">
                         <button
-                          className="text-left w-full text-sm text-gray-300 hover:text-white"
+                          className="text-left w-full text-sm text-gray-300 hover:text-white flex items-center gap-2"
                           onClick={() =>
                             setExpandedChapters((prev) => ({
                               ...prev,
@@ -1083,9 +1085,15 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                             }))
                           }
                         >
-                          {expandedChapters[chapter.id]
-                            ? "Hide Sequences & Shots"
-                            : "Show Sequences & Shots"}
+                          {expandedChapters[chapter.id] ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                          <span className="font-medium">Sequences & Shots</span>
+                          <span className="ml-2 text-gray-400">
+                            {sequencesByChapter[chapter.id]?.length ?? 0} seq
+                          </span>
                         </button>
                         {expandedChapters[chapter.id] && (
                           <div className="mt-3 space-y-2">
@@ -1103,7 +1111,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                   <Button size="sm" variant="outline" className="h-8 border-gray-600 text-gray-300" onClick={() => { setIsCreatingSequence(null); setNewSequenceCode(""); }}>Cancel</Button>
                                 </>
                               ) : (
-                                <Button size="sm" variant="outline" className="h-8 border-gray-600 text-gray-300" onClick={async () => { setIsCreatingSequence(chapter.id); await ensureSequencesLoaded(chapter.id); }}>
+                                <Button size="sm" variant="outline" className="h-8 border-gray-600 text-gray-300" onClick={async () => { setIsCreatingSequence(chapter.id); await ensureSequencesLoaded(chapter.id); }} title="Add a new sequence to this chapter">
                                   <Plus className="w-3 h-3 mr-1" /> Add Sequence
                                 </Button>
                               )}
@@ -1125,9 +1133,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                 );
                               }
                               return seqs.map((seq) => (
-                                <div key={seq.id} className="bg-gray-700 rounded p-2">
+                                <div key={seq.id} className="bg-gray-700/70 rounded p-2">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-xs text-gray-200 font-medium">{seq.code}</span>
+                                    <span className="text-xs text-gray-200 font-medium tracking-wide">{seq.code}</span>
                                     <div className="flex items-center gap-2">
                                       {isCreatingShot === seq.id ? (
                                         <>
@@ -1141,13 +1149,13 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                           <Button size="xs" variant="outline" className="h-7 border-gray-600 text-gray-300" onClick={() => { setIsCreatingShot(null); setNewShotCode(""); }}>Cancel</Button>
                                         </>
                                       ) : (
-                                        <Button size="xs" variant="outline" className="h-7 border-gray-600 text-gray-300" onClick={async () => { setIsCreatingShot(seq.id); await ensureShotsLoaded(seq.id); }}>
+                                        <Button size="xs" variant="outline" className="h-7 border-gray-600 text-gray-300" onClick={async () => { setIsCreatingShot(seq.id); await ensureShotsLoaded(seq.id); }} title="Add a shot to this sequence">
                                           <Plus className="w-3 h-3 mr-1" /> Add Shot
                                         </Button>
                                       )}
                                     </div>
                                   </div>
-                                  <div className="mt-2 space-y-1">
+                                  <div className="mt-2 flex flex-wrap gap-2">
                                     {(() => {
                                       const shots = shotsBySequence[seq.id];
                                       if (!shots) {
@@ -1162,20 +1170,18 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                         );
                                       }
                                       return shots.map((shot) => (
-                                        <div key={shot.id} className="flex items-center justify-between text-xs bg-gray-800 rounded px-2 py-1">
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-gray-200">SHOT {shot.code}</span>
-                                            {shot.status && (
-                                              <Badge className="bg-gray-600">{shot.status}</Badge>
-                                            )}
-                                          </div>
+                                        <div key={shot.id} className="flex items-center gap-2 text-xs bg-gray-800 rounded-full pl-2 pr-1 py-1">
+                                          <span className="text-gray-200">SHOT {shot.code}</span>
+                                          {shot.status && (
+                                            <Badge className="bg-gray-600 rounded-full px-2 py-0.5">{shot.status}</Badge>
+                                          )}
                                           <Button
                                             variant="outline"
                                             size="xs"
-                                            className="border-gray-600 text-gray-200 hover:bg-gray-700"
+                                            className="ml-1 h-6 px-2 border-gray-600 text-gray-200 hover:bg-gray-700"
                                             onClick={() => handleOpenShotEditor(chapter.id, seq.code, shot.code)}
                                           >
-                                            Open Editor
+                                            Open
                                           </Button>
                                         </div>
                                       ));
