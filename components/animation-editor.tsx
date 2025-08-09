@@ -443,6 +443,7 @@ export function AnimationEditor({
 
       // 2) Upload versioned JSON into Storage
       const bucket = "animation-scenes"; // Ensure this bucket exists and allows authenticated uploads
+      const enableStorage = process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const pId = sceneSettings.projectId || "unknown-project";
       const cId = sceneSettings.chapterId || "unknown-chapter";
@@ -451,31 +452,35 @@ export function AnimationEditor({
       const key = `${pId}/${cId}/${sId}/${shId}/scene/scene-${ts}.json`;
 
       let uploadOk = false;
-      try {
-        const blob = new Blob([JSON.stringify(doc)], { type: "application/json" });
-        const { error: upErr } = await supabase.storage.from(bucket).upload(key, blob, { upsert: true });
-        if (upErr) {
-          console.error("Storage upload failed, will still update DB row:", upErr);
-        } else {
-          uploadOk = true;
+      if (enableStorage) {
+        try {
+          const blob = new Blob([JSON.stringify(doc)], { type: "application/json" });
+          const { error: upErr } = await supabase.storage.from(bucket).upload(key, blob, { upsert: true });
+          if (upErr) {
+            console.error("Storage upload failed, will still update DB row:", upErr);
+          } else {
+            uploadOk = true;
+          }
+        } catch (e) {
+          console.error("Unexpected Storage upload error:", e);
         }
-      } catch (e) {
-        console.error("Unexpected Storage upload error:", e);
       }
 
       // 3) Merge DB row data with latest settings and manifest
       const prevManifest: any[] = Array.isArray(baseData?.manifest) ? baseData.manifest : [];
-      const nextManifest = [
-        ...prevManifest,
-        {
-          key,
-          saved_at: new Date().toISOString(),
-          width: appliedWidth,
-          height: appliedHeight,
-          fps: appliedFps,
-          version: 1,
-        },
-      ];
+      const nextManifest = uploadOk
+        ? [
+            ...prevManifest,
+            {
+              key,
+              saved_at: new Date().toISOString(),
+              width: appliedWidth,
+              height: appliedHeight,
+              fps: appliedFps,
+              version: 1,
+            },
+          ]
+        : prevManifest;
 
       const merged = {
         ...baseData,
@@ -517,7 +522,8 @@ export function AnimationEditor({
       // Prefer storage-saved latest version; fallback to inline document
       let doc: any = null;
       const latestKey: string | undefined = data?.latest_key;
-      if (latestKey) {
+      const enableStorage = process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
+      if (enableStorage && latestKey) {
         try {
           const { data: file, error: dlErr } = await supabase.storage
             .from("animation-scenes")
