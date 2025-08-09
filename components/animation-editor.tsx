@@ -429,6 +429,7 @@ export function AnimationEditor({
     if (!sceneSettings?.shotId) return;
     try {
       setIsSaving(true);
+      // Read existing data to merge manifest/history
       const { data: row, error: readErr } = await supabase
         .from("shots")
         .select("data")
@@ -436,6 +437,46 @@ export function AnimationEditor({
         .maybeSingle();
       if (readErr) console.error("Failed to read shot row:", readErr);
       const baseData = (row?.data as any) || {};
+
+      // 1) Serialize current document
+      const doc = serializeDocument();
+
+      // 2) Upload versioned JSON into Storage
+      const bucket = "animation-scenes"; // Ensure this bucket exists and allows authenticated uploads
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+      const pId = sceneSettings.projectId || "unknown-project";
+      const cId = sceneSettings.chapterId || "unknown-chapter";
+      const sId = sceneSettings.sequenceId || "unknown-seq";
+      const shId = sceneSettings.shotId;
+      const key = `${pId}/${cId}/${sId}/${shId}/scene/scene-${ts}.json`;
+
+      let uploadOk = false;
+      try {
+        const blob = new Blob([JSON.stringify(doc)], { type: "application/json" });
+        const { error: upErr } = await supabase.storage.from(bucket).upload(key, blob, { upsert: true });
+        if (upErr) {
+          console.error("Storage upload failed, will still update DB row:", upErr);
+        } else {
+          uploadOk = true;
+        }
+      } catch (e) {
+        console.error("Unexpected Storage upload error:", e);
+      }
+
+      // 3) Merge DB row data with latest settings and manifest
+      const prevManifest: any[] = Array.isArray(baseData?.manifest) ? baseData.manifest : [];
+      const nextManifest = [
+        ...prevManifest,
+        {
+          key,
+          saved_at: new Date().toISOString(),
+          width: appliedWidth,
+          height: appliedHeight,
+          fps: appliedFps,
+          version: 1,
+        },
+      ];
+
       const merged = {
         ...baseData,
         initialized: true,
@@ -443,8 +484,12 @@ export function AnimationEditor({
         height: appliedHeight,
         units: "px",
         fps: appliedFps,
-        document: serializeDocument(),
-      };
+        // Keep latest inline for backward-compatibility, but prefer Storage version
+        document: doc,
+        latest_key: uploadOk ? key : baseData?.latest_key,
+        manifest: nextManifest,
+      } as any;
+
       const { error } = await supabase
         .from("shots")
         .update({ data: merged })
@@ -453,7 +498,7 @@ export function AnimationEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [sceneSettings?.shotId, appliedWidth, appliedHeight, appliedFps, serializeDocument]);
+  }, [sceneSettings?.shotId, sceneSettings?.projectId, sceneSettings?.chapterId, sceneSettings?.sequenceId, appliedWidth, appliedHeight, appliedFps, serializeDocument]);
 
   useEffect(() => {
     const load = async () => {
@@ -468,8 +513,28 @@ export function AnimationEditor({
       if (typeof data.width === "number") setAppliedWidth(data.width);
       if (typeof data.height === "number") setAppliedHeight(data.height);
       if (typeof data.fps === "number") setAppliedFps(data.fps);
-      const doc = data.document;
+
+      // Prefer storage-saved latest version; fallback to inline document
+      let doc: any = null;
+      const latestKey: string | undefined = data?.latest_key;
+      if (latestKey) {
+        try {
+          const { data: file, error: dlErr } = await supabase.storage
+            .from("animation-scenes")
+            .download(latestKey);
+          if (!dlErr && file) {
+            const text = await file.text();
+            doc = JSON.parse(text);
+          }
+        } catch (e) {
+          console.warn("Failed to download latest scene version; will fallback to inline document", e);
+        }
+      }
+      if (!doc) {
+        doc = data.document;
+      }
       if (!doc) return;
+
       try {
         if (Array.isArray(doc.rows)) setRows(doc.rows);
         if (typeof doc.frameCount === "number") setFrameCount(doc.frameCount);
