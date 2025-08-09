@@ -154,10 +154,19 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
       // Fetch projects with ratings (lightweight). Fallback to direct query if empty.
       let projectsData = await getProjectsWithRatings();
       if (!projectsData || projectsData.length === 0) {
-        const { data: directProjects, error: directErr } = await supabase
+        // Fallback: try with image columns, then without if needed
+        let { data: directProjects, error: directErr }: any = await supabase
           .from("projects")
           .select(`id, title, description, genre, status, image_url, square_thumbnail_url, horizontal_thumbnail_url, creator_id, created_at, updated_at`)
           .order("created_at", { ascending: false });
+        if (directErr && directErr.code === "42703") {
+          const fallback = await supabase
+            .from("projects")
+            .select(`id, title, description, genre, status, creator_id, created_at, updated_at`)
+            .order("created_at", { ascending: false });
+          directProjects = fallback.data;
+          directErr = fallback.error;
+        }
         if (!directErr && directProjects) {
           projectsData = (directProjects as any[]).map((p) => ({
             ...p,

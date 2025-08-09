@@ -30,17 +30,28 @@ export interface ProjectWithRatings {
 }
 
 export const getProjectsWithRatings = async (): Promise<ProjectWithRatings[]> => {
-  const { data, error } = await supabase
+  // First try with image columns. If the DB doesn’t have them, retry without.
+  let query = supabase
     .from("projects")
     .select(
       `id, title, description, genre, status, image_url, square_thumbnail_url, horizontal_thumbnail_url, creator_id, created_at, updated_at`
     )
     .order("created_at", { ascending: false });
+  let { data, error }: any = await query;
+  if (error && error.code === "42703") {
+    // Columns not present in this database. Fallback to minimal select.
+    const fallback = await supabase
+      .from("projects")
+      .select(`id, title, description, genre, status, creator_id, created_at, updated_at`)
+      .order("created_at", { ascending: false });
+    data = fallback.data;
+    error = fallback.error;
+  }
   if (error) {
     console.warn("getProjectsWithRatings error:", error);
     return [];
   }
-  return (data || []).map((p) => ({ ...p, average_rating: 0, total_ratings: 0 }));
+  return (data || []).map((p: any) => ({ ...p, average_rating: 0, total_ratings: 0 }));
 };
 
 export const getUserRating = async (projectId: string): Promise<number> => {
