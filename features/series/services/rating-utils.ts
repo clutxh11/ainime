@@ -19,6 +19,8 @@ export interface ProjectWithRatings {
   views: number;
   progress: number;
   image_url?: string;
+  square_thumbnail_url?: string;
+  horizontal_thumbnail_url?: string;
   creator_id: string;
   created_at: string;
   updated_at: string;
@@ -59,7 +61,7 @@ export const getUserRating = async (projectId: string): Promise<number> => {
       .select("rating")
       .eq("project_id", projectId)
       .eq("user_id", userId)
-      .maybeSingle(); // Use maybeSingle() instead of single() to handle no results gracefully
+      .maybeSingle(); // Use maybeSingle() to handle no results gracefully
 
     if (error) {
       console.error("Error fetching user rating:", error);
@@ -130,7 +132,6 @@ export const getProjectsWithRatings = async (): Promise<
     // Calculate ratings for each project
     const projectsWithRatings = await Promise.all(
       (projectsData || []).map(async (project) => {
-        // Get ratings for this project that are from auth.users
         const { data: ratingsData, error: ratingsError } = await supabase
           .from("ratings")
           .select("rating, user_id")
@@ -142,27 +143,20 @@ export const getProjectsWithRatings = async (): Promise<
             project.id,
             ratingsError
           );
-          return { ...project, average_rating: 0, total_ratings: 0 };
+          return {
+            ...project,
+            average_rating: 0,
+            total_ratings: 0,
+          } as ProjectWithRatings;
         }
 
         const ratings = ratingsData || [];
-
-        // Filter out ratings from old public.users table
-        // Only count ratings from auth.users (which have different UUID format)
-        const validRatings = ratings.filter((rating) => {
-          // Check if this user_id exists in auth.users
-          // For now, we'll assume any rating is valid since we can't easily join with auth.users
-          // The real fix would be to clean up the ratings table, but for now we'll use all ratings
-          return true;
-        });
-
-        const totalRatings = validRatings.length;
+        const totalRatings = ratings.length;
         const averageRating =
           totalRatings > 0
             ? Number(
                 (
-                  validRatings.reduce((sum, r) => sum + r.rating, 0) /
-                  totalRatings
+                  ratings.reduce((sum, r) => sum + r.rating, 0) / totalRatings
                 ).toFixed(2)
               )
             : 0;
@@ -171,7 +165,7 @@ export const getProjectsWithRatings = async (): Promise<
           ...project,
           average_rating: averageRating,
           total_ratings: totalRatings,
-        };
+        } as ProjectWithRatings;
       })
     );
 

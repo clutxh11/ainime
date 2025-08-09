@@ -184,7 +184,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   const [chapterAggregates, setChapterAggregates] = useState<
     Record<string, { highestStatus: string; contributors: string[] }>
   >({});
-  const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
+  const [expandedChapters, setExpandedChapters] = useState<
+    Record<string, boolean>
+  >({});
 
   const scrollMessagesToBottom = (smooth: boolean = false) => {
     const el = messagesContainerRef.current;
@@ -945,144 +947,136 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
 
   const renderYourTeamTab = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Left Column - Manga Info & Team Details */}
+      {/* Left Column - Chapter Progress & Team Discussion */}
       <div className="lg:col-span-2 space-y-6">
-        {/* Manga Information */}
+        {/* Chapter Progress */}
         <Card className="bg-gray-800 border-gray-700">
           <CardHeader>
-            <CardTitle className="text-white">Manga Information</CardTitle>
+            <CardTitle className="text-white">Chapter Progress</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-300">
-                  {project?.volumes?.[0]?.chapters?.[0]?.release_date
-                    ? new Date(
-                        project.volumes[0].chapters[0].release_date
-                      ).toLocaleDateString()
-                    : "N/A"}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Eye className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-300">
-                  {project?.views || 0} Views
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Heart className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-300">
-                  {project?.progress || 0} Chapters
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-300">
-                  {otherTeams.length} Active Teams
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Your Team Section */}
-        {isInTeam && userTeam ? (
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-white">{userTeam.name}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-gray-400 text-sm">{userTeam.description}</p>
-
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <Heart className="w-4 h-4 text-gray-400" />
-                  <span className="text-gray-300">
-                    {userTeam.upvotes.toLocaleString()} Team Upvotes
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Eye className="w-4 h-4 text-gray-400" />
-                  <span className="text-gray-300">
-                    {userTeam.views.toLocaleString()} Team Views
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-gray-400 text-sm">Led by:</span>
-                <div className="flex items-center gap-2">
-                  <Avatar className="w-6 h-6">
-                    <AvatarFallback className="text-xs bg-red-600 text-white">
-                      {userTeam.leader_display_name
-                        ?.split(" ")
-                        .map((n) => n[0])
-                        .join("") || "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-white text-sm">
-                    {userTeam.leader_display_name}
-                  </span>
-                  <Crown className="w-4 h-4 text-yellow-400" />
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-white font-semibold mb-2">Team Members</h4>
-                <div className="space-y-2">
-                  {userTeam.members?.map((member) => (
-                    <div key={member.id} className="flex items-center gap-3">
-                      <Avatar className="w-8 h-8">
-                        <AvatarFallback className="text-xs bg-gray-600 text-white">
-                          {member.user_display_name
-                            ?.split(" ")
-                            .map((n) => n[0])
-                            .join("") || "U"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-white text-sm">
-                            {member.user_display_name}
-                          </span>
-                          {member.user_id === userTeam.leader_id && (
-                            <Crown className="w-3 h-3 text-yellow-400" />
-                          )}
-                        </div>
-                        <span className="text-gray-400 text-xs">
-                          {member.role}
-                        </span>
+            {project?.volumes?.map((volume) => (
+              <div key={volume.id} className="space-y-4">
+                <h4 className="text-white font-semibold text-lg">
+                  Volume {volume.volume_number}
+                </h4>
+                <div className="grid gap-4">
+                  {volume.chapters.map((chapter) => (
+                    <div
+                      key={chapter.id}
+                      className="border border-gray-600 rounded-lg p-4"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div
+                          className={`w-3 h-3 rounded-full ${getStatusColor(
+                            chapter.status
+                          )}`}
+                        ></div>
+                        <h4 className="text-white font-semibold">
+                          {chapter.title}
+                        </h4>
+                      </div>
+                      <p className="text-gray-300 text-xs mb-3">
+                        {getStatusText(chapter.status)}
+                      </p>
+                      {chapter.release_date && (
+                        <p className="text-gray-400 text-xs mb-3">
+                          Released:{" "}
+                          {new Date(chapter.release_date).toLocaleDateString()}
+                        </p>
+                      )}
+                      <Button
+                        onClick={() => handleOpenEditor(chapter.id)}
+                        size="sm"
+                        className="w-full bg-red-600 hover:bg-red-700"
+                      >
+                        <Play className="w-3 h-3 mr-1" /> Open Editor
+                      </Button>
+                      {/* Sequences & Shots */}
+                      <div className="mt-3 border-t border-gray-700 pt-3">
+                        <button
+                          className="text-left w-full text-sm text-gray-300 hover:text-white"
+                          onClick={() =>
+                            setExpandedChapters((prev) => ({
+                              ...prev,
+                              [chapter.id]: !prev[chapter.id],
+                            }))
+                          }
+                        >
+                          {expandedChapters[chapter.id]
+                            ? "Hide Sequences & Shots"
+                            : "Show Sequences & Shots"}
+                        </button>
+                        {expandedChapters[chapter.id] && (
+                          <div className="mt-3 space-y-2">
+                            {getMockSequencesForChapter(chapter.id).map(
+                              (seq) => (
+                                <div
+                                  key={seq.seq}
+                                  className="bg-gray-700 rounded p-2"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs text-gray-200 font-medium">
+                                      {seq.seq}
+                                    </span>
+                                  </div>
+                                  <div className="mt-2 space-y-1">
+                                    {seq.shots.map((shot) => (
+                                      <div
+                                        key={shot.code}
+                                        className="flex items-center justify-between text-xs bg-gray-800 rounded px-2 py-1"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-gray-200">
+                                            SHOT {shot.code}
+                                          </span>
+                                          <Badge className="bg-gray-600">
+                                            {shot.stage}
+                                          </Badge>
+                                          <Badge
+                                            className={`${
+                                              shot.status === "approved"
+                                                ? "bg-green-600"
+                                                : shot.status === "review"
+                                                ? "bg-yellow-600"
+                                                : shot.status === "in-progress"
+                                                ? "bg-blue-600"
+                                                : "bg-gray-600"
+                                            }`}
+                                          >
+                                            {shot.status}
+                                          </Badge>
+                                        </div>
+                                        <Button
+                                          variant="outline"
+                                          size="xs"
+                                          className="border-gray-600 text-gray-200 hover:bg-gray-700"
+                                          onClick={() =>
+                                            handleOpenShotEditor(
+                                              chapter.id,
+                                              seq.seq,
+                                              shot.code
+                                            )
+                                          }
+                                        >
+                                          Open Editor
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="bg-gray-800 border-gray-700">
-            <CardContent className="space-y-4">
-              <div className="text-center py-8">
-                <Users className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  You're not currently in a team
-                </h3>
-                <p className="text-gray-400 mb-6">
-                  Join an existing team or create a new one to start
-                  collaborating on this project.
-                </p>
-                <Button
-                  className="bg-red-600 hover:bg-red-700"
-                  onClick={() => setIsStartTeamModalOpen(true)}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Start New Team
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+            ))}
+          </CardContent>
+        </Card>
 
         {/* Team Discussion - Only show if user is in a team */}
         {isInTeam && userTeam && (
@@ -1289,129 +1283,74 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
         )}
       </div>
 
-      {/* Right Column - Chapter Progress */}
+      {/* Right Column - Team Details */}
       <div>
-        <Card className="bg-gray-800 border-gray-700">
-          <CardHeader>
-            <CardTitle className="text-white">Chapter Progress</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {project?.volumes?.map((volume) => (
-              <div key={volume.id} className="space-y-4">
-                <h4 className="text-white font-semibold text-lg">
-                  Volume {volume.volume_number}
-                </h4>
-                <div className="grid gap-4">
-                  {volume.chapters.map((chapter) => (
-                    <div
-                      key={chapter.id}
-                      className="border border-gray-600 rounded-lg p-4"
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <div
-                          className={`w-3 h-3 rounded-full ${getStatusColor(
-                            chapter.status
-                          )}`}
-                        ></div>
-                        <h4 className="text-white font-semibold">
-                          {chapter.title}
-                        </h4>
-                      </div>
-                      <p className="text-gray-300 text-xs mb-3">
-                        {getStatusText(chapter.status)}
-                      </p>
-                      {chapter.release_date && (
-                        <p className="text-gray-400 text-xs mb-3">
-                          Released:{" "}
-                          {new Date(chapter.release_date).toLocaleDateString()}
-                        </p>
-                      )}
-
-                      <Button
-                        onClick={() => handleOpenEditor(chapter.id)}
-                        size="sm"
-                        className="w-full bg-red-600 hover:bg-red-700"
-                      >
-                        <Play className="w-3 h-3 mr-1" />
-                        Open Editor
-                      </Button>
-
-                      <div className="mt-3 border-t border-gray-700 pt-3">
-                        <button
-                          className="text-left w-full text-sm text-gray-300 hover:text-white"
-                          onClick={() =>
-                            setExpandedChapters((prev) => ({
-                              ...prev,
-                              [chapter.id]: !prev[chapter.id],
-                            }))
-                          }
-                        >
-                          {expandedChapters[chapter.id]
-                            ? "Hide Sequences & Shots"
-                            : "Show Sequences & Shots"}
-                        </button>
-
-                        {expandedChapters[chapter.id] && (
-                          <div className="mt-3 space-y-2">
-                            {getMockSequencesForChapter(chapter.id).map((seq) => (
-                              <div key={seq.seq} className="bg-gray-700 rounded p-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-2 00 font-medium">
-                                    {seq.seq}
-                                  </span>
-                                </div>
-                                <div className="mt-2 space-y-1">
-                                  {seq.shots.map((shot) => (
-                                    <div
-                                      key={shot.code}
-                                      className="flex items-center justify-between text-xs bg-gray-800 rounded px-2 py-1"
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-gray-200">SHOT {shot.code}</span>
-                                        <Badge className="bg-gray-600">{shot.stage}</Badge>
-                                        <Badge
-                                          className={`${
-                                            shot.status === "approved"
-                                              ? "bg-green-600"
-                                              : shot.status === "review"
-                                              ? "bg-yellow-600"
-                                              : shot.status === "in-progress"
-                                              ? "bg-blue-600"
-                                              : "bg-gray-600"
-                                          }`}
-                                        >
-                                          {shot.status}
-                                        </Badge>
-                                      </div>
-                                      <Button
-                                        variant="outline"
-                                        size="xs"
-                                        className="border-gray-600 text-gray-200 hover:bg-gray-700"
-                                        onClick={() =>
-                                          handleOpenShotEditor(
-                                            chapter.id,
-                                            seq.seq,
-                                            shot.code
-                                          )
-                                        }
-                                      >
-                                        Open Editor
-                                      </Button>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+        {isInTeam && userTeam ? (
+          <Card className="bg-gray-800 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-white">{userTeam.name}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-gray-400 text-sm">{userTeam.description}</p>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-gray-400" />
+                  <span className="text-gray-300">{userTeam.upvotes.toLocaleString()} Team Upvotes</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-gray-400" />
+                  <span className="text-gray-300">{userTeam.views.toLocaleString()} Team Views</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400 text-sm">Led by:</span>
+                <div className="flex items-center gap-2">
+                  <Avatar className="w-6 h-6">
+                    <AvatarFallback className="text-xs bg-red-600 text-white">
+                      {userTeam.leader_display_name?.split(" ").map((n) => n[0]).join("") || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-white text-sm">{userTeam.leader_display_name}</span>
+                  <Crown className="w-4 h-4 text-yellow-400" />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-white font-semibold mb-2">Team Members</h4>
+                <div className="space-y-2">
+                  {userTeam.members?.map((member) => (
+                    <div key={member.id} className="flex items-center gap-3">
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback className="text-xs bg-gray-600 text-white">
+                          {member.user_display_name?.split(" ").map((n) => n[0]).join("") || "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white text-sm">{member.user_display_name}</span>
+                          {member.user_id === userTeam.leader_id && <Crown className="w-3 h-3 text-yellow-400" />}
+                        </div>
+                        <span className="text-gray-400 text-xs">{member.role}</span>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-            ))}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="bg-gray-800 border-gray-700">
+            <CardContent className="space-y-4">
+              <div className="text-center py-8">
+                <Users className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">You're not currently in a team</h3>
+                <p className="text-gray-400 mb-6">Join an existing team or create a new one to start collaborating on this project.</p>
+                <Button className="bg-red-600 hover:bg-red-700" onClick={() => setIsStartTeamModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" /> Start New Team
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
