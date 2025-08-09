@@ -586,11 +586,10 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   }, [directMessages]);
 
   const handleOpenEditor = (chapterId: string) => {
-    onViewChange("animation-editor", {
-      projectId,
-      chapterId,
-      projectTitle: project?.title || "Project",
-    });
+    const url = `/editor?projectId=${projectId}&chapterId=${chapterId}&mode=animate`;
+    if (typeof window !== "undefined") {
+      window.location.href = url;
+    }
   };
 
   const handleOpenShotEditor = (
@@ -598,9 +597,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     sequenceCode: string,
     shotCode: string
   ) => {
-    const url = `/animation-workspace?projectId=${projectId}&chapterId=${chapterId}&sequence=${encodeURIComponent(
+    const url = `/editor?projectId=${projectId}&chapterId=${chapterId}&sequenceId=${encodeURIComponent(
       sequenceCode
-    )}&shot=${encodeURIComponent(shotCode)}`;
+    )}&shotId=${encodeURIComponent(shotCode)}&mode=animate`;
     if (typeof window !== "undefined") {
       window.location.href = url;
     }
