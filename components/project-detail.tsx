@@ -1352,9 +1352,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                             size="sm"
                                             className="h-7 px-3 border-gray-600 text-gray-100 hover:bg-gray-700"
                                             onClick={() => handleShotOpenClick(chapter.id, seq, shot)}
-                                            title="Open this shot in the editor"
+                                            title={shot?.data?.initialized ? "Open this shot in the editor" : "Create this shot scene"}
                                           >
-                                            Open
+                                            {shot?.data?.initialized ? "Open" : "Create"}
                                           </Button>
                                         </div>
                                       ));
