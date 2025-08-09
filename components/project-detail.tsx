@@ -1133,7 +1133,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                 );
                               }
                               return seqs.map((seq) => (
-                                <div key={seq.id} className="bg-gray-700/70 rounded p-2">
+                                <div key={seq.id} className="bg-gray-700/70 rounded px-3 py-3">
                                   <div className="flex items-center justify-between">
                                     <span className="text-xs text-gray-200 font-medium tracking-wide">{seq.code}</span>
                                     <div className="flex items-center gap-2">
@@ -1143,19 +1143,19 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                             value={newShotCode}
                                             onChange={(e) => setNewShotCode(e.target.value)}
                                             placeholder="Shot code e.g. 010A"
-                                            className="h-7 bg-gray-700 border-gray-600 text-white"
+                                            className="h-8 bg-gray-700 border-gray-600 text-white px-3"
                                           />
-                                          <Button size="xs" className="h-7 bg-red-600 hover:bg-red-700" onClick={() => handleCreateShot(chapter.id, seq.id)}>Add</Button>
-                                          <Button size="xs" variant="outline" className="h-7 border-gray-600 text-gray-300" onClick={() => { setIsCreatingShot(null); setNewShotCode(""); }}>Cancel</Button>
+                                          <Button size="sm" className="h-8 px-3 bg-red-600 hover:bg-red-700" onClick={() => handleCreateShot(chapter.id, seq.id)}>Add</Button>
+                                          <Button size="sm" variant="outline" className="h-8 px-3 border-gray-600 text-gray-300" onClick={() => { setIsCreatingShot(null); setNewShotCode(""); }}>Cancel</Button>
                                         </>
                                       ) : (
-                                        <Button size="xs" variant="outline" className="h-7 border-gray-600 text-gray-300" onClick={async () => { setIsCreatingShot(seq.id); await ensureShotsLoaded(seq.id); }} title="Add a shot to this sequence">
+                                        <Button size="sm" variant="outline" className="h-8 px-3 border-gray-600 text-gray-300" onClick={async () => { setIsCreatingShot(seq.id); await ensureShotsLoaded(seq.id); }} title="Add a shot to this sequence">
                                           <Plus className="w-3 h-3 mr-1" /> Add Shot
                                         </Button>
                                       )}
                                     </div>
                                   </div>
-                                  <div className="mt-2 flex flex-wrap gap-2">
+                                  <div className="mt-3 flex flex-wrap gap-3">
                                     {(() => {
                                       const shots = shotsBySequence[seq.id];
                                       if (!shots) {
@@ -1170,15 +1170,15 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                         );
                                       }
                                       return shots.map((shot) => (
-                                        <div key={shot.id} className="flex items-center gap-2 text-xs bg-gray-800 rounded-full pl-2 pr-1 py-1">
+                                        <div key={shot.id} className="flex items-center gap-2 text-xs bg-gray-800 rounded-full pl-3 pr-2 py-1">
                                           <span className="text-gray-200">SHOT {shot.code}</span>
                                           {shot.status && (
                                             <Badge className="bg-gray-600 rounded-full px-2 py-0.5">{shot.status}</Badge>
                                           )}
                                           <Button
                                             variant="outline"
-                                            size="xs"
-                                            className="ml-1 h-6 px-2 border-gray-600 text-gray-200 hover:bg-gray-700"
+                                            size="sm"
+                                            className="ml-1 h-7 px-3 border-gray-600 text-gray-200 hover:bg-gray-700"
                                             onClick={() => handleOpenShotEditor(chapter.id, seq.code, shot.code)}
                                           >
                                             Open
