@@ -658,6 +658,19 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     });
   };
 
+  const handleOpenSequenceStoryboard = (
+    chapterId: string,
+    sequenceCode: string
+  ) => {
+    onViewChange("animation-editor", {
+      projectId,
+      chapterId,
+      sequenceCode,
+      mode: "storyboard",
+      projectTitle: project?.title || "Project",
+    });
+  };
+
   const ensureSequencesLoaded = async (chapterId: string) => {
     if (sequencesByChapter[chapterId]) return;
     const seqs = await listSequences(chapterId);
@@ -1194,6 +1207,14 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                   <div className="flex items-center justify-between">
                                     <span className="text-xs text-gray-200 font-medium tracking-wide">{seq.code}</span>
                                     <div className="flex items-center gap-2">
+                                      <Button
+                                        size="sm"
+                                        className="h-8 px-3 bg-purple-600 hover:bg-purple-700"
+                                        onClick={() => handleOpenSequenceStoryboard(chapter.id, seq.code)}
+                                        title="Open storyboard for this sequence"
+                                      >
+                                        <BookOpen className="w-3 h-3 mr-1" /> Storyboard
+                                      </Button>
                                       {isCreatingShot === seq.id ? (
                                         <>
                                           <Input
