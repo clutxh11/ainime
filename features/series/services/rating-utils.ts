@@ -33,7 +33,7 @@ export const getProjectsWithRatings = async (): Promise<ProjectWithRatings[]> =>
   const { data, error } = await supabase
     .from("projects")
     .select(
-      `id, title, description, genre, status, image_url, square_thumbnail_url, horizontal_thumbnail_url, creator_id, created_at, updated_at`
+      `id, title, description, genre, status, creator_id, created_at, updated_at`
     )
     .order("created_at", { ascending: false });
   if (error) {
