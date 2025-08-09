@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import type { CurrentView } from "@/types";
 import { supabase } from "@/lib/supabase";
+import { listSequences, listShots, createSequence, createShot } from "@/lib/sequences";
 import { toast } from "sonner";
 
 interface ProjectDetailProps {
@@ -187,6 +188,16 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   const [expandedChapters, setExpandedChapters] = useState<
     Record<string, boolean>
   >({});
+  const [sequencesByChapter, setSequencesByChapter] = useState<
+    Record<string, Array<{ id: string; code: string }>>
+  >({});
+  const [shotsBySequence, setShotsBySequence] = useState<
+    Record<string, Array<{ id: string; code: string; status?: string }>>
+  >({});
+  const [isCreatingSequence, setIsCreatingSequence] = useState<string | null>(null); // chapterId
+  const [newSequenceCode, setNewSequenceCode] = useState("");
+  const [isCreatingShot, setIsCreatingShot] = useState<string | null>(null); // sequenceId
+  const [newShotCode, setNewShotCode] = useState("");
 
   const scrollMessagesToBottom = (smooth: boolean = false) => {
     const el = messagesContainerRef.current;
@@ -608,23 +619,53 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     });
   };
 
-  const getMockSequencesForChapter = (chapterId: string) => {
-    return [
-      {
-        seq: "SEQ 010",
-        shots: [
-          { code: "010A", stage: "Storyboard", status: "todo" },
-          { code: "010B", stage: "Layout", status: "in-progress" },
-        ],
-      },
-      {
-        seq: "SEQ 020",
-        shots: [
-          { code: "020A", stage: "Key", status: "review" },
-          { code: "020B", stage: "Inbetween", status: "todo" },
-        ],
-      },
-    ];
+  const ensureSequencesLoaded = async (chapterId: string) => {
+    if (sequencesByChapter[chapterId]) return;
+    const seqs = await listSequences(chapterId);
+    const simple = (seqs || []).map((s) => ({ id: s.id, code: s.code }));
+    setSequencesByChapter((prev) => ({ ...prev, [chapterId]: simple }));
+  };
+
+  const ensureShotsLoaded = async (sequenceId: string) => {
+    if (shotsBySequence[sequenceId]) return;
+    const shots = await listShots(sequenceId);
+    const simple = (shots || []).map((s) => ({ id: s.id, code: s.code, status: s.status }));
+    setShotsBySequence((prev) => ({ ...prev, [sequenceId]: simple }));
+  };
+
+  const handleCreateSequence = async (chapterId: string) => {
+    if (!newSequenceCode.trim() || !projectId) return;
+    const created = await createSequence({
+      projectId,
+      chapterId,
+      code: newSequenceCode.trim(),
+    });
+    if (created) {
+      setSequencesByChapter((prev) => ({
+        ...prev,
+        [chapterId]: [...(prev[chapterId] || []), { id: created.id, code: created.code }],
+      }));
+      setNewSequenceCode("");
+      setIsCreatingSequence(null);
+    }
+  };
+
+  const handleCreateShot = async (chapterId: string, sequenceId: string) => {
+    if (!newShotCode.trim() || !projectId) return;
+    const created = await createShot({
+      projectId,
+      chapterId,
+      sequenceId,
+      code: newShotCode.trim(),
+    });
+    if (created) {
+      setShotsBySequence((prev) => ({
+        ...prev,
+        [sequenceId]: [...(prev[sequenceId] || []), { id: created.id, code: created.code, status: created.status }],
+      }));
+      setNewShotCode("");
+      setIsCreatingShot(null);
+    }
   };
 
   const handleSendMessage = () => {
@@ -1011,64 +1052,101 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                         </button>
                         {expandedChapters[chapter.id] && (
                           <div className="mt-3 space-y-2">
-                            {getMockSequencesForChapter(chapter.id).map(
-                              (seq) => (
-                                <div
-                                  key={seq.seq}
-                                  className="bg-gray-700 rounded p-2"
-                                >
+                            {/* Add Sequence */}
+                            <div className="flex items-center gap-2">
+                              {isCreatingSequence === chapter.id ? (
+                                <>
+                                  <Input
+                                    value={newSequenceCode}
+                                    onChange={(e) => setNewSequenceCode(e.target.value)}
+                                    placeholder="Sequence code e.g. SEQ 010"
+                                    className="h-8 bg-gray-700 border-gray-600 text-white"
+                                  />
+                                  <Button size="sm" className="h-8 bg-red-600 hover:bg-red-700" onClick={() => handleCreateSequence(chapter.id)}>Create</Button>
+                                  <Button size="sm" variant="outline" className="h-8 border-gray-600 text-gray-300" onClick={() => { setIsCreatingSequence(null); setNewSequenceCode(""); }}>Cancel</Button>
+                                </>
+                              ) : (
+                                <Button size="sm" variant="outline" className="h-8 border-gray-600 text-gray-300" onClick={async () => { setIsCreatingSequence(chapter.id); await ensureSequencesLoaded(chapter.id); }}>
+                                  <Plus className="w-3 h-3 mr-1" /> Add Sequence
+                                </Button>
+                              )}
+                            </div>
+
+                            {/* Load sequences */}
+                            {(() => {
+                              const seqs = sequencesByChapter[chapter.id];
+                              if (!seqs) {
+                                // kick off load and show hint
+                                ensureSequencesLoaded(chapter.id);
+                                return (
+                                  <div className="text-xs text-gray-400">Loading sequences…</div>
+                                );
+                              }
+                              if (seqs.length === 0) {
+                                return (
+                                  <div className="text-xs text-gray-400">No sequences yet.</div>
+                                );
+                              }
+                              return seqs.map((seq) => (
+                                <div key={seq.id} className="bg-gray-700 rounded p-2">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-xs text-gray-200 font-medium">
-                                      {seq.seq}
-                                    </span>
+                                    <span className="text-xs text-gray-200 font-medium">{seq.code}</span>
+                                    <div className="flex items-center gap-2">
+                                      {isCreatingShot === seq.id ? (
+                                        <>
+                                          <Input
+                                            value={newShotCode}
+                                            onChange={(e) => setNewShotCode(e.target.value)}
+                                            placeholder="Shot code e.g. 010A"
+                                            className="h-7 bg-gray-700 border-gray-600 text-white"
+                                          />
+                                          <Button size="xs" className="h-7 bg-red-600 hover:bg-red-700" onClick={() => handleCreateShot(chapter.id, seq.id)}>Add</Button>
+                                          <Button size="xs" variant="outline" className="h-7 border-gray-600 text-gray-300" onClick={() => { setIsCreatingShot(null); setNewShotCode(""); }}>Cancel</Button>
+                                        </>
+                                      ) : (
+                                        <Button size="xs" variant="outline" className="h-7 border-gray-600 text-gray-300" onClick={async () => { setIsCreatingShot(seq.id); await ensureShotsLoaded(seq.id); }}>
+                                          <Plus className="w-3 h-3 mr-1" /> Add Shot
+                                        </Button>
+                                      )}
+                                    </div>
                                   </div>
                                   <div className="mt-2 space-y-1">
-                                    {seq.shots.map((shot) => (
-                                      <div
-                                        key={shot.code}
-                                        className="flex items-center justify-between text-xs bg-gray-800 rounded px-2 py-1"
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-gray-200">
-                                            SHOT {shot.code}
-                                          </span>
-                                          <Badge className="bg-gray-600">
-                                            {shot.stage}
-                                          </Badge>
-                                          <Badge
-                                            className={`${
-                                              shot.status === "approved"
-                                                ? "bg-green-600"
-                                                : shot.status === "review"
-                                                ? "bg-yellow-600"
-                                                : shot.status === "in-progress"
-                                                ? "bg-blue-600"
-                                                : "bg-gray-600"
-                                            }`}
+                                    {(() => {
+                                      const shots = shotsBySequence[seq.id];
+                                      if (!shots) {
+                                        ensureShotsLoaded(seq.id);
+                                        return (
+                                          <div className="text-xs text-gray-400">Loading shots…</div>
+                                        );
+                                      }
+                                      if (shots.length === 0) {
+                                        return (
+                                          <div className="text-xs text-gray-400">No shots yet.</div>
+                                        );
+                                      }
+                                      return shots.map((shot) => (
+                                        <div key={shot.id} className="flex items-center justify-between text-xs bg-gray-800 rounded px-2 py-1">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-gray-200">SHOT {shot.code}</span>
+                                            {shot.status && (
+                                              <Badge className="bg-gray-600">{shot.status}</Badge>
+                                            )}
+                                          </div>
+                                          <Button
+                                            variant="outline"
+                                            size="xs"
+                                            className="border-gray-600 text-gray-200 hover:bg-gray-700"
+                                            onClick={() => handleOpenShotEditor(chapter.id, seq.code, shot.code)}
                                           >
-                                            {shot.status}
-                                          </Badge>
+                                            Open Editor
+                                          </Button>
                                         </div>
-                                        <Button
-                                          variant="outline"
-                                          size="xs"
-                                          className="border-gray-600 text-gray-200 hover:bg-gray-700"
-                                          onClick={() =>
-                                            handleOpenShotEditor(
-                                              chapter.id,
-                                              seq.seq,
-                                              shot.code
-                                            )
-                                          }
-                                        >
-                                          Open Editor
-                                        </Button>
-                                      </div>
-                                    ))}
+                                      ));
+                                    })()}
                                   </div>
                                 </div>
-                              )
-                            )}
+                              ));
+                            })()}
                           </div>
                         )}
                       </div>
