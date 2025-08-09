@@ -6,6 +6,8 @@ export const mockContent: ContentItem[] = [
     id: "1",
     title: "Dragon's Legacy",
     type: "animated",
+    genre: "Fantasy",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "A young warrior discovers an ancient dragon's power within himself and must learn to control it while protecting his village from dark forces.",
@@ -17,6 +19,8 @@ export const mockContent: ContentItem[] = [
     id: "2",
     title: "Cyber Samurai",
     type: "manga",
+    genre: "Sci-Fi",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "In a dystopian future, a lone samurai fights against corporate tyranny using both ancient sword techniques and advanced cybernetics.",
@@ -28,6 +32,8 @@ export const mockContent: ContentItem[] = [
     id: "3",
     title: "Magical Academy Chronicles",
     type: "ongoing",
+    genre: "Fantasy",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "Students at a prestigious magical academy must master their powers while uncovering a conspiracy that threatens the magical world.",
@@ -39,6 +45,8 @@ export const mockContent: ContentItem[] = [
     id: "4",
     title: "Space Pirates Saga",
     type: "manga",
+    genre: "Adventure",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "A ragtag crew of space pirates navigates dangerous territories while searching for the legendary treasure of the cosmic emperor.",
@@ -50,6 +58,8 @@ export const mockContent: ContentItem[] = [
     id: "5",
     title: "Mystic Warriors",
     type: "animated",
+    genre: "Fantasy",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "Ancient warriors wielding mystical powers battle against an otherworldly invasion threatening their realm.",
@@ -61,6 +71,8 @@ export const mockContent: ContentItem[] = [
     id: "6",
     title: "Urban Legends",
     type: "ongoing",
+    genre: "Horror",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "Modern-day investigators uncover supernatural mysteries hidden in the shadows of metropolitan cities.",
@@ -72,6 +84,8 @@ export const mockContent: ContentItem[] = [
     id: "7",
     title: "Elemental Guardians",
     type: "animated",
+    genre: "Fantasy",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "Four teenagers discover they are the chosen guardians of the elemental forces and must protect the world from ancient evil.",
@@ -83,6 +97,8 @@ export const mockContent: ContentItem[] = [
     id: "8",
     title: "Neon Dreams",
     type: "manga",
+    genre: "Cyberpunk",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "In a neon-lit future city, a hacker uncovers a conspiracy that threatens to destroy the boundary between reality and virtual worlds.",
@@ -94,6 +110,8 @@ export const mockContent: ContentItem[] = [
     id: "9",
     title: "Forest Spirits",
     type: "ongoing",
+    genre: "Fantasy",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "A young botanist discovers a hidden world of forest spirits and becomes their protector against industrial destruction.",
@@ -105,6 +123,8 @@ export const mockContent: ContentItem[] = [
     id: "10",
     title: "Stellar Knights",
     type: "animated",
+    genre: "Mecha",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "Elite space knights defend the galaxy from alien invasions using advanced mecha suits and ancient combat techniques.",
@@ -116,6 +136,8 @@ export const mockContent: ContentItem[] = [
     id: "11",
     title: "Time Weavers",
     type: "manga",
+    genre: "Adventure",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "A group of time travelers attempt to prevent historical disasters while avoiding paradoxes that could unravel reality.",
@@ -127,6 +149,8 @@ export const mockContent: ContentItem[] = [
     id: "12",
     title: "Shadow Academy",
     type: "ongoing",
+    genre: "Supernatural",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "Students at a secret academy learn to control their supernatural abilities while uncovering dark secrets about their institution.",
@@ -139,6 +163,8 @@ export const mockContent: ContentItem[] = [
     id: "13",
     title: "Galactic Conquest",
     type: "animated",
+    genre: "Space",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "An epic space opera following rebel forces as they fight against an oppressive galactic empire.",
@@ -150,6 +176,8 @@ export const mockContent: ContentItem[] = [
     id: "14",
     title: "Phantom Thief Chronicles",
     type: "manga",
+    genre: "Mystery",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "A master thief targets corrupt corporations while evading both law enforcement and rival criminal organizations.",
@@ -161,6 +189,8 @@ export const mockContent: ContentItem[] = [
     id: "15",
     title: "Divine Ascension",
     type: "animated",
+    genre: "Fantasy",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "Mortals compete in trials set by gods to earn the right to ascend to divine status and reshape reality.",
@@ -172,6 +202,8 @@ export const mockContent: ContentItem[] = [
     id: "16",
     title: "Ocean Depths",
     type: "manga",
+    genre: "Adventure",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "Deep-sea explorers discover an ancient underwater civilization and must navigate political intrigue beneath the waves.",
@@ -183,6 +215,8 @@ export const mockContent: ContentItem[] = [
     id: "17",
     title: "Mech Warriors",
     type: "animated",
+    genre: "Mecha",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "Pilots of giant robots defend Earth from alien invaders in intense mecha battles across multiple fronts.",
@@ -194,6 +228,8 @@ export const mockContent: ContentItem[] = [
     id: "18",
     title: "Mirror Dimensions",
     type: "manga",
+    genre: "Sci-Fi",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "A teenager discovers they can travel between parallel dimensions and must prevent reality from collapsing.",
@@ -205,6 +241,8 @@ export const mockContent: ContentItem[] = [
     id: "19",
     title: "Shadow Hunters",
     type: "animated",
+    genre: "Supernatural",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "Elite warriors hunt supernatural creatures that threaten the balance between the human and spirit worlds.",
@@ -216,6 +254,8 @@ export const mockContent: ContentItem[] = [
     id: "20",
     title: "Sky Kingdoms",
     type: "manga",
+    genre: "Fantasy",
+    status: "Active",
     image: "/placeholder.svg?height=300&width=200",
     synopsis:
       "Floating islands in the sky host competing kingdoms vying for control of ancient sky magic.",
@@ -428,4 +468,3 @@ export function getTeamCountForProject(projectId: string): number {
   const project = getProjectById(projectId);
   return project?.teams.length || 0;
 }
- 
