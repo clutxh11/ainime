@@ -60,6 +60,10 @@ interface AnimationEditorProps {
     canvasWidth: number;
     canvasHeight: number;
     frameRate: number;
+    projectId?: string;
+    chapterId?: string;
+    sequenceId?: string;
+    shotId?: string;
   };
 }
 
@@ -197,6 +201,14 @@ export function AnimationEditor({
   const [settingsWidth, setSettingsWidth] = useState<number>(sceneSettings?.canvasWidth ?? 1920);
   const [settingsHeight, setSettingsHeight] = useState<number>(sceneSettings?.canvasHeight ?? 1080);
   const [settingsFps, setSettingsFps] = useState<number>(sceneSettings?.frameRate ?? 24);
+  // Sync settings state whenever a new shot/scene is opened
+  useEffect(() => {
+    if (sceneSettings) {
+      setSettingsWidth(sceneSettings.canvasWidth);
+      setSettingsHeight(sceneSettings.canvasHeight);
+      setSettingsFps(sceneSettings.frameRate);
+    }
+  }, [sceneSettings?.sceneName, sceneSettings?.canvasWidth, sceneSettings?.canvasHeight, sceneSettings?.frameRate]);
   const [editingLayer, setEditingLayer] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -363,8 +375,8 @@ export function AnimationEditor({
     if (!canvas) return;
 
     // Actual canvas resolution (for quality)
-    const canvasWidth = sceneSettings?.canvasWidth ?? settingsWidth ?? 800;
-    const canvasHeight = sceneSettings?.canvasHeight ?? settingsHeight ?? 600;
+    const canvasWidth = settingsWidth ?? 800;
+    const canvasHeight = settingsHeight ?? 600;
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
 
@@ -391,7 +403,7 @@ export function AnimationEditor({
     contextRef.current = context;
 
     drawFrame();
-  }, [zoom, sceneSettings, settingsWidth, settingsHeight]);
+  }, [zoom, settingsWidth, settingsHeight]);
 
   // Helper to get mouse position in canvas coordinates (accounting for zoom)
   const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -3204,14 +3216,11 @@ export function AnimationEditor({
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <button className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded px-3 py-2" onClick={() => {
-                  // Update reactive settings so canvas effect reruns
-                  (sceneSettings as any) = {
-                    ...(sceneSettings || {}),
-                    canvasWidth: settingsWidth,
-                    canvasHeight: settingsHeight,
-                    frameRate: settingsFps,
-                  } as any;
+                <button className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded px-3 py-2" onClick={async () => {
+                  // Update local state so canvas effect reruns immediately
+                  setSettingsWidth((w) => settingsWidth);
+                  setSettingsHeight((h) => settingsHeight);
+                  setSettingsFps((f) => settingsFps);
                   setIsSettingsOpen(false);
                 }}>Apply</button>
                 <button className="border border-gray-600 text-gray-300 rounded px-3 py-2" onClick={() => setIsSettingsOpen(false)}>Cancel</button>

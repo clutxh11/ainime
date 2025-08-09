@@ -58,6 +58,10 @@ export default function Home() {
         canvasWidth: number;
         canvasHeight: number;
         frameRate: number;
+        projectId?: string;
+        chapterId?: string;
+        sequenceId?: string;
+        shotId?: string;
       }
     | undefined
   >(undefined);

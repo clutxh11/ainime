@@ -748,7 +748,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
       onViewChange("animation-editor", {
         projectId,
         chapterId,
+        sequenceId: seq.id,
         sequenceCode: seq.code,
+        shotId: shot.id,
         shotCode: shot.code,
         projectTitle: project?.title || "Project",
         sceneName: `SHOT ${shot.code}`,
