@@ -745,7 +745,17 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   ) => {
     const initialized = Boolean(shot?.data?.initialized);
     if (initialized) {
-      handleOpenShotEditor(chapterId, seq.code, shot.code);
+      onViewChange("animation-editor", {
+        projectId,
+        chapterId,
+        sequenceCode: seq.code,
+        shotCode: shot.code,
+        projectTitle: project?.title || "Project",
+        sceneName: `SHOT ${shot.code}`,
+        canvasWidth: shot?.data?.width || 1920,
+        canvasHeight: shot?.data?.height || 1080,
+        frameRate: shot?.data?.fps || 24,
+      });
       return;
     }
     // Open setup modal

@@ -363,8 +363,8 @@ export function AnimationEditor({
     if (!canvas) return;
 
     // Actual canvas resolution (for quality)
-    const canvasWidth = sceneSettings?.canvasWidth ?? 800;
-    const canvasHeight = sceneSettings?.canvasHeight ?? 600;
+    const canvasWidth = sceneSettings?.canvasWidth ?? settingsWidth ?? 800;
+    const canvasHeight = sceneSettings?.canvasHeight ?? settingsHeight ?? 600;
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
 
@@ -391,7 +391,7 @@ export function AnimationEditor({
     contextRef.current = context;
 
     drawFrame();
-  }, [zoom, sceneSettings]);
+  }, [zoom, sceneSettings, settingsWidth, settingsHeight]);
 
   // Helper to get mouse position in canvas coordinates (accounting for zoom)
   const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -3205,11 +3205,13 @@ export function AnimationEditor({
               </div>
               <div className="flex gap-2 pt-2">
                 <button className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded px-3 py-2" onClick={() => {
-                  if (sceneSettings) {
-                    (sceneSettings as any).canvasWidth = settingsWidth;
-                    (sceneSettings as any).canvasHeight = settingsHeight;
-                    (sceneSettings as any).frameRate = settingsFps;
-                  }
+                  // Update reactive settings so canvas effect reruns
+                  (sceneSettings as any) = {
+                    ...(sceneSettings || {}),
+                    canvasWidth: settingsWidth,
+                    canvasHeight: settingsHeight,
+                    frameRate: settingsFps,
+                  } as any;
                   setIsSettingsOpen(false);
                 }}>Apply</button>
                 <button className="border border-gray-600 text-gray-300 rounded px-3 py-2" onClick={() => setIsSettingsOpen(false)}>Cancel</button>
