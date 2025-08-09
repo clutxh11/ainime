@@ -9,19 +9,12 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Play,
-  Search,
   MessageCircle,
   Star,
   CalendarIcon,
@@ -44,8 +37,19 @@ import { SettingsModal } from "@/components/settings-modal";
 import { ContributionsModal } from "@/components/contributions-modal";
 import { ProfileDropdown } from "@/components/shared/profile-dropdown";
 import { supabase } from "@/lib/supabase";
+import {
+  getProjectsWithRatings,
+  getUserRating,
+  submitRating,
+} from "@/lib/rating-utils";
+import { RatingStars } from "@/components/ui/rating-stars";
 import React from "react";
 import { CommentSection } from "@/components/ui/comment-section";
+import { SearchDropdown } from "@/components/ui/search-dropdown";
+import { useAuth } from "@/components/auth/auth-provider";
+import { AuthModal } from "@/components/auth/auth-modal";
+import { HierarchicalDropdown } from "@/components/ui/hierarchical-dropdown";
+// import { UserProfile } from "@/components/auth/user-profile";
 
 interface ViewerHubProps extends ComponentWithViewChange {}
 
@@ -54,13 +58,21 @@ interface Project {
   title: string;
   description: string;
   genre: string;
+  genres?: string[]; // Added for multiple genres
+  series_type?: string; // Added for manga/manhwa/manhua
+  tags?: string[]; // Added for tags
   status: string;
   views: number;
   progress: number;
   image_url?: string;
+  square_thumbnail_url?: string; // Added for square thumbnail
+  horizontal_thumbnail_url?: string; // Added for hero banner
   creator_id: string;
+  creator_display_name?: string;
   created_at: string;
   updated_at: string;
+  average_rating: number;
+  total_ratings: number;
   users?: {
     username: string;
     avatar_url?: string;
@@ -74,6 +86,18 @@ interface Project {
     created_at: string;
     updated_at: string;
   }[];
+  volumes?: Array<{
+    id: string;
+    volume_number: number;
+    title: string;
+    description?: string;
+    chapters: Array<{
+      id: string;
+      title: string;
+      status: string;
+      release_date?: string;
+    }>;
+  }>;
 }
 
 export function ViewerHub({ onViewChange }: ViewerHubProps) {
@@ -81,7 +105,35 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
     null
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [userRatings, setUserRatings] = useState<Record<string, number>>({});
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const { user } = useAuth();
+  // Handle search result click
+  const handleSearchResultClick = useCallback((result: any) => {
+    // Convert search result to ContentItem format
+    const contentItem: ContentItem = {
+      id: result.id,
+      title: result.title,
+      synopsis: result.description,
+      type: result.type,
+      genre: result.genre,
+      status: result.status,
+      rating: result.rating,
+      views: result.views,
+      progress: result.progress || 0,
+      image: result.image_url || "/placeholder.jpg",
+      creator: result.users?.username || "Unknown Creator",
+      tags: [result.genre, result.status],
+      episodes: [],
+      chapters: [],
+    };
+
+    setSelectedContent(contentItem);
+    setIsModalOpen(true);
+  }, []);
+
+  // Remove the old searchTerm state since SearchDropdown manages its own state
+  // const [searchTerm, setSearchTerm] = useState("");
 
   // Data states
   const [projects, setProjects] = useState<Project[]>([]);
@@ -99,27 +151,79 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
   const fetchProjects = async () => {
     try {
       setLoading(true);
-      setError(null);
 
-      const { data: projectsData, error: projectsError } = await supabase
-        .from("projects")
-        .select(
-          `
-          *,
-          users!projects_creator_id_fkey(username, avatar_url),
-          chapters(*)
-        `
-        )
-        .order("views", { ascending: false });
+      // Fetch projects with ratings
+      const projectsData = await getProjectsWithRatings();
+      setProjects(projectsData);
 
-      if (projectsError) throw projectsError;
+      // Fetch volumes and chapters for each project
+      const projectsWithVolumes = await Promise.all(
+        projectsData.map(async (project) => {
+          const { data: volumesData, error: volumesError } = await supabase
+            .from("volumes")
+            .select(
+              `
+              id,
+              volume_number,
+              title,
+              description,
+              chapters (
+                id,
+                title,
+                status,
+                release_date
+              )
+            `
+            )
+            .eq("project_id", project.id)
+            .order("volume_number", { ascending: true });
 
-      // Debug: Log the first project's chapters to see the structure
-      if (projectsData && projectsData.length > 0) {
-        console.log("First project chapters:", projectsData[0].chapters);
+          if (volumesError) {
+            console.error("Error fetching volumes:", volumesError);
+            return project;
+          }
+
+          return {
+            ...project,
+            volumes: volumesData || [],
+          };
+        })
+      );
+
+      // Fetch creator information for each project
+      const projectsWithCreators = await Promise.all(
+        projectsWithVolumes.map(async (project) => {
+          const { data: creatorData, error: creatorError } = await supabase
+            .from("user_profiles_public")
+            .select("display_name")
+            .eq("id", project.creator_id)
+            .single();
+
+          if (creatorError) {
+            console.error("Error fetching creator:", creatorError);
+            return {
+              ...project,
+              creator_display_name: "Unknown Creator",
+            };
+          }
+
+          return {
+            ...project,
+            creator_display_name:
+              creatorData?.display_name || "Unknown Creator",
+          };
+        })
+      );
+
+      setProjects(projectsWithCreators);
+
+      // Fetch user ratings for all projects
+      const ratings: Record<string, number> = {};
+      for (const project of projectsWithCreators) {
+        const userRating = await getUserRating(project.id);
+        ratings[project.id] = userRating;
       }
-
-      setProjects(projectsData || []);
+      setUserRatings(ratings);
     } catch (err: any) {
       setError(err.message);
       console.error("Error fetching data:", err);
@@ -128,21 +232,35 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
     }
   };
 
+  // Utility function to truncate synopsis
+  const truncateSynopsis = (text: string, maxLength: number = 150) => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength).trim() + "...";
+  };
+
   // Convert projects to ContentItem format for compatibility
   const contentItems: ContentItem[] = useMemo(() => {
     return projects.map((project) => ({
       id: project.id,
       title: project.title,
-      description: project.description,
+      synopsis: truncateSynopsis(project.description), // Truncate synopsis
       type: "animated" as const,
       genre: project.genre,
       status: project.status,
-      rating: 4.5,
+      rating: project.average_rating || 0,
+      totalRatings: project.total_ratings || 0,
       views: project.views,
       progress: project.progress,
-      image: project.image_url || "/placeholder.jpg",
-      creator: project.users?.username || "Unknown Creator",
-      tags: [project.genre, project.status],
+      seriesType: project.series_type, // Added for series type display
+      image:
+        project.square_thumbnail_url || project.image_url || "/placeholder.jpg", // Use square thumbnail for cards
+      heroImage:
+        project.horizontal_thumbnail_url ||
+        project.image_url ||
+        "/placeholder.jpg", // Use horizontal thumbnail for hero
+      creator: project.creator_display_name,
+      tags: project.tags || [project.genre, project.status], // Use database tags if available, fallback to genre/status
+      authors: [], // Empty since we don't have authors table anymore
       episodes:
         project.chapters?.map((chapter, index) => ({
           id: chapter.id,
@@ -157,20 +275,34 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
           pages: 20,
           thumbnail: "/placeholder.jpg",
         })) || [],
+      volumes:
+        project.volumes?.map((volume) => ({
+          id: volume.id,
+          volume_number: volume.volume_number,
+          title: volume.title,
+          description: volume.description,
+          chapters:
+            volume.chapters?.map((chapter) => ({
+              id: chapter.id,
+              title: chapter.title,
+              status: chapter.status,
+              release_date: chapter.release_date,
+            })) || [],
+        })) || [],
     }));
   }, [projects]);
 
-  // Memoize filtered content to improve performance
-  const filteredContent = useMemo(() => {
-    if (!searchTerm) return contentItems;
-    return contentItems.filter(
-      (item) =>
-        item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.tags.some((tag) =>
-          tag.toLowerCase().includes(searchTerm.toLowerCase())
-        )
-    );
-  }, [contentItems, searchTerm]);
+  // Remove the old filteredContent logic since SearchDropdown handles its own search
+  // const filteredContent = useMemo(() => {
+  //   if (!searchTerm) return contentItems;
+  //   return contentItems.filter(
+  //     (item) =>
+  //       item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //       item.tags.some((tag) =>
+  //         tag.toLowerCase().includes(searchTerm.toLowerCase())
+  //       )
+  //   );
+  // }, [contentItems]);
 
   // Stable callback functions to prevent re-renders
   const handleContentSelect = useCallback((content: ContentItem) => {
@@ -190,20 +322,74 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
   );
 
   const handleWatchEpisode = useCallback(
-    (content: ContentItem, episode: string) => {
-      console.log("handleWatchEpisode called with:", { content, episode });
-      onViewChange("video", { ...content, selectedEpisode: episode });
+    (content: ContentItem, episodeTitle: string) => {
+      console.log("handleWatchEpisode called with:", { content, episodeTitle });
+      // Find the episode object to get the ID
+      const episode = content.episodes?.find((ep) => ep.title === episodeTitle);
+      onViewChange("video", {
+        ...content,
+        selectedEpisode: episodeTitle,
+        selectedEpisodeId: episode?.id || content.id, // Use episode ID if available, fallback to content ID
+      });
     },
     [onViewChange]
   );
 
-  const handleReadChapter = useCallback(
-    (content: ContentItem, chapter: string) => {
-      console.log("handleReadChapter called with:", { content, chapter });
-      onViewChange("manga", { ...content, selectedChapter: chapter });
-    },
-    [onViewChange]
-  );
+  const handleReadChapter = (content: ContentItem, chapterTitle: string) => {
+    console.log("handleReadChapter called with:", { content, chapterTitle });
+
+    // Look for the chapter in all volumes
+    let foundChapter = null;
+    let foundVolume = null;
+
+    for (const volume of content.volumes || []) {
+      console.log("Searching volume:", volume.title);
+      const chapter = volume.chapters?.find((ch) => ch.title === chapterTitle);
+      if (chapter) {
+        foundChapter = chapter;
+        foundVolume = volume;
+        console.log("Found chapter:", chapter);
+        break;
+      }
+    }
+
+    if (!foundChapter) {
+      console.error("Chapter not found:", chapterTitle);
+      console.log("Available volumes:", content.volumes);
+      return;
+    }
+
+    console.log("Opening manga viewer with:", {
+      selectedChapter: chapterTitle,
+      selectedChapterId: foundChapter.id,
+      selectedVolume: foundVolume,
+    });
+
+    onViewChange("manga", {
+      ...content,
+      selectedChapter: chapterTitle,
+      selectedChapterId: foundChapter.id,
+      selectedVolume: foundVolume,
+    });
+  };
+
+  const handleRatingChange = async (projectId: string, rating: number) => {
+    try {
+      const result = await submitRating(projectId, rating);
+      if (result.success) {
+        // Update local state
+        setUserRatings((prev) => ({ ...prev, [projectId]: rating }));
+
+        // Refresh projects to get updated average ratings
+        const updatedProjects = await getProjectsWithRatings();
+        setProjects(updatedProjects);
+      } else {
+        console.error("Failed to submit rating:", result.error);
+      }
+    } catch (error) {
+      console.error("Error submitting rating:", error);
+    }
+  };
 
   // Completely isolated Hero Section Component
   const HeroSection = React.memo(() => {
@@ -251,7 +437,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
       <div className="relative h-[500px] overflow-hidden group">
         <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-transparent z-10" />
         <img
-          src={currentHero.image}
+          src={currentHero.heroImage || currentHero.image}
           alt={currentHero.title}
           className="w-full h-full object-cover transition-all duration-1000"
         />
@@ -291,23 +477,15 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
               {currentHero.title}
             </h1>
             <p className="text-gray-300 mb-6 max-w-2xl">
-              {currentHero.description}
+              {currentHero.synopsis}
             </p>
             <div className="flex items-center gap-4">
               <Button
-                onClick={() => handlePlayContent(currentHero)}
+                onClick={() => handleContentSelect(currentHero)}
                 className="bg-red-600 hover:bg-red-700 px-8 py-3 text-lg"
               >
                 <Play className="w-5 h-5 mr-2" />
                 Watch Now
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleContentSelect(currentHero)}
-                className="border-white text-white hover:bg-white/10 px-8 py-3 text-lg"
-              >
-                <MessageCircle className="w-5 h-5 mr-2" />
-                Learn More
               </Button>
             </div>
           </div>
@@ -449,6 +627,15 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                     <p className="text-xs text-gray-300 line-clamp-3">
                       {item.synopsis}
                     </p>
+                    {item.authors && item.authors.length > 0 && (
+                      <div className="text-xs text-gray-300">
+                        <span className="font-medium">By: </span>
+                        {item.authors
+                          .filter((author) => author.is_primary)
+                          .map((author) => author.name)
+                          .join(", ") || item.authors[0]?.name}
+                      </div>
+                    )}
                     <Button
                       size="sm"
                       className="bg-red-600 hover:bg-red-700 w-full"
@@ -469,8 +656,19 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                 </h3>
                 <div className="flex items-center gap-1 mb-2">
                   <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                  <span className="text-sm text-gray-300">{item.rating}</span>
+                  <span className="text-sm text-gray-300">
+                    {item.rating.toFixed(2)} ({item.totalRatings || 0})
+                  </span>
                 </div>
+                {item.authors && item.authors.length > 0 && (
+                  <div className="text-xs text-gray-400 mb-2">
+                    by{" "}
+                    {item.authors
+                      .filter((author) => author.is_primary)
+                      .map((author) => author.name)
+                      .join(", ") || item.authors[0]?.name}
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-1">
                   {item.tags.slice(0, 2).map((tag) => (
                     <Badge key={tag} variant="secondary" className="text-xs">
@@ -624,20 +822,20 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
 
   // Better content distribution for scrolling - MEMOIZED to prevent re-renders
   const continueWatchingItems = useMemo(
-    () => filteredContent.filter((item) => item.progress && item.progress > 0),
-    [filteredContent]
+    () => contentItems.filter((item) => item.progress && item.progress > 0),
+    [contentItems]
   );
   const trendingAnimeItems = useMemo(
-    () => filteredContent.filter((item) => item.type === "animated"),
-    [filteredContent]
+    () => contentItems.filter((item) => item.type === "animated"),
+    [contentItems]
   );
   const newMangaItems = useMemo(
-    () => filteredContent.filter((item) => item.type === "manga"),
-    [filteredContent]
+    () => contentItems.filter((item) => item.type === "manga"),
+    [contentItems]
   );
   const fanFavoriteItems = useMemo(
-    () => [...filteredContent].sort((a, b) => b.rating - a.rating),
-    [filteredContent]
+    () => [...contentItems].sort((a, b) => b.rating - a.rating),
+    [contentItems]
   );
 
   if (loading) {
@@ -710,20 +908,17 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="relative hidden sm:block">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Search anime & manga..."
-                  className="pl-10 w-64 bg-gray-800 border-gray-700 text-white"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
+              <SearchDropdown
+                placeholder="Search anime & manga..."
+                onResultClick={handleSearchResultClick}
+                className="w-80"
+              />
               <ProfileDropdown
                 onSettingsClick={() => openModal("isSettingsModalOpen")}
                 onContributionsClick={() =>
                   openModal("isContributionsModalOpen")
                 }
+                onSignInClick={() => setShowAuthModal(true)}
               />
             </div>
           </div>
@@ -781,9 +976,12 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
             <DialogTitle className="text-2xl">
               {selectedContent?.title}
             </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Created by {selectedContent?.creator || "Unknown Creator"}
+            </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh] pr-4">
-            <div className="grid md:grid-cols-3 gap-6 pr-2">
+            <div className="grid md:grid-cols-3 gap-6 pr-2 pb-8">
               <div className="md:col-span-1">
                 <img
                   src={selectedContent?.image || "/placeholder.svg"}
@@ -792,16 +990,87 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                 />
                 <div className="mt-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                    <span>{selectedContent?.rating}</span>
+                    <RatingStars
+                      rating={selectedContent?.rating || 0}
+                      totalRatings={selectedContent?.totalRatings || 0}
+                      userRating={userRatings[selectedContent?.id || ""] || 0}
+                      onRatingChange={(rating) =>
+                        handleRatingChange(selectedContent?.id || "", rating)
+                      }
+                      interactive={true}
+                      size="lg"
+                      showTotal={true}
+                    />
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedContent?.tags?.map((tag) => (
-                      <Badge key={tag} variant="secondary">
-                        {tag}
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {/* Genre badges */}
+                    {selectedContent?.genre && (
+                      <Badge
+                        key="genre"
+                        variant="secondary"
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        {selectedContent.genre}
                       </Badge>
-                    ))}
+                    )}
+                    {/* Status badge */}
+                    {selectedContent?.status && (
+                      <Badge
+                        key="status"
+                        variant="secondary"
+                        className="bg-gray-600 hover:bg-gray-700"
+                      >
+                        {selectedContent.status}
+                      </Badge>
+                    )}
+                    {/* Series type badge */}
+                    {selectedContent?.seriesType && (
+                      <Badge
+                        key="seriesType"
+                        variant="secondary"
+                        className="bg-purple-600 hover:bg-purple-700"
+                      >
+                        {selectedContent.seriesType === "manga"
+                          ? "Manga"
+                          : selectedContent.seriesType === "manhwa"
+                          ? "Manhwa"
+                          : selectedContent.seriesType === "manhua"
+                          ? "Manhua"
+                          : selectedContent.seriesType}
+                      </Badge>
+                    )}
                   </div>
+
+                  {/* Tags section */}
+                  {selectedContent?.tags && selectedContent.tags.length > 0 && (
+                    <div className="mb-2">
+                      <div className="text-sm text-gray-400 mb-1">Tags:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {selectedContent.tags.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="outline"
+                            className="text-xs border-gray-500 text-gray-300"
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="text-sm text-gray-300 mb-2">
+                    <span className="font-medium">Creator: </span>
+                    {selectedContent?.creator || "Unknown Creator"}
+                  </div>
+                  {selectedContent?.authors &&
+                    selectedContent.authors.length > 0 && (
+                      <div className="text-sm text-gray-300">
+                        <span className="font-medium">Authors: </span>
+                        {selectedContent.authors
+                          .map((author) => author.name)
+                          .join(", ")}
+                      </div>
+                    )}
                 </div>
               </div>
               <div className="md:col-span-2">
@@ -811,63 +1080,86 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                 </p>
 
                 {/* Manga Chapters - Always available since platform is for manga first */}
-                {selectedContent?.chapters && (
-                  <div className="mb-6">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-full justify-between border-gray-600 hover:bg-gray-700 bg-transparent"
-                        >
-                          Manga Chapters
-                          <ChevronDown className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-full bg-gray-700 border-gray-600">
-                        {selectedContent.chapters.map((chapter, index) => (
-                          <DropdownMenuItem
-                            key={index}
+                {selectedContent?.volumes &&
+                  selectedContent.volumes.length > 0 && (
+                    <div className="mb-6">
+                      <HierarchicalDropdown
+                        title="Manga Chapters"
+                        volumes={selectedContent.volumes}
+                        onChapterClick={(volumeTitle, chapterTitle) =>
+                          handleReadChapter(selectedContent, chapterTitle)
+                        }
+                        showStatusBadges={false}
+                      />
+                    </div>
+                  )}
+
+                {/* Fallback to old chapters structure if no volumes */}
+                {(!selectedContent?.volumes ||
+                  selectedContent.volumes.length === 0) &&
+                  selectedContent?.chapters && (
+                    <div className="mb-6">
+                      <h4 className="text-white font-semibold mb-2">
+                        Manga Chapters
+                      </h4>
+                      <div className="bg-gray-800 border border-gray-700 rounded-lg divide-y divide-gray-700">
+                        {selectedContent.chapters.map((chapter) => (
+                          <button
+                            key={chapter.id}
+                            className="w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-700"
                             onClick={() =>
                               handleReadChapter(selectedContent, chapter.title)
                             }
-                            className="text-white hover:bg-gray-600"
                           >
                             {chapter.title}
-                          </DropdownMenuItem>
+                          </button>
                         ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )}
+                      </div>
+                    </div>
+                  )}
 
                 {/* Animation Episodes - Only show if available (community-created) */}
                 {selectedContent?.episodes && (
                   <div className="mb-6">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-full justify-between border-gray-600 hover:bg-gray-700 bg-transparent"
-                        >
-                          Animated Episodes
-                          <ChevronDown className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-full bg-gray-700 border-gray-600">
-                        {selectedContent.episodes.map((episode, index) => (
-                          <DropdownMenuItem
-                            key={index}
-                            onClick={() =>
-                              handleWatchEpisode(selectedContent, episode.title)
-                            }
-                            className="text-white hover:bg-gray-600"
-                          >
-                            <Play className="w-4 h-4 mr-2" />
-                            {episode.title}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <HierarchicalDropdown
+                      title="Animated Chapters"
+                      volumes={(() => {
+                        const episodes = selectedContent.episodes;
+                        const episodesPerVolume = 5; // 5 episodes per volume
+                        const volumes = [];
+
+                        for (
+                          let i = 0;
+                          i < episodes.length;
+                          i += episodesPerVolume
+                        ) {
+                          const volumeEpisodes = episodes.slice(
+                            i,
+                            i + episodesPerVolume
+                          );
+                          const volumeNumber =
+                            Math.floor(i / episodesPerVolume) + 1;
+
+                          volumes.push({
+                            id: `animated-volume-${volumeNumber}`,
+                            volume_number: volumeNumber,
+                            title: `Volume ${volumeNumber}: ${selectedContent.title} Volume ${volumeNumber}`,
+                            chapters: volumeEpisodes.map((episode, index) => ({
+                              id: `animated-chapter-${i + index}`,
+                              title: `${episode}: ${
+                                selectedContent.title
+                              } Chapter ${i + index + 1}`,
+                            })),
+                          });
+                        }
+
+                        return volumes;
+                      })()}
+                      onChapterClick={(volumeTitle, chapterTitle) =>
+                        handleWatchEpisode(selectedContent, chapterTitle)
+                      }
+                      showStatusBadges={false}
+                    />
                   </div>
                 )}
 
@@ -876,6 +1168,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                   contentType="project"
                   contentId={selectedContent?.id || ""}
                   title={selectedContent?.title}
+                  projectId={selectedContent?.id}
                 />
               </div>
             </div>
@@ -892,6 +1185,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
         open={modalStates.isContributionsModalOpen}
         onOpenChange={() => closeModal("isContributionsModalOpen")}
       />
+      <AuthModal open={showAuthModal} onOpenChange={setShowAuthModal} />
     </div>
   );
 }

@@ -55,8 +55,7 @@ export async function getProjects() {
     .select(
       `
       *,
-      users!projects_creator_id_fkey(username, avatar_url),
-      teams(*)
+      volumes(*)
     `
     )
     .order("created_at", { ascending: false });
@@ -70,9 +69,10 @@ export async function getProjectById(id: string) {
     .select(
       `
       *,
-      users!projects_creator_id_fkey(username, avatar_url),
-      teams(*),
-      chapters(*)
+      volumes(
+        *,
+        chapters(*)
+      )
     `
     )
     .eq("id", id)

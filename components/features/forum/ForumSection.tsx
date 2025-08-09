@@ -61,15 +61,10 @@ export function ForumSection() {
       setLoading(true);
       setError(null);
 
-      // Fetch forum posts with author information
+      // Fetch forum posts
       const { data: postsData, error: postsError } = await supabase
         .from("forum_posts")
-        .select(
-          `
-          *,
-          users!forum_posts_author_id_fkey(username, avatar_url)
-        `
-        )
+        .select("*")
         .order("created_at", { ascending: false });
 
       if (postsError) throw postsError;
@@ -79,8 +74,9 @@ export function ForumSection() {
         .from("forum_posts")
         .select("*", { count: "exact", head: true });
 
+      // Get user count from auth.users (approximate)
       const { count: totalUsers } = await supabase
-        .from("users")
+        .from("user_profiles_public")
         .select("*", { count: "exact", head: true });
 
       setPosts(postsData || []);

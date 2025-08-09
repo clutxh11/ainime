@@ -94,15 +94,16 @@ export function MangaManager({ onViewChange }: MangaManagerProps) {
       setLoading(true);
       setError(null);
 
-      // Fetch projects with chapters and teams
+      // Fetch projects with volumes and chapters
       const { data: projectsData, error: projectsError } = await supabase
         .from("projects")
         .select(
           `
           *,
-          users!projects_creator_id_fkey(username, avatar_url),
-          chapters(*),
-          teams(*)
+          volumes(
+            *,
+            chapters(*)
+          )
         `
         )
         .order("created_at", { ascending: false });
@@ -125,11 +126,7 @@ export function MangaManager({ onViewChange }: MangaManagerProps) {
         projectsData?.reduce((sum, project) => sum + (project.views || 0), 0) ||
         0;
       const totalChapters = chaptersData?.length || 0;
-      const activeTeams =
-        projectsData?.reduce(
-          (sum, project) => sum + (project.teams?.length || 0),
-          0
-        ) || 0;
+      const activeTeams = 0; // No teams table anymore
       const totalFollowers = Math.floor(totalViews * 0.1); // Estimate followers as 10% of views
 
       setStats({

@@ -4,110 +4,178 @@ import { Input } from "@/components/ui/input";
 import { MessageCircle, ThumbsUp, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { ContentComment } from "@/types/database";
+import { useAuth } from "@/components/auth/auth-provider";
+import { getUserProfiles, UserProfile } from "@/lib/user-utils";
 
 interface CommentSectionProps {
   contentType: "project" | "chapter" | "episode";
   contentId: string;
   title?: string;
+  projectId?: string; // Add projectId for better project filtering
 }
 
 export function CommentSection({
   contentType,
   contentId,
   title,
+  projectId,
 }: CommentSectionProps) {
-  const [comments, setComments] = useState<ContentComment[]>([]);
+  const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [userDetails, setUserDetails] = useState<{ [key: string]: any }>({});
+  const { user } = useAuth();
 
   // Fetch comments based on content type
   useEffect(() => {
     fetchComments();
-  }, [contentType, contentId]);
+  }, [contentType, contentId, projectId]);
 
   const fetchComments = async () => {
     try {
       setLoading(true);
-      setError(null);
+      let commentData: any[] = [];
 
       if (contentType === "project") {
-        // For project-level, fetch forum posts related to the project
         const { data, error } = await supabase
-          .from("forum_posts")
-          .select(
-            `
-            *,
-            users!forum_posts_author_id_fkey(username, avatar_url)
-          `
-          )
-          .eq("category", "Project Discussion")
+          .from("project_comments")
+          .select("*")
+          .eq("project_id", projectId || contentId)
           .order("created_at", { ascending: false })
           .limit(10);
 
-        if (error) throw error;
-        setComments(data || []);
-      } else {
-        // For chapter/episode specific comments
-        const { data, error } = await supabase
-          .from("content_comments")
-          .select(
-            `
-            *,
-            users!content_comments_author_id_fkey(username, avatar_url)
-          `
-          )
-          .eq("content_type", contentType)
-          .eq("content_id", contentId)
-          .order("created_at", { ascending: false });
+        if (error) {
+          console.error("Error fetching comments:", error);
+          throw error;
+        }
 
-        if (error) throw error;
-        setComments(data || []);
+        commentData = data || [];
+      } else if (contentType === "chapter") {
+        const { data, error } = await supabase
+          .from("chapter_comments")
+          .select("*")
+          .eq("chapter_id", contentId)
+          .order("created_at", { ascending: false })
+          .limit(10);
+
+        if (error) {
+          console.error("Error fetching comments:", error);
+          throw error;
+        }
+
+        commentData = data || [];
+      } else if (contentType === "episode") {
+        const { data, error } = await supabase
+          .from("animated_chapter_comments")
+          .select("*")
+          .eq("animated_chapter_id", contentId)
+          .order("created_at", { ascending: false })
+          .limit(10);
+
+        if (error) {
+          console.error("Error fetching comments:", error);
+          throw error;
+        }
+
+        commentData = data || [];
       }
-    } catch (err: any) {
-      setError(err.message);
-      console.error("Error fetching comments:", err);
+
+      // Fetch user details for all comment authors
+      const userIds = [
+        ...new Set(commentData.map((c) => c.author_id).filter(Boolean)),
+      ];
+
+      // Fetch user profiles from the public view
+      const userDetailsMap = await getUserProfiles(userIds);
+      setUserDetails(userDetailsMap);
+      setComments(commentData);
+    } catch (error) {
+      console.error("Error fetching comments:", error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleSubmitComment = async () => {
-    if (!newComment.trim()) return;
+    if (!user) {
+      setError("Please sign in to comment");
+      return;
+    }
+
+    if (!newComment.trim()) {
+      setError("Please enter a comment");
+      return;
+    }
+
+    const authorId = user.id;
 
     try {
       setSubmitting(true);
       setError(null);
 
       if (contentType === "project") {
-        // Create a forum post for project discussion
-        const { error } = await supabase.from("forum_posts").insert({
-          title: `Comment on ${title || "Project"}`,
+        // Create project comment
+        const insertData = {
           content: newComment,
-          author_id: "1", // TODO: Get from auth
-          category: "Project Discussion",
-          tags: ["project-comment"],
-        });
+          author_id: authorId,
+          project_id: projectId || contentId,
+        };
 
-        if (error) throw error;
-      } else {
-        // Create a content-specific comment
-        const { error } = await supabase.from("content_comments").insert({
-          content_type: contentType,
-          content_id: contentId,
-          author_id: "1", // TODO: Get from auth
+        console.log("Inserting project comment:", insertData);
+
+        const { error } = await supabase
+          .from("project_comments")
+          .insert(insertData);
+
+        if (error) {
+          console.error("Project comment error:", error);
+          throw error;
+        }
+      } else if (contentType === "chapter") {
+        // Create chapter comment
+        const insertData = {
           content: newComment,
-        });
+          author_id: authorId,
+          chapter_id: contentId,
+        };
 
-        if (error) throw error;
+        console.log("Inserting chapter comment:", insertData);
+
+        const { error } = await supabase
+          .from("chapter_comments")
+          .insert(insertData);
+
+        if (error) {
+          console.error("Chapter comment error:", error);
+          throw error;
+        }
+      } else if (contentType === "episode") {
+        // Create animated chapter comment
+        const insertData = {
+          content: newComment,
+          author_id: authorId,
+          animated_chapter_id: contentId,
+        };
+
+        console.log("Inserting animated chapter comment:", insertData);
+
+        const { error } = await supabase
+          .from("animated_chapter_comments")
+          .insert(insertData);
+
+        if (error) {
+          console.error("Animated chapter comment error:", error);
+          throw error;
+        }
       }
 
       setNewComment("");
-      fetchComments(); // Refresh comments
+      await fetchComments(); // Refresh comments and user details
     } catch (err: any) {
-      setError(err.message);
       console.error("Error submitting comment:", err);
+      setError(err.message);
     } finally {
       setSubmitting(false);
     }
@@ -123,6 +191,32 @@ export function CommentSection({
     if (diffInSeconds < 86400)
       return `${Math.floor(diffInSeconds / 3600)}h ago`;
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
+  };
+
+  const getDisplayName = (comment: any) => {
+    if (!comment.author_id) {
+      return "Anonymous";
+    }
+
+    // If this is the current user's comment, show their display name
+    if (user && comment.author_id === user.id) {
+      return (
+        user.user_metadata?.full_name || user.email?.split("@")[0] || "You"
+      );
+    }
+
+    // Check if we have user details for this author
+    const authorDetails = userDetails[comment.author_id];
+    if (authorDetails) {
+      return (
+        authorDetails.display_name ||
+        authorDetails.email?.split("@")[0] ||
+        "User"
+      );
+    }
+
+    // Fallback to a generic name
+    return `User ${comment.author_id.substring(0, 8)}`;
   };
 
   const getSectionTitle = () => {
@@ -205,7 +299,7 @@ export function CommentSection({
             <div key={comment.id} className="bg-gray-700 rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-semibold text-white text-sm">
-                  {comment.users?.username || "Anonymous"}
+                  {getDisplayName(comment)}
                 </span>
                 <span className="text-xs text-gray-400">
                   {formatTimeAgo(comment.created_at)}

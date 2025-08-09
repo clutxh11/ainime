@@ -14,16 +14,76 @@ export type CurrentView =
 export interface ContentItem {
   id: string;
   title: string;
-  type: "manga" | "animated" | "ongoing";
-  image: string;
   synopsis: string;
-  tags: string[];
-  chapters?: string[];
-  episodes?: string[];
-  rating: number;
-  progress?: number;
-  currentChapter?: number;
-  currentEpisode?: number;
+  genre: string;
+  status: string;
+  seriesType?: string; // Added for manga/manhwa/manhua
+  image?: string;
+  heroImage?: string; // Added for hero banner (horizontal thumbnail)
+  rating?: number;
+  totalRatings?: number;
+  tags?: string[];
+  authors?: Array<{ name: string }>;
+  chapters?: Array<{
+    id: string;
+    title: string;
+    status: string;
+    thumbnail_url?: string;
+    release_date?: string;
+    created_at: string;
+    updated_at: string;
+  }>;
+  episodes?: Array<{
+    id: string;
+    title: string;
+    status: string;
+    thumbnail_url?: string;
+    release_date?: string;
+    created_at: string;
+    updated_at: string;
+  }>;
+  volumes?: Array<{
+    id: string;
+    volume_number: number;
+    title: string;
+    description?: string;
+    chapters: Array<{
+      id: string;
+      title: string;
+      status: string;
+      release_date?: string;
+    }>;
+  }>;
+}
+
+// Author Types
+export interface Author {
+  id: string;
+  name: string;
+  bio?: string;
+  avatar_url?: string;
+  website?: string;
+  social_media?: {
+    twitter?: string;
+    instagram?: string;
+    facebook?: string;
+    youtube?: string;
+  };
+  role?: string;
+  is_primary?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ProjectAuthor {
+  id: string;
+  project_id: string;
+  author_id: string;
+  role: string;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+  author?: Author; // Include author details
 }
 
 export interface Chapter {
@@ -177,4 +237,3 @@ export interface PaginatedResponse<T> {
     hasPrev: boolean;
   };
 }
- 
