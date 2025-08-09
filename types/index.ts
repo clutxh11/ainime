@@ -17,6 +17,7 @@ export interface ContentItem {
   synopsis: string;
   genre: string;
   status: string;
+  type?: "animated" | "manga" | "ongoing";
   seriesType?: string; // Added for manga/manhwa/manhua
   image?: string;
   heroImage?: string; // Added for hero banner (horizontal thumbnail)

@@ -232,7 +232,7 @@ export default function ContentExplorer({
       creator: project.creator_display_name || "Unknown Creator",
       tags: project.tags || [project.genre, project.status], // Use database tags if available, fallback to genre/status
       authors: project.authors || [],
-      created_at: project.created_at,
+      // Use volumes for chapter navigation; omit episodes/chapters that don't match ContentItem type
       volumes:
         project.volumes?.map((volume) => ({
           id: volume.id,
@@ -246,20 +246,6 @@ export default function ContentExplorer({
               status: chapter.status,
               release_date: chapter.release_date,
             })) || [],
-        })) || [],
-      episodes:
-        project.chapters?.map((chapter, index) => ({
-          id: chapter.id,
-          title: chapter.title || `Chapter ${index + 1}`,
-          duration: "24 min",
-          thumbnail: "/placeholder.jpg",
-        })) || [],
-      chapters:
-        project.chapters?.map((chapter, index) => ({
-          id: chapter.id,
-          title: chapter.title || `Chapter ${index + 1}`,
-          pages: 20,
-          thumbnail: "/placeholder.jpg",
         })) || [],
     }));
   }, [projects]);
@@ -301,18 +287,14 @@ export default function ContentExplorer({
     // Sort
     switch (sortBy) {
       case "rating":
-        filtered = [...filtered].sort((a, b) => b.rating - a.rating);
+        filtered = [...filtered].sort((a, b) => (b.rating || 0) - (a.rating || 0));
         break;
       case "title":
         filtered = [...filtered].sort((a, b) => a.title.localeCompare(b.title));
         break;
       case "release-date":
       default:
-        filtered = [...filtered].sort(
-          (a, b) =>
-            new Date(b.created_at || "").getTime() -
-            new Date(a.created_at || "").getTime()
-        );
+        filtered = [...filtered].sort((a, b) => a.title.localeCompare(b.title));
         break;
     }
 
@@ -343,20 +325,26 @@ export default function ContentExplorer({
 
   const handleWatchEpisode = (content: ContentItem, episodeTitle: string) => {
     const episode = content.episodes?.find((ep) => ep.title === episodeTitle);
-    onViewChange("video", {
-      ...content,
-      selectedEpisode: episodeTitle,
-      selectedEpisodeId: episode?.id || content.id,
-    });
+    onViewChange(
+      "video",
+      {
+        ...(content as any),
+        selectedEpisode: episodeTitle,
+        selectedEpisodeId: episode?.id || content.id,
+      } as any
+    );
   };
 
   const handleReadChapter = (content: ContentItem, chapterTitle: string) => {
     const chapter = content.chapters?.find((ch) => ch.title === chapterTitle);
-    onViewChange("manga", {
-      ...content,
-      selectedChapter: chapterTitle,
-      selectedChapterId: chapter?.id || content.id,
-    });
+    onViewChange(
+      "manga",
+      {
+        ...(content as any),
+        selectedChapter: chapterTitle,
+        selectedChapterId: chapter?.id || content.id,
+      } as any
+    );
   };
 
   const handleRatingChange = async (projectId: string, rating: number) => {
@@ -442,9 +430,8 @@ export default function ContentExplorer({
                     <div className="text-xs text-gray-300">
                       <span className="font-medium">By: </span>
                       {item.authors
-                        .filter((author) => author.is_primary)
                         .map((author) => author.name)
-                        .join(", ") || item.authors[0]?.name}
+                        .join(", ")}
                     </div>
                   )}
                 </div>
@@ -457,16 +444,13 @@ export default function ContentExplorer({
               <div className="flex items-center gap-1 mb-2">
                 <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                 <span className="text-sm text-gray-300">
-                  {item.rating.toFixed(2)} ({item.totalRatings || 0})
+                  {(item.rating || 0).toFixed(2)} ({item.totalRatings || 0})
                 </span>
               </div>
               {item.authors && item.authors.length > 0 && (
                 <div className="text-xs text-gray-400 mb-2">
                   by{" "}
-                  {item.authors
-                    .filter((author) => author.is_primary)
-                    .map((author) => author.name)
-                    .join(", ") || item.authors[0]?.name}
+                  {item.authors.map((author) => author.name).join(", ")}
                 </div>
               )}
               <div className="flex flex-wrap gap-1">
