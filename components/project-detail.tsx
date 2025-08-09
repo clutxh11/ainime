@@ -1027,6 +1027,63 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     }
   };
 
+  // Shot-level visual styles
+  const getShotStatusClasses = (status?: string) => {
+    const s = (status || "").toLowerCase();
+    switch (s) {
+      case "layout":
+        return "bg-blue-600 text-white";
+      case "key":
+        return "bg-amber-600 text-white";
+      case "inbetween":
+        return "bg-cyan-600 text-white";
+      case "cleanup":
+        return "bg-slate-600 text-white";
+      case "color":
+        return "bg-pink-600 text-white";
+      case "composite":
+        return "bg-indigo-600 text-white";
+      case "audio":
+        return "bg-teal-600 text-white";
+      case "review":
+        return "bg-yellow-700 text-white";
+      case "approved":
+        return "bg-green-600 text-white";
+      case "published":
+        return "bg-emerald-600 text-white";
+      case "blocked":
+        return "bg-red-700 text-white";
+      case "on-hold":
+        return "bg-orange-700 text-white";
+      case "todo":
+      default:
+        return "bg-gray-600 text-gray-100";
+    }
+  };
+
+  const getShotDotClasses = (status?: string) => {
+    const s = (status || "").toLowerCase();
+    switch (s) {
+      case "approved":
+      case "published":
+        return "bg-emerald-500";
+      case "layout":
+      case "key":
+      case "inbetween":
+      case "cleanup":
+      case "color":
+      case "composite":
+      case "audio":
+        return "bg-blue-400";
+      case "review":
+        return "bg-yellow-500";
+      case "blocked":
+        return "bg-red-600";
+      default:
+        return "bg-gray-500";
+    }
+  };
+
   const renderYourTeamTab = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Left Column - Chapter Progress & Team Discussion */}
@@ -1170,16 +1227,27 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                         );
                                       }
                                       return shots.map((shot) => (
-                                        <div key={shot.id} className="flex items-center gap-2 text-xs bg-gray-800 rounded-full pl-3 pr-2 py-1">
-                                          <span className="text-gray-200">SHOT {shot.code}</span>
+                                        <div
+                                          key={shot.id}
+                                          className="group flex items-center gap-3 text-xs bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 hover:border-gray-500 hover:bg-gray-800 transition cursor-default"
+                                          onDoubleClick={() => handleOpenShotEditor(chapter.id, seq.code, shot.code)}
+                                        >
+                                          <span className={`w-2 h-2 rounded-full ${getShotDotClasses(shot.status)}`} />
+                                          <span className="text-gray-100 font-medium tracking-wide">
+                                            SHOT {shot.code}
+                                          </span>
                                           {shot.status && (
-                                            <Badge className="bg-gray-600 rounded-full px-2 py-0.5">{shot.status}</Badge>
+                                            <span className={`rounded-full px-2 py-0.5 text-[10px] ${getShotStatusClasses(shot.status)}`}>
+                                              {shot.status}
+                                            </span>
                                           )}
+                                          <span className="flex-1" />
                                           <Button
                                             variant="outline"
                                             size="sm"
-                                            className="ml-1 h-7 px-3 border-gray-600 text-gray-200 hover:bg-gray-700"
+                                            className="h-7 px-3 border-gray-600 text-gray-100 hover:bg-gray-700"
                                             onClick={() => handleOpenShotEditor(chapter.id, seq.code, shot.code)}
+                                            title="Open this shot in the editor"
                                           >
                                             Open
                                           </Button>
