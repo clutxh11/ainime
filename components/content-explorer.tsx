@@ -454,7 +454,7 @@ export default function ContentExplorer({
                 </div>
               )}
               <div className="flex flex-wrap gap-1">
-                {item.tags.slice(0, 2).map((tag) => (
+                {(item.tags || []).slice(0, 2).map((tag) => (
                   <Badge key={tag} variant="secondary" className="text-xs">
                     {tag}
                   </Badge>

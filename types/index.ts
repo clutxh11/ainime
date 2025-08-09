@@ -23,6 +23,7 @@ export interface ContentItem {
   heroImage?: string; // Added for hero banner (horizontal thumbnail)
   rating?: number;
   totalRatings?: number;
+  creator?: string;
   tags?: string[];
   authors?: Array<{ name: string }>;
   chapters?: Array<{
