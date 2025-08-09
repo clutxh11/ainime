@@ -598,12 +598,14 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     sequenceCode: string,
     shotCode: string
   ) => {
-    const url = `/animation-workspace?projectId=${projectId}&chapterId=${chapterId}&sequence=${encodeURIComponent(
-      sequenceCode
-    )}&shot=${encodeURIComponent(shotCode)}`;
-    if (typeof window !== "undefined") {
-      window.location.href = url;
-    }
+    // Route shots to the same animation editor view used by the red chapter button
+    onViewChange("animation-editor", {
+      projectId,
+      chapterId,
+      sequenceCode,
+      shotCode,
+      projectTitle: project?.title || "Project",
+    });
   };
 
   const getMockSequencesForChapter = (chapterId: string) => {
