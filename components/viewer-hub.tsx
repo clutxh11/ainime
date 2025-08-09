@@ -156,7 +156,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
       if (!projectsData || projectsData.length === 0) {
         const { data: directProjects, error: directErr } = await supabase
           .from("projects")
-          .select(`id, title, description, genre, status, creator_id, created_at, updated_at`)
+          .select(`id, title, description, genre, status, image_url, square_thumbnail_url, horizontal_thumbnail_url, creator_id, created_at, updated_at`)
           .order("created_at", { ascending: false });
         if (!directErr && directProjects) {
           projectsData = (directProjects as any[]).map((p) => ({
@@ -264,10 +264,9 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
       progress: project.progress,
       seriesType: project.series_type, // Added for series type display
       image:
-        // No image columns in schema right now; fallback to placeholder
-        "/placeholder.jpg",
+        project.square_thumbnail_url || project.image_url || "/placeholder.jpg",
       heroImage:
-        "/placeholder.jpg", // hero fallback
+        project.horizontal_thumbnail_url || project.image_url || "/placeholder.jpg",
       creator: project.creator_display_name,
       tags: project.tags || [project.genre, project.status], // Use database tags if available, fallback to genre/status
       authors: [], // Empty since we don't have authors table anymore
