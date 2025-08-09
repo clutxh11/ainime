@@ -198,17 +198,36 @@ export function AnimationEditor({
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsWidth, setSettingsWidth] = useState<number>(sceneSettings?.canvasWidth ?? 1920);
-  const [settingsHeight, setSettingsHeight] = useState<number>(sceneSettings?.canvasHeight ?? 1080);
-  const [settingsFps, setSettingsFps] = useState<number>(sceneSettings?.frameRate ?? 24);
-  // Sync settings state whenever a new shot/scene is opened
+  // Applied settings that drive the canvas and playback
+  const [appliedWidth, setAppliedWidth] = useState<number>(
+    sceneSettings?.canvasWidth ?? 1920
+  );
+  const [appliedHeight, setAppliedHeight] = useState<number>(
+    sceneSettings?.canvasHeight ?? 1080
+  );
+  const [appliedFps, setAppliedFps] = useState<number>(
+    sceneSettings?.frameRate ?? 24
+  );
+  // Draft values used inside the settings modal only
+  const [draftWidth, setDraftWidth] = useState<number>(appliedWidth);
+  const [draftHeight, setDraftHeight] = useState<number>(appliedHeight);
+  const [draftFps, setDraftFps] = useState<number>(appliedFps);
+  // Sync applied + draft settings whenever a new shot/scene is opened
   useEffect(() => {
     if (sceneSettings) {
-      setSettingsWidth(sceneSettings.canvasWidth);
-      setSettingsHeight(sceneSettings.canvasHeight);
-      setSettingsFps(sceneSettings.frameRate);
+      setAppliedWidth(sceneSettings.canvasWidth);
+      setAppliedHeight(sceneSettings.canvasHeight);
+      setAppliedFps(sceneSettings.frameRate);
+      setDraftWidth(sceneSettings.canvasWidth);
+      setDraftHeight(sceneSettings.canvasHeight);
+      setDraftFps(sceneSettings.frameRate);
     }
-  }, [sceneSettings?.sceneName, sceneSettings?.canvasWidth, sceneSettings?.canvasHeight, sceneSettings?.frameRate]);
+  }, [
+    sceneSettings?.sceneName,
+    sceneSettings?.canvasWidth,
+    sceneSettings?.canvasHeight,
+    sceneSettings?.frameRate,
+  ]);
   const [editingLayer, setEditingLayer] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -375,8 +394,8 @@ export function AnimationEditor({
     if (!canvas) return;
 
     // Actual canvas resolution (for quality)
-    const canvasWidth = settingsWidth ?? 800;
-    const canvasHeight = settingsHeight ?? 600;
+    const canvasWidth = appliedWidth ?? 800;
+    const canvasHeight = appliedHeight ?? 600;
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
 
@@ -403,7 +422,7 @@ export function AnimationEditor({
     contextRef.current = context;
 
     drawFrame();
-  }, [zoom, settingsWidth, settingsHeight]);
+  }, [zoom, appliedWidth, appliedHeight]);
 
   // Helper to get mouse position in canvas coordinates (accounting for zoom)
   const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1448,7 +1467,7 @@ export function AnimationEditor({
     }, 1000 / (sceneSettings?.frameRate ?? 12));
 
     return () => clearInterval(interval);
-  }, [isPlaying, maxFrame, isLooping, sceneSettings?.frameRate]);
+  }, [isPlaying, maxFrame, isLooping, appliedFps]);
 
   // Tools
   const tools = [
@@ -3198,11 +3217,11 @@ export function AnimationEditor({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">Width</label>
-                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={settingsWidth} onChange={(e) => setSettingsWidth(parseInt(e.target.value || "0", 10))} />
+                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={draftWidth} onChange={(e) => setDraftWidth(parseInt(e.target.value || "0", 10))} />
                 </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">Height</label>
-                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={settingsHeight} onChange={(e) => setSettingsHeight(parseInt(e.target.value || "0", 10))} />
+                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={draftHeight} onChange={(e) => setDraftHeight(parseInt(e.target.value || "0", 10))} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -3212,15 +3231,15 @@ export function AnimationEditor({
                 </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">Frame Rate</label>
-                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={settingsFps} onChange={(e) => setSettingsFps(parseInt(e.target.value || "0", 10))} />
+                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={draftFps} onChange={(e) => setDraftFps(parseInt(e.target.value || "0", 10))} />
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
                 <button className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded px-3 py-2" onClick={async () => {
-                  // Update local state so canvas effect reruns immediately
-                  setSettingsWidth((w) => settingsWidth);
-                  setSettingsHeight((h) => settingsHeight);
-                  setSettingsFps((f) => settingsFps);
+                  // Commit draft → applied
+                  setAppliedWidth(draftWidth);
+                  setAppliedHeight(draftHeight);
+                  setAppliedFps(draftFps);
                   setIsSettingsOpen(false);
                 }}>Apply</button>
                 <button className="border border-gray-600 text-gray-300 rounded px-3 py-2" onClick={() => setIsSettingsOpen(false)}>Cancel</button>
