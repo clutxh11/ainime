@@ -29,7 +29,7 @@ import {
   getProjectsWithRatings,
   getUserRating,
   submitRating,
-} from "@/lib/rating-utils";
+} from "@/features/series/services/rating-utils";
 import { RatingStars } from "@/components/ui/rating-stars";
 import { CommentSection } from "@/components/ui/comment-section";
 import { SearchDropdown } from "@/components/ui/search-dropdown";

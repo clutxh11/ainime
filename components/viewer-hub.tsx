@@ -41,7 +41,7 @@ import {
   getProjectsWithRatings,
   getUserRating,
   submitRating,
-} from "@/lib/rating-utils";
+} from "@/features/series/services/rating-utils";
 import { RatingStars } from "@/components/ui/rating-stars";
 import React from "react";
 import { CommentSection } from "@/components/ui/comment-section";
