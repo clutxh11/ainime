@@ -157,7 +157,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
         // Fallback: try with image columns, then without if needed
         let { data: directProjects, error: directErr }: any = await supabase
           .from("projects")
-          .select(`id, title, description, genre, status, image_url, square_thumbnail_url, horizontal_thumbnail_url, creator_id, created_at, updated_at`)
+          .select(`id, title, description, genre, status, square_thumbnail_url, horizontal_thumbnail_url, creator_id, created_at, updated_at`)
           .order("created_at", { ascending: false });
         if (directErr && directErr.code === "42703") {
           const fallback = await supabase

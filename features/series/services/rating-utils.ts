@@ -34,7 +34,7 @@ export const getProjectsWithRatings = async (): Promise<ProjectWithRatings[]> =>
   let query = supabase
     .from("projects")
     .select(
-      `id, title, description, genre, status, image_url, square_thumbnail_url, horizontal_thumbnail_url, creator_id, created_at, updated_at`
+      `id, title, description, genre, status, square_thumbnail_url, horizontal_thumbnail_url, creator_id, created_at, updated_at`
     )
     .order("created_at", { ascending: false });
   let { data, error }: any = await query;
