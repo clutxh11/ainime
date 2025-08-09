@@ -231,122 +231,7 @@ export function AnimationEditor({
     sceneSettings?.frameRate,
   ]);
 
-  // Build a serializable document capturing the full editing context
-  const serializeDocument = useCallback(() => {
-    return {
-      version: 1,
-      sceneSettings: {
-        sceneName: sceneSettings?.sceneName ?? "Scene",
-        width: appliedWidth,
-        height: appliedHeight,
-        fps: appliedFps,
-        units: "px",
-      },
-      rows,
-      frameCount,
-      timeline: {
-        drawingFrames,
-        layerOrder,
-      },
-      layers: {
-        folderLayers,
-        layerStrokes,
-      },
-      uiState: {
-        currentFrame,
-        selectedRow,
-        zoom,
-        onionSkin,
-        showGrid,
-      },
-    } as const;
-  }, [
-    sceneSettings?.sceneName,
-    appliedWidth,
-    appliedHeight,
-    appliedFps,
-    rows,
-    frameCount,
-    drawingFrames,
-    layerOrder,
-    folderLayers,
-    layerStrokes,
-    currentFrame,
-    selectedRow,
-    zoom,
-    onionSkin,
-    showGrid,
-  ]);
-
-  // Persist settings + full document into shots.data (merged)
-  const saveScene = useCallback(async () => {
-    if (!sceneSettings?.shotId) return;
-    try {
-      setIsSaving(true);
-      const { data: row, error: readErr } = await supabase
-        .from("shots")
-        .select("data")
-        .eq("id", sceneSettings.shotId)
-        .maybeSingle();
-      if (readErr) {
-        console.error("Failed to read shot row:", readErr);
-      }
-      const baseData = (row?.data as any) || {};
-      const merged = {
-        ...baseData,
-        initialized: true,
-        width: appliedWidth,
-        height: appliedHeight,
-        units: "px",
-        fps: appliedFps,
-        document: serializeDocument(),
-      };
-      const { error } = await supabase
-        .from("shots")
-        .update({ data: merged })
-        .eq("id", sceneSettings.shotId);
-      if (error) {
-        console.error("Failed to save scene:", error);
-      }
-    } finally {
-      setIsSaving(false);
-    }
-  }, [sceneSettings?.shotId, appliedWidth, appliedHeight, appliedFps, serializeDocument]);
-
-  // Load saved document if present
-  useEffect(() => {
-    const load = async () => {
-      if (!sceneSettings?.shotId) return;
-      const { data: row, error } = await supabase
-        .from("shots")
-        .select("data")
-        .eq("id", sceneSettings.shotId)
-        .maybeSingle();
-      if (error) return;
-      const data: any = row?.data || {};
-      if (typeof data.width === "number") setAppliedWidth(data.width);
-      if (typeof data.height === "number") setAppliedHeight(data.height);
-      if (typeof data.fps === "number") setAppliedFps(data.fps);
-      const doc = data.document;
-      if (!doc) return;
-      try {
-        if (Array.isArray(doc.rows)) setRows(doc.rows);
-        if (typeof doc.frameCount === "number") setFrameCount(doc.frameCount);
-        if (doc.timeline?.drawingFrames) setDrawingFrames(doc.timeline.drawingFrames);
-        if (doc.timeline?.layerOrder) setLayerOrder(doc.timeline.layerOrder);
-        if (doc.layers?.folderLayers) setFolderLayers(doc.layers.folderLayers);
-        if (doc.layers?.layerStrokes) setLayerStrokes(doc.layers.layerStrokes);
-        if (doc.uiState?.currentFrame) setCurrentFrame(doc.uiState.currentFrame);
-        if (doc.uiState?.selectedRow) setSelectedRow(doc.uiState.selectedRow);
-        if (typeof doc.uiState?.zoom === "number") setZoom(doc.uiState.zoom);
-        if (typeof doc.uiState?.onionSkin === "boolean") setOnionSkin(doc.uiState.onionSkin);
-        if (typeof doc.uiState?.showGrid === "boolean") setShowGrid(doc.uiState.showGrid);
-      } catch (e) {
-        console.warn("Failed to hydrate document", e);
-      }
-    };
-    load();
-  }, [sceneSettings?.shotId]);
+  // Note: save/load helpers are defined later, after timeline state declarations
   const [editingLayer, setEditingLayer] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -504,6 +389,105 @@ export function AnimationEditor({
   );
   const [undoStack, setUndoStack] = useState<any[]>([]);
   const [redoStack, setRedoStack] = useState<any[]>([]);
+
+  // -------- Persistence helpers (now that timeline state exists) --------
+  const serializeDocument = useCallback(() => {
+    return {
+      version: 1,
+      sceneSettings: {
+        sceneName: sceneSettings?.sceneName ?? "Scene",
+        width: appliedWidth,
+        height: appliedHeight,
+        fps: appliedFps,
+        units: "px",
+      },
+      rows,
+      frameCount,
+      timeline: { drawingFrames, layerOrder },
+      layers: { folderLayers, layerStrokes },
+      uiState: { currentFrame, selectedRow, zoom, onionSkin, showGrid },
+    } as const;
+  }, [
+    sceneSettings?.sceneName,
+    appliedWidth,
+    appliedHeight,
+    appliedFps,
+    rows,
+    frameCount,
+    drawingFrames,
+    layerOrder,
+    folderLayers,
+    layerStrokes,
+    currentFrame,
+    selectedRow,
+    zoom,
+    onionSkin,
+    showGrid,
+  ]);
+
+  const saveScene = useCallback(async () => {
+    if (!sceneSettings?.shotId) return;
+    try {
+      setIsSaving(true);
+      const { data: row, error: readErr } = await supabase
+        .from("shots")
+        .select("data")
+        .eq("id", sceneSettings.shotId)
+        .maybeSingle();
+      if (readErr) console.error("Failed to read shot row:", readErr);
+      const baseData = (row?.data as any) || {};
+      const merged = {
+        ...baseData,
+        initialized: true,
+        width: appliedWidth,
+        height: appliedHeight,
+        units: "px",
+        fps: appliedFps,
+        document: serializeDocument(),
+      };
+      const { error } = await supabase
+        .from("shots")
+        .update({ data: merged })
+        .eq("id", sceneSettings.shotId);
+      if (error) console.error("Failed to save scene:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [sceneSettings?.shotId, appliedWidth, appliedHeight, appliedFps, serializeDocument]);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!sceneSettings?.shotId) return;
+      const { data: row, error } = await supabase
+        .from("shots")
+        .select("data")
+        .eq("id", sceneSettings.shotId)
+        .maybeSingle();
+      if (error) return;
+      const data: any = row?.data || {};
+      if (typeof data.width === "number") setAppliedWidth(data.width);
+      if (typeof data.height === "number") setAppliedHeight(data.height);
+      if (typeof data.fps === "number") setAppliedFps(data.fps);
+      const doc = data.document;
+      if (!doc) return;
+      try {
+        if (Array.isArray(doc.rows)) setRows(doc.rows);
+        if (typeof doc.frameCount === "number") setFrameCount(doc.frameCount);
+        if (doc.timeline?.drawingFrames) setDrawingFrames(doc.timeline.drawingFrames);
+        if (doc.timeline?.layerOrder) setLayerOrder(doc.timeline.layerOrder);
+        if (doc.layers?.folderLayers) setFolderLayers(doc.layers.folderLayers);
+        if (doc.layers?.layerStrokes) setLayerStrokes(doc.layers.layerStrokes);
+        if (doc.uiState?.currentFrame) setCurrentFrame(doc.uiState.currentFrame);
+        if (doc.uiState?.selectedRow) setSelectedRow(doc.uiState.selectedRow);
+        if (typeof doc.uiState?.zoom === "number") setZoom(doc.uiState.zoom);
+        if (typeof doc.uiState?.onionSkin === "boolean") setOnionSkin(doc.uiState.onionSkin);
+        if (typeof doc.uiState?.showGrid === "boolean") setShowGrid(doc.uiState.showGrid);
+      } catch (e) {
+        console.warn("Failed to hydrate document", e);
+      }
+    };
+    load();
+  }, [sceneSettings?.shotId]);
 
   // Set initial current layer
 
