@@ -151,9 +151,24 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
     try {
       setLoading(true);
 
-      // Fetch projects with ratings
-      const projectsData = await getProjectsWithRatings();
-      setProjects(projectsData);
+      // Fetch projects with ratings (lightweight). Fallback to direct query if empty.
+      let projectsData = await getProjectsWithRatings();
+      if (!projectsData || projectsData.length === 0) {
+        const { data: directProjects, error: directErr } = await supabase
+          .from("projects")
+          .select(
+            `id, title, description, genre, status, image_url, square_thumbnail_url, horizontal_thumbnail_url, creator_id, created_at, updated_at`
+          )
+          .order("created_at", { ascending: false });
+        if (!directErr && directProjects) {
+          projectsData = (directProjects as any[]).map((p) => ({
+            ...p,
+            average_rating: 0,
+            total_ratings: 0,
+          }));
+        }
+      }
+      setProjects(projectsData || []);
 
       // Fetch volumes and chapters for each project
       const projectsWithVolumes = await Promise.all(
