@@ -24,6 +24,7 @@ export interface ContentItem {
   rating?: number;
   totalRatings?: number;
   creator?: string;
+  progress?: number;
   tags?: string[];
   authors?: Array<{ name: string }>;
   chapters?: Array<{
