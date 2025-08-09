@@ -197,8 +197,23 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     Record<string, Array<{ id: string; code: string }>>
   >({});
   const [shotsBySequence, setShotsBySequence] = useState<
-    Record<string, Array<{ id: string; code: string; status?: string }>>
+    Record<string, Array<{ id: string; code: string; status?: string; data?: any }>>
   >({});
+  // Shot setup modal state
+  const [isShotSetupOpen, setIsShotSetupOpen] = useState(false);
+  const [shotSetup, setShotSetup] = useState<
+    | {
+        chapterId: string;
+        sequenceId: string;
+        sequenceCode: string;
+        shotId: string;
+        shotCode: string;
+      }
+    | null
+  >(null);
+  const [setupWidth, setSetupWidth] = useState<number>(1920);
+  const [setupHeight, setSetupHeight] = useState<number>(1080);
+  const [setupFps, setSetupFps] = useState<number>(24);
   const [isCreatingSequence, setIsCreatingSequence] = useState<string | null>(null); // chapterId
   const [newSequenceCode, setNewSequenceCode] = useState("");
   const [isCreatingShot, setIsCreatingShot] = useState<string | null>(null); // sequenceId
@@ -681,7 +696,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   const ensureShotsLoaded = async (sequenceId: string) => {
     if (shotsBySequence[sequenceId]) return;
     const shots = await listShots(sequenceId);
-    const simple = (shots || []).map((s) => ({ id: s.id, code: s.code, status: s.status }));
+    const simple = (shots || []).map((s) => ({ id: s.id, code: s.code, status: s.status, data: (s as any).data }));
     setShotsBySequence((prev) => ({ ...prev, [sequenceId]: simple }));
   };
 
@@ -713,10 +728,85 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     if (created) {
       setShotsBySequence((prev) => ({
         ...prev,
-        [sequenceId]: [...(prev[sequenceId] || []), { id: created.id, code: created.code, status: created.status }],
+        [sequenceId]: [
+          ...(prev[sequenceId] || []),
+          { id: created.id, code: created.code, status: created.status, data: (created as any).data },
+        ],
       }));
       setNewShotCode("");
       setIsCreatingShot(null);
+    }
+  };
+
+  const handleShotOpenClick = (
+    chapterId: string,
+    seq: { id: string; code: string },
+    shot: { id: string; code: string; status?: string; data?: any }
+  ) => {
+    const initialized = Boolean(shot?.data?.initialized);
+    if (initialized) {
+      handleOpenShotEditor(chapterId, seq.code, shot.code);
+      return;
+    }
+    // Open setup modal
+    setShotSetup({
+      chapterId,
+      sequenceId: seq.id,
+      sequenceCode: seq.code,
+      shotId: shot.id,
+      shotCode: shot.code,
+    });
+    setSetupWidth(shot?.data?.width || 1920);
+    setSetupHeight(shot?.data?.height || 1080);
+    setSetupFps(shot?.data?.fps || 24);
+    setIsShotSetupOpen(true);
+  };
+
+  const confirmCreateShotScene = async () => {
+    if (!shotSetup) return;
+    try {
+      const payload = {
+        data: {
+          initialized: true,
+          width: setupWidth,
+          height: setupHeight,
+          units: "px",
+          fps: setupFps,
+        },
+      } as any;
+      const { error } = await supabase
+        .from("shots")
+        .update(payload)
+        .eq("id", shotSetup.shotId);
+      if (error) {
+        toast.error("Failed to create scene");
+        return;
+      }
+      // Update local cache for this shot
+      setShotsBySequence((prev) => {
+        const list = prev[shotSetup.sequenceId] || [];
+        const next = list.map((s) =>
+          s.id === shotSetup.shotId
+            ? { ...s, data: { ...(s.data || {}), ...payload.data } }
+            : s
+        );
+        return { ...prev, [shotSetup.sequenceId]: next };
+      });
+      setIsShotSetupOpen(false);
+      const content = {
+        projectId,
+        chapterId: shotSetup.chapterId,
+        sequenceCode: shotSetup.sequenceCode,
+        shotCode: shotSetup.shotCode,
+        projectTitle: project?.title || "Project",
+        sceneName: `SHOT ${shotSetup.shotCode}`,
+        canvasWidth: setupWidth,
+        canvasHeight: setupHeight,
+        frameRate: setupFps,
+      } as any;
+      onViewChange("animation-editor", content);
+    } catch (_) {
+      toast.error("Failed to create scene");
     }
   };
 
@@ -1261,7 +1351,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                             variant="outline"
                                             size="sm"
                                             className="h-7 px-3 border-gray-600 text-gray-100 hover:bg-gray-700"
-                                            onClick={() => handleOpenShotEditor(chapter.id, seq.code, shot.code)}
+                                            onClick={() => handleShotOpenClick(chapter.id, seq, shot)}
                                             title="Open this shot in the editor"
                                           >
                                             Open
@@ -2089,6 +2179,72 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                 }}
                 variant="outline"
                 className="border-gray-600 text-gray-300"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Shot Setup Modal */}
+      <Dialog open={isShotSetupOpen} onOpenChange={setIsShotSetupOpen}>
+        <DialogContent className="bg-gray-800 border-gray-700 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Create Shot</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-gray-300 mb-2 block">Shot Name</label>
+              <Input
+                value={shotSetup ? `SHOT ${shotSetup.shotCode}` : ""}
+                disabled
+                className="bg-gray-700 border-gray-600 text-white"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm text-gray-300 mb-2 block">Width</label>
+                <Input
+                  type="number"
+                  value={setupWidth}
+                  onChange={(e) => setSetupWidth(parseInt(e.target.value || "0", 10))}
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-300 mb-2 block">Height</label>
+                <Input
+                  type="number"
+                  value={setupHeight}
+                  onChange={(e) => setSetupHeight(parseInt(e.target.value || "0", 10))}
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm text-gray-300 mb-2 block">Units</label>
+                <Input value="px" disabled className="bg-gray-700 border-gray-600 text-gray-300" />
+              </div>
+              <div>
+                <label className="text-sm text-gray-300 mb-2 block">Frame Rate</label>
+                <Input
+                  type="number"
+                  value={setupFps}
+                  onChange={(e) => setSetupFps(parseInt(e.target.value || "0", 10))}
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={confirmCreateShotScene} className="flex-1 bg-red-600 hover:bg-red-700">
+                Create Shot
+              </Button>
+              <Button
+                variant="outline"
+                className="border-gray-600 text-gray-300"
+                onClick={() => setIsShotSetupOpen(false)}
               >
                 Cancel
               </Button>
