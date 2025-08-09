@@ -361,15 +361,41 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
             setOtherTeams(othersExcludingMine);
 
             // Compute chapter aggregates: highest status across teams and contributor team names
-            const chapterIds = (transformedProject.volumes || [])
+            const rawChapterIds = (transformedProject.volumes || [])
               .flatMap((v: any) => v.chapters || [])
               .map((c: any) => c.id);
+            const chapterIds = (rawChapterIds || []).filter(
+              (id: any): id is string => typeof id === "string" && id.length > 0
+            );
 
             if (chapterIds.length > 0) {
-              const { data: animatedData } = await supabase
+              // Try IN filter first; if the backend rejects it (400), fall back to OR filter
+              let animatedData: any[] | null = null;
+              let err: any = null;
+              const inRes = await supabase
                 .from("animated_chapters")
                 .select("chapter_id, team_id, status")
                 .in("chapter_id", chapterIds);
+              if (inRes.error) {
+                err = inRes.error;
+                try {
+                  const orExpr = chapterIds
+                    .map((id) => `chapter_id.eq.${id}`)
+                    .join(",");
+                  const orRes = await supabase
+                    .from("animated_chapters")
+                    .select("chapter_id, team_id, status")
+                    .or(orExpr);
+                  if (!orRes.error) {
+                    animatedData = orRes.data || [];
+                    err = null;
+                  }
+                } catch (_) {
+                  // swallow; will skip aggregates
+                }
+              } else {
+                animatedData = inRes.data || [];
+              }
 
               // Map team_id -> team name
               const teamIdToName: Record<string, string> = {};
