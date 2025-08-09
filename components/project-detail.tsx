@@ -184,6 +184,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   const [chapterAggregates, setChapterAggregates] = useState<
     Record<string, { highestStatus: string; contributors: string[] }>
   >({});
+  const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
 
   const scrollMessagesToBottom = (smooth: boolean = false) => {
     const el = messagesContainerRef.current;
@@ -588,6 +589,38 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
       chapterId,
       projectTitle: project?.title || "Project",
     });
+  };
+
+  const handleOpenShotEditor = (
+    chapterId: string,
+    sequenceCode: string,
+    shotCode: string
+  ) => {
+    const url = `/animation-workspace?projectId=${projectId}&chapterId=${chapterId}&sequence=${encodeURIComponent(
+      sequenceCode
+    )}&shot=${encodeURIComponent(shotCode)}`;
+    if (typeof window !== "undefined") {
+      window.location.href = url;
+    }
+  };
+
+  const getMockSequencesForChapter = (chapterId: string) => {
+    return [
+      {
+        seq: "SEQ 010",
+        shots: [
+          { code: "010A", stage: "Storyboard", status: "todo" },
+          { code: "010B", stage: "Layout", status: "in-progress" },
+        ],
+      },
+      {
+        seq: "SEQ 020",
+        shots: [
+          { code: "020A", stage: "Key", status: "review" },
+          { code: "020B", stage: "Inbetween", status: "todo" },
+        ],
+      },
+    ];
   };
 
   const handleSendMessage = () => {
@@ -1302,6 +1335,76 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                         <Play className="w-3 h-3 mr-1" />
                         Open Editor
                       </Button>
+
+                      <div className="mt-3 border-t border-gray-700 pt-3">
+                        <button
+                          className="text-left w-full text-sm text-gray-300 hover:text-white"
+                          onClick={() =>
+                            setExpandedChapters((prev) => ({
+                              ...prev,
+                              [chapter.id]: !prev[chapter.id],
+                            }))
+                          }
+                        >
+                          {expandedChapters[chapter.id]
+                            ? "Hide Sequences & Shots"
+                            : "Show Sequences & Shots"}
+                        </button>
+
+                        {expandedChapters[chapter.id] && (
+                          <div className="mt-3 space-y-2">
+                            {getMockSequencesForChapter(chapter.id).map((seq) => (
+                              <div key={seq.seq} className="bg-gray-700 rounded p-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-gray-2 00 font-medium">
+                                    {seq.seq}
+                                  </span>
+                                </div>
+                                <div className="mt-2 space-y-1">
+                                  {seq.shots.map((shot) => (
+                                    <div
+                                      key={shot.code}
+                                      className="flex items-center justify-between text-xs bg-gray-800 rounded px-2 py-1"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-gray-200">SHOT {shot.code}</span>
+                                        <Badge className="bg-gray-600">{shot.stage}</Badge>
+                                        <Badge
+                                          className={`${
+                                            shot.status === "approved"
+                                              ? "bg-green-600"
+                                              : shot.status === "review"
+                                              ? "bg-yellow-600"
+                                              : shot.status === "in-progress"
+                                              ? "bg-blue-600"
+                                              : "bg-gray-600"
+                                          }`}
+                                        >
+                                          {shot.status}
+                                        </Badge>
+                                      </div>
+                                      <Button
+                                        variant="outline"
+                                        size="xs"
+                                        className="border-gray-600 text-gray-200 hover:bg-gray-700"
+                                        onClick={() =>
+                                          handleOpenShotEditor(
+                                            chapter.id,
+                                            seq.seq,
+                                            shot.code
+                                          )
+                                        }
+                                      >
+                                        Open Editor
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
