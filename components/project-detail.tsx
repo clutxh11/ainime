@@ -151,6 +151,9 @@ interface Project {
 // removed legacy mock data
 
 export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
+  const ENABLE_ANIMATED_AGG =
+    typeof process !== "undefined" &&
+    (process as any).env?.NEXT_PUBLIC_ENABLE_ANIMATED_AGG === "1";
   const [activeTab, setActiveTab] = useState("your-team");
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
@@ -369,7 +372,11 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
             );
 
             // Only attempt animated_chapters lookups if there are teams and chapters
-            if ((transformedTeams?.length || 0) > 0 && chapterIds.length > 0) {
+            if (
+              ENABLE_ANIMATED_AGG &&
+              (transformedTeams?.length || 0) > 0 &&
+              chapterIds.length > 0
+            ) {
               // Try IN filter first; if the backend rejects it (400), fall back to OR filter
               let animatedData: any[] | null = null;
               let err: any = null;
