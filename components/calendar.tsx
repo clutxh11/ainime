@@ -178,7 +178,7 @@ export function Calendar({ onViewChange }: CalendarProps) {
               <ProfileDropdown
                 onSettingsClick={() => setIsSettingsModalOpen(true)}
                 onContributionsClick={() => setIsContributionsModalOpen(true)}
-                onLogoutClick={() => console.log("Logout clicked")}
+                onSignInClick={() => {}}
               />
             </div>
           </div>

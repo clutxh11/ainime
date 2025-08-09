@@ -22,7 +22,7 @@ import { supabase } from "@/lib/supabase";
 
 interface MangaViewerProps {
   content: any;
-  onViewChange: (view: CurrentView) => void;
+  onViewChange: (view: CurrentView, content?: any) => void;
 }
 
 interface Chapter {
@@ -177,12 +177,15 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
         (ch: any) => ch.title === chapterTitle
       );
       if (chapter) {
-        onViewChange("manga", {
-          ...content,
-          selectedChapter: chapterTitle,
-          selectedChapterId: chapter.id,
-          selectedVolume: volume,
-        });
+        onViewChange(
+          "manga",
+          {
+            ...(content as any),
+            selectedChapter: chapterTitle,
+            selectedChapterId: chapter.id,
+            selectedVolume: volume,
+          } as any
+        );
         break;
       }
     }

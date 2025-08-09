@@ -334,8 +334,8 @@ export function ManageSeries({ onViewChange }: ManageSeriesProps) {
         volume_id: volumeId,
         title: chapterTitle,
         chapter_number:
-          selectedSeries.volumes?.find((v) => v.id === volumeId)?.chapters
-            .length + 1 || 1,
+          ((selectedSeries.volumes?.find((v) => v.id === volumeId)?.chapters
+            ?.length || 0) + 1) || 1,
         content: JSON.stringify([]), // Temporary empty content
         status: chapterStatus,
         release_date: releaseDate,

@@ -59,9 +59,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { ProjectSetup } from "@/components/features/creator/ProjectSetup";
-import { ManageSeries } from "@/components/features/creator/ManageSeries";
-import { ForumSection } from "@/components/features/forum/ForumSection";
+import { ProjectSetup } from "@/features/components/creator/ProjectSetup";
+import { ManageSeries } from "@/features/components/creator/ManageSeries";
+import { ForumSection } from "@/features/components/forum/ForumSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,

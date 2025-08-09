@@ -41,7 +41,7 @@ import {
   getProjectsWithRatings,
   getUserRating,
   submitRating,
-} from "@/lib/rating-utils";
+} from "@/features/series/services/rating-utils";
 import { RatingStars } from "@/components/ui/rating-stars";
 import React from "react";
 import { CommentSection } from "@/components/ui/comment-section";
@@ -119,13 +119,12 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
       genre: result.genre,
       status: result.status,
       rating: result.rating,
-      views: result.views,
       progress: result.progress || 0,
       image: result.image_url || "/placeholder.jpg",
       creator: result.users?.username || "Unknown Creator",
       tags: [result.genre, result.status],
-      episodes: [],
-      chapters: [],
+      // episodes/chapters omitted; use volumes only
+      volumes: [],
     };
 
     setSelectedContent(contentItem);
@@ -249,7 +248,6 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
       status: project.status,
       rating: project.average_rating || 0,
       totalRatings: project.total_ratings || 0,
-      views: project.views,
       progress: project.progress,
       seriesType: project.series_type, // Added for series type display
       image:
@@ -261,20 +259,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
       creator: project.creator_display_name,
       tags: project.tags || [project.genre, project.status], // Use database tags if available, fallback to genre/status
       authors: [], // Empty since we don't have authors table anymore
-      episodes:
-        project.chapters?.map((chapter, index) => ({
-          id: chapter.id,
-          title: chapter.title || `Chapter ${index + 1}`,
-          duration: "24 min",
-          thumbnail: "/placeholder.jpg",
-        })) || [],
-      chapters:
-        project.chapters?.map((chapter, index) => ({
-          id: chapter.id,
-          title: chapter.title || `Chapter ${index + 1}`,
-          pages: 20,
-          thumbnail: "/placeholder.jpg",
-        })) || [],
+      // episodes/chapters omitted; use volumes only
       volumes:
         project.volumes?.map((volume) => ({
           id: volume.id,
@@ -312,7 +297,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
 
   const handlePlayContent = useCallback(
     (content: ContentItem) => {
-      if (content.type === "animated" || content.episodes) {
+      if (content.type === "animated" || content.volumes) {
         onViewChange("video", content);
       } else {
         onViewChange("manga", content);
@@ -325,11 +310,17 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
     (content: ContentItem, episodeTitle: string) => {
       console.log("handleWatchEpisode called with:", { content, episodeTitle });
       // Find the episode object to get the ID
-      const episode = content.episodes?.find((ep) => ep.title === episodeTitle);
+      const episode = content.volumes?.find((vol) =>
+        vol.chapters?.some((ch) => ch.title === episodeTitle)
+      );
+      const foundChapter = episode?.chapters?.find(
+        (ch) => ch.title === episodeTitle
+      );
+
       onViewChange("video", {
         ...content,
         selectedEpisode: episodeTitle,
-        selectedEpisodeId: episode?.id || content.id, // Use episode ID if available, fallback to content ID
+        selectedEpisodeId: foundChapter?.id || content.id, // Use episode ID if available, fallback to content ID
       });
     },
     [onViewChange]
@@ -517,17 +508,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
     <Card
       className="min-w-[350px] bg-gray-800 border-gray-700 hover:bg-gray-700 transition-colors cursor-pointer"
       onClick={() => {
-        if (item.currentEpisode) {
-          onViewChange("video", {
-            ...item,
-            selectedEpisode: `Episode ${item.currentEpisode}`,
-          });
-        } else if (item.currentChapter) {
-          onViewChange("manga", {
-            ...item,
-            selectedChapter: `Chapter ${item.currentChapter}`,
-          });
-        }
+        onViewChange("video", item as any);
       }}
     >
       <CardContent className="p-0">
@@ -546,11 +527,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
             <h3 className="font-semibold text-white text-sm mb-1">
               {item.title}
             </h3>
-            <p className="text-xs text-gray-400 mb-2">
-              {item.currentEpisode
-                ? `Episode ${item.currentEpisode}`
-                : `Chapter ${item.currentChapter}`}
-            </p>
+            <p className="text-xs text-gray-400 mb-2">Continue</p>
             <Progress value={item.progress} className="h-1" />
           </div>
         </div>
@@ -611,10 +588,10 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                 >
                   <div className="text-white space-y-2">
                     <div className="flex items-center gap-4 text-sm">
-                      {item.chapters && (
+                      {item.volumes && (
                         <div className="flex items-center gap-1">
                           <BookOpen className="w-4 h-4" />
-                          <span>{item.chapters.length} chapters</span>
+                          <span>{item.volumes.length} volumes</span>
                         </div>
                       )}
                       {item.episodes && (
@@ -630,10 +607,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                     {item.authors && item.authors.length > 0 && (
                       <div className="text-xs text-gray-300">
                         <span className="font-medium">By: </span>
-                        {item.authors
-                          .filter((author) => author.is_primary)
-                          .map((author) => author.name)
-                          .join(", ") || item.authors[0]?.name}
+                        {item.authors.map((author) => author.name).join(", ")}
                       </div>
                     )}
                     <Button
@@ -657,20 +631,16 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                 <div className="flex items-center gap-1 mb-2">
                   <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                   <span className="text-sm text-gray-300">
-                    {item.rating.toFixed(2)} ({item.totalRatings || 0})
+                    {(item.rating || 0).toFixed(2)} ({item.totalRatings || 0})
                   </span>
                 </div>
                 {item.authors && item.authors.length > 0 && (
                   <div className="text-xs text-gray-400 mb-2">
-                    by{" "}
-                    {item.authors
-                      .filter((author) => author.is_primary)
-                      .map((author) => author.name)
-                      .join(", ") || item.authors[0]?.name}
+                    by {item.authors.map((author) => author.name).join(", ")}
                   </div>
                 )}
                 <div className="flex flex-wrap gap-1">
-                  {item.tags.slice(0, 2).map((tag) => (
+                  {(item.tags || []).slice(0, 2).map((tag) => (
                     <Badge key={tag} variant="secondary" className="text-xs">
                       {tag}
                     </Badge>
@@ -834,7 +804,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
     [contentItems]
   );
   const fanFavoriteItems = useMemo(
-    () => [...contentItems].sort((a, b) => b.rating - a.rating),
+    () => [...contentItems].sort((a, b) => (b.rating || 0) - (a.rating || 0)),
     [contentItems]
   );
 

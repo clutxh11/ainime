@@ -147,153 +147,7 @@ interface Project {
   }>;
 }
 
-const mockProject = {
-  id: "1",
-  title: "Dragon's Ascent",
-  author: "Kenji Yamamoto",
-  genres: ["Fantasy", "Action", "Adventure"],
-  description:
-    "A young warrior discovers ancient dragon magic in a world where technology and magic collide.",
-  mangaReads: 45000,
-  animationViews: 125000,
-  upvotes: 8500,
-  activeTeams: 3,
-  coverImage: "/placeholder.svg?height=400&width=300",
-};
-
-const mockYourTeam: Team = {
-  id: "1",
-  name: "Dragon Fire Studios",
-  description:
-    "Specializing in epic fantasy animations with fluid combat sequences.",
-  members: [
-    {
-      id: "1",
-      name: "Alex Chen",
-      role: "Lead Animator",
-      avatar: "AC",
-      isLead: true,
-    },
-    { id: "2", name: "Mike Johnson", role: "Clean-up Artist", avatar: "MJ" },
-    { id: "3", name: "Sarah Kim", role: "In-betweener", avatar: "SK" },
-  ],
-  upvotes: 2500,
-  views: 45000,
-  completedChapters: 1,
-  lead: {
-    id: "1",
-    name: "Alex Chen",
-    role: "Lead Animator",
-    avatar: "AC",
-    isLead: true,
-  },
-};
-
-const mockOtherTeams: Team[] = [
-  {
-    id: "2",
-    name: "Anime Warriors",
-    description:
-      "Focused on high-quality character animation and storytelling.",
-    members: [
-      {
-        id: "4",
-        name: "Emma Wilson",
-        role: "Lead Animator",
-        avatar: "EW",
-        isLead: true,
-      },
-      { id: "5", name: "David Lee", role: "Background Artist", avatar: "DL" },
-    ],
-    upvotes: 1800,
-    views: 32000,
-    completedChapters: 2,
-    lead: {
-      id: "4",
-      name: "Emma Wilson",
-      role: "Lead Animator",
-      avatar: "EW",
-      isLead: true,
-    },
-  },
-  {
-    id: "3",
-    name: "Pixel Dreams",
-    description: "Creating stunning visual effects and dynamic scenes.",
-    members: [
-      {
-        id: "6",
-        name: "Lisa Park",
-        role: "Lead Animator",
-        avatar: "LP",
-        isLead: true,
-      },
-      { id: "7", name: "Tom Anderson", role: "Effects Artist", avatar: "TA" },
-      { id: "8", name: "Rachel Green", role: "Clean-up Artist", avatar: "RG" },
-    ],
-    upvotes: 1200,
-    views: 28000,
-    completedChapters: 1,
-    lead: {
-      id: "6",
-      name: "Lisa Park",
-      role: "Lead Animator",
-      avatar: "LP",
-      isLead: true,
-    },
-  },
-];
-
-const mockChapters: Chapter[] = [
-  {
-    id: "1",
-    title: "Ch. 1",
-    subtitle: "The Awakening",
-    status: "published",
-    contributors: ["Alex Chen", "Sarah Kim"],
-  },
-  {
-    id: "2",
-    title: "Ch. 2",
-    subtitle: "First Flight",
-    status: "in-betweening",
-    contributors: ["Sarah Kim", "Mike Johnson"],
-  },
-  {
-    id: "3",
-    title: "Ch. 3",
-    subtitle: "The Ancient Temple",
-    status: "storyboard",
-    contributors: ["Alex Chen"],
-  },
-  {
-    id: "4",
-    title: "Ch. 4",
-    subtitle: "Dragon's Power",
-    status: "not-started",
-    contributors: [],
-  },
-];
-
-const mockMessages: Message[] = [
-  {
-    id: "1",
-    author: mockYourTeam.members[0],
-    content:
-      "Hey team! I've finished the keyframes for chapter 2. Ready for review!",
-    timestamp: "Today at 2:30 PM",
-    channel: "general",
-  },
-  {
-    id: "2",
-    author: mockYourTeam.members[2],
-    content: "Great work! I'll start on the in-betweening tomorrow morning.",
-    timestamp: "Today at 2:45 PM",
-    channel: "general",
-  },
-];
-
-// Remove the old static definitions since we're now using state
+// removed legacy mock data
 
 export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   const [activeTab, setActiveTab] = useState("your-team");
@@ -437,9 +291,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
           } else {
             // Fetch all user profiles for teams
             const allUserIds = new Set<string>();
-            teamsData?.forEach((team) => {
+            teamsData?.forEach((team: any) => {
               if (team.leader_id) allUserIds.add(team.leader_id);
-              team.animation_team_members?.forEach((member) => {
+              team.animation_team_members?.forEach((member: any) => {
                 if (member.user_id) allUserIds.add(member.user_id);
               });
             });
@@ -461,12 +315,12 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
 
             // Transform team data
             const transformedTeams =
-              teamsData?.map((team) => ({
+              teamsData?.map((team: any) => ({
                 ...team,
                 leader_display_name:
                   userProfiles[team.leader_id] || "Unknown Leader",
                 members:
-                  team.animation_team_members?.map((member) => ({
+                  team.animation_team_members?.map((member: any) => ({
                     ...member,
                     user_display_name:
                       userProfiles[member.user_id] || "Unknown User",
@@ -479,9 +333,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
             const currentUser1 = getUserRes1.data.user;
             if (currentUser1) {
               currentUsersTeam =
-                transformedTeams.find((team) =>
+                transformedTeams.find((team: any) =>
                   team.members.some(
-                    (member) => member.user_id === currentUser1.id
+                    (member: any) => member.user_id === currentUser1.id
                   )
                 ) || null;
             }
@@ -556,9 +410,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
             const getUserRes2 = await supabase.auth.getUser();
             const currentUser2 = getUserRes2.data.user;
             if (currentUser2) {
-              const userTeam = transformedTeams.find((team) =>
+              const userTeam = transformedTeams.find((team: any) =>
                 team.members.some(
-                  (member) => member.user_id === currentUser2.id
+                  (member: any) => member.user_id === currentUser2.id
                 )
               );
 
@@ -577,8 +431,8 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
         } else {
           setError("Project not found.");
         }
-      } catch (err) {
-        setError(err.message);
+      } catch (err: any) {
+        setError(err?.message || "Failed to load project");
       } finally {
         setLoading(false);
       }
@@ -941,8 +795,8 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     }
   };
 
-  const handleTeamClick = (team: Team) => {
-    setSelectedTeam(team);
+  const handleTeamClick = (team: any) => {
+    setSelectedTeam(team as AnimationTeam);
     setIsTeamModalOpen(true);
   };
 
@@ -1807,7 +1661,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                       Team Members
                     </h4>
                     <div className="space-y-2">
-                      {selectedTeam.members.map((member) => (
+                      {(selectedTeam.members || []).map((member: any) => (
                         <div
                           key={member.id}
                           className="flex items-center gap-3"
