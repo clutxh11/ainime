@@ -1,5 +1,9 @@
 import { supabase } from "./supabase";
-import type { Database } from "@/types/database";
+import type {
+  Database,
+  ContentCommentInsert,
+  ContentCommentUpdate,
+} from "@/types/database";
 
 type Tables = Database["public"]["Tables"];
 

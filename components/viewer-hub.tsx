@@ -804,7 +804,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
     [contentItems]
   );
   const fanFavoriteItems = useMemo(
-    () => [...contentItems].sort((a, b) => b.rating - a.rating),
+    () => [...contentItems].sort((a, b) => (b.rating || 0) - (a.rating || 0)),
     [contentItems]
   );
 
