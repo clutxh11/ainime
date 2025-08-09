@@ -368,7 +368,8 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
               (id: any): id is string => typeof id === "string" && id.length > 0
             );
 
-            if (chapterIds.length > 0) {
+            // Only attempt animated_chapters lookups if there are teams and chapters
+            if ((transformedTeams?.length || 0) > 0 && chapterIds.length > 0) {
               // Try IN filter first; if the backend rejects it (400), fall back to OR filter
               let animatedData: any[] | null = null;
               let err: any = null;
@@ -444,6 +445,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                 };
               });
               setChapterAggregates(finalized);
+            } else {
+              // No teams or no chapters to aggregate; ensure we don't show errors
+              setChapterAggregates({});
             }
 
             // Check if current user is in any team
