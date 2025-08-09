@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import type { CurrentView } from "@/types";
 import TimelineGrid, { DrawingFrame } from "./timeline-grid";
+import { supabase } from "@/lib/supabase";
 
 interface AnimationEditorProps {
   onViewChange: (view: CurrentView) => void;
@@ -212,6 +213,7 @@ export function AnimationEditor({
   const [draftWidth, setDraftWidth] = useState<number>(appliedWidth);
   const [draftHeight, setDraftHeight] = useState<number>(appliedHeight);
   const [draftFps, setDraftFps] = useState<number>(appliedFps);
+  const [isSaving, setIsSaving] = useState(false);
   // Sync applied + draft settings whenever a new shot/scene is opened
   useEffect(() => {
     if (sceneSettings) {
@@ -228,6 +230,30 @@ export function AnimationEditor({
     sceneSettings?.canvasHeight,
     sceneSettings?.frameRate,
   ]);
+
+  const saveSceneSettings = useCallback(async () => {
+    if (!sceneSettings?.shotId) return;
+    try {
+      setIsSaving(true);
+      const { error } = await supabase
+        .from("shots")
+        .update({
+          data: {
+            initialized: true,
+            width: appliedWidth,
+            height: appliedHeight,
+            units: "px",
+            fps: appliedFps,
+          },
+        })
+        .eq("id", sceneSettings.shotId);
+      if (error) {
+        console.error("Failed to save scene settings:", error);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  }, [sceneSettings?.shotId, appliedWidth, appliedHeight, appliedFps]);
   const [editingLayer, setEditingLayer] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -2464,12 +2490,12 @@ export function AnimationEditor({
               variant="outline"
               size="sm"
               className="text-gray-400 bg-transparent border-gray-600"
+              onClick={saveSceneSettings}
+              disabled={isSaving}
+              title="Save settings"
             >
               <Save className="w-4 h-4 mr-2" />
-              Save Draft
-            </Button>
-            <Button className="bg-red-600 hover:bg-red-700" size="sm">
-              Publish
+              {isSaving ? "Saving..." : "Save"}
             </Button>
           </div>
         </div>
