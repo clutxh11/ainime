@@ -193,6 +193,10 @@ export function AnimationEditor({
   const [onionSkin, setOnionSkin] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(1);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsWidth, setSettingsWidth] = useState<number>(sceneSettings?.canvasWidth ?? 1920);
+  const [settingsHeight, setSettingsHeight] = useState<number>(sceneSettings?.canvasHeight ?? 1080);
+  const [settingsFps, setSettingsFps] = useState<number>(sceneSettings?.frameRate ?? 24);
   const [editingLayer, setEditingLayer] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -2413,6 +2417,18 @@ export function AnimationEditor({
 
             <Separator orientation="vertical" className="h-6" />
 
+            {/* Scene Settings */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-gray-400 bg-transparent border-gray-600"
+              onClick={() => setIsSettingsOpen(true)}
+              title="Scene settings"
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              Settings
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -3155,6 +3171,53 @@ export function AnimationEditor({
           </ScrollArea>
         </div>
       </div>
+
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setIsSettingsOpen(false)} />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-white mb-4">Scene Settings</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">Scene Name</label>
+                <input className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-300" value={sceneSettings?.sceneName ?? "Scene"} disabled />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm text-gray-300 mb-1">Width</label>
+                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={settingsWidth} onChange={(e) => setSettingsWidth(parseInt(e.target.value || "0", 10))} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-300 mb-1">Height</label>
+                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={settingsHeight} onChange={(e) => setSettingsHeight(parseInt(e.target.value || "0", 10))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm text-gray-300 mb-1">Units</label>
+                  <input className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-300" value="px" disabled />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-300 mb-1">Frame Rate</label>
+                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={settingsFps} onChange={(e) => setSettingsFps(parseInt(e.target.value || "0", 10))} />
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded px-3 py-2" onClick={() => {
+                  if (sceneSettings) {
+                    (sceneSettings as any).canvasWidth = settingsWidth;
+                    (sceneSettings as any).canvasHeight = settingsHeight;
+                    (sceneSettings as any).frameRate = settingsFps;
+                  }
+                  setIsSettingsOpen(false);
+                }}>Apply</button>
+                <button className="border border-gray-600 text-gray-300 rounded px-3 py-2" onClick={() => setIsSettingsOpen(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
