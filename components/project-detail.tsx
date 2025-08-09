@@ -1137,13 +1137,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                           {new Date(chapter.release_date).toLocaleDateString()}
                         </p>
                       )}
-                      <Button
-                        onClick={() => handleOpenEditor(chapter.id)}
-                        size="sm"
-                        className="w-full bg-red-600 hover:bg-red-700"
-                      >
-                        <Play className="w-3 h-3 mr-1" /> Open Editor
-                      </Button>
+                      {/* Removed chapter-level red Open Editor button */}
                       {/* Sequences & Shots */}
                       <div className="mt-3 border-t border-gray-700 pt-3">
                         <button
