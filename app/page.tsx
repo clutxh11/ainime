@@ -158,6 +158,19 @@ export default function Home() {
           </Suspense>
         );
 
+      case "compositing-editor":
+        return (
+          <Suspense fallback={<LoadingSpinner />}>
+            {/* TODO: replace with real CompositingEditor component */}
+            <div className="min-h-screen bg-gray-900 text-gray-200 flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-xl font-semibold mb-2">Compositing Editor</div>
+                <div className="text-sm opacity-80">Placeholder – opens from Project Details via Create/Open Composition</div>
+              </div>
+            </div>
+          </Suspense>
+        );
+
       case "project-detail":
         return (
           <Suspense fallback={<LoadingSpinner />}>

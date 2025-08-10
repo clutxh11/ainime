@@ -1311,6 +1311,20 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                       >
                                         <BookOpen className="w-3 h-3 mr-1" /> Storyboard
                                       </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 px-3 border-gray-600 text-gray-300"
+                                        onClick={() =>
+                                          onViewChange("compositing-editor", {
+                                            projectId,
+                                            chapterId: chapter.id,
+                                          })
+                                        }
+                                        title="Create/Open composition for this chapter"
+                                      >
+                                        Create Composition
+                                      </Button>
                                       {isCreatingShot === seq.id ? (
                                         <>
                                           <Input

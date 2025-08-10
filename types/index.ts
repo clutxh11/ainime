@@ -7,6 +7,7 @@ export type CurrentView =
   | "manga"
   | "content-explorer"
   | "animation-editor"
+  | "compositing-editor"
   | "project-dashboard"
   | "project-detail";
 
