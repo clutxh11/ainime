@@ -217,6 +217,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   const [isStoryboardSetupOpen, setIsStoryboardSetupOpen] = useState<string | null>(null); // holds sequenceId when open
   const [storyboardLoading, setStoryboardLoading] = useState(false);
   const [storyboardsBySequence, setStoryboardsBySequence] = useState<Record<string, { exists: boolean; id?: string; width?: number; height?: number; title?: string }>>({});
+  const [storyboardChapterId, setStoryboardChapterId] = useState<string | null>(null);
 
   // Preload storyboard existence for sequences once loaded
   useEffect(() => {
@@ -1354,6 +1355,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                             });
                                           } else {
                                             setIsStoryboardSetupOpen(seq.id);
+                                            setStoryboardChapterId(chapter.id);
                                           }
                                         }}
                                         title="Create/Open storyboard for this sequence"
@@ -1497,7 +1499,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                     if (!seq) { setIsStoryboardSetupOpen(null); return; }
                     const created = await createStoryboard({
                       projectId: projectId!,
-                      chapterId: chapter.id,
+                      chapterId: storyboardChapterId || "",
                       sequenceId: seqId,
                       title: `Storyboard: ${seq.code}`,
                       width: setupWidth,
@@ -1506,7 +1508,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                     setStoryboardsBySequence((prev)=>({ ...prev, [seqId]: { exists: true, id: created?.id, width: setupWidth, height: setupHeight, title: created?.title } }));
                     onViewChange("animation-editor", {
                       projectId,
-                      chapterId: chapter.id,
+                      chapterId: storyboardChapterId || "",
                       sequenceId: seqId,
                       sequenceCode: seq.code,
                       mode: "storyboard",
