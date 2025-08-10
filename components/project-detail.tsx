@@ -1298,7 +1298,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                   <div className="text-xs text-gray-400">No sequences yet.</div>
                                 );
                               }
-                              return seqs.map((seq) => (
+                              const seqList = seqs.map((seq) => (
                                 <div key={seq.id} className="bg-gray-700/70 rounded px-3 py-3">
                                   <div className="flex items-center justify-between">
                                     <span className="text-xs text-gray-200 font-medium tracking-wide">{seq.code}</span>
@@ -1311,20 +1311,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                       >
                                         <BookOpen className="w-3 h-3 mr-1" /> Storyboard
                                       </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-8 px-3 border-gray-600 text-gray-300"
-                                        onClick={() =>
-                                          onViewChange("compositing-editor", {
-                                            projectId,
-                                            chapterId: chapter.id,
-                                          })
-                                        }
-                                        title="Create/Open composition for this chapter"
-                                      >
-                                        Create Composition
-                                      </Button>
+                                      {/* Per-sequence Create Composition button removed */}
                                       {isCreatingShot === seq.id ? (
                                         <>
                                           <Input
@@ -1388,6 +1375,29 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                   </div>
                                 </div>
                               ));
+
+                              return (
+                                <>
+                                  {seqList}
+                                  {/* Chapter-level Create/Open Composition button under the list */}
+                                  <div className="pt-2 flex justify-end">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 px-3 border-gray-600 text-gray-300"
+                                      onClick={() =>
+                                        onViewChange("compositing-editor", {
+                                          projectId,
+                                          chapterId: chapter.id,
+                                        })
+                                      }
+                                      title="Create/Open composition for this chapter"
+                                    >
+                                      Create Composition
+                                    </Button>
+                                  </div>
+                                </>
+                              );
                             })()}
                           </div>
                         )}
