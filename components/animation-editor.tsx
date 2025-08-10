@@ -389,6 +389,8 @@ export function AnimationEditor({
   );
   const [undoStack, setUndoStack] = useState<any[]>([]);
   const [redoStack, setRedoStack] = useState<any[]>([]);
+  // Map of timeline cell → storage key for the image placed there (rowId|frameIndex → key)
+  const [frameAssetKeys, setFrameAssetKeys] = useState<Record<string, string>>({});
 
   // -------- Persistence helpers (now that timeline state exists) --------
   const serializeDocument = useCallback(() => {
@@ -406,6 +408,8 @@ export function AnimationEditor({
       timeline: { drawingFrames, layerOrder },
       layers: { folderLayers, layerStrokes },
       uiState: { currentFrame, selectedRow, zoom, onionSkin, showGrid },
+      // Persist per-frame asset keys so we can re-sign URLs on load
+      frameAssetKeys,
     } as const;
   }, [
     sceneSettings?.sceneName,
@@ -423,6 +427,7 @@ export function AnimationEditor({
     zoom,
     onionSkin,
     showGrid,
+    frameAssetKeys,
   ]);
 
   const saveScene = useCallback(async () => {
@@ -553,6 +558,39 @@ export function AnimationEditor({
         if (typeof doc.uiState?.zoom === "number") setZoom(doc.uiState.zoom);
         if (typeof doc.uiState?.onionSkin === "boolean") setOnionSkin(doc.uiState.onionSkin);
         if (typeof doc.uiState?.showGrid === "boolean") setShowGrid(doc.uiState.showGrid);
+        if (doc.frameAssetKeys && typeof doc.frameAssetKeys === "object") {
+          setFrameAssetKeys(doc.frameAssetKeys);
+          // If storage enabled, re-sign URLs for any drawingFrames that have a stored key
+          const enableStorage = process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
+          if (enableStorage) {
+            const bucket = "animation-scenes";
+            const entries: Array<[string, string]> = Object.entries(doc.frameAssetKeys);
+            if (entries.length > 0) {
+              try {
+                const urlMap: Record<string, string> = {};
+                // Sign each key
+                for (const [cell, k] of entries) {
+                  const { data: signed } = await supabase.storage
+                    .from(bucket)
+                    .createSignedUrl(k, 60 * 60 * 24);
+                  if (signed?.signedUrl) urlMap[cell] = signed.signedUrl;
+                }
+                // Apply signed URLs into drawingFrames
+                setDrawingFrames((prev) =>
+                  prev.map((df) => {
+                    const cellKey = `${df.rowId}|${df.frameIndex}`;
+                    if (urlMap[cellKey]) {
+                      return { ...df, imageUrl: urlMap[cellKey] };
+                    }
+                    return df;
+                  })
+                );
+              } catch (e) {
+                console.warn("Failed to re-sign frame asset URLs", e);
+              }
+            }
+          }
+        }
       } catch (e) {
         console.warn("Failed to hydrate document", e);
       }
@@ -1482,7 +1520,40 @@ export function AnimationEditor({
       const file = e.dataTransfer.files[0];
       if (!file || !file.type.startsWith("image/")) return;
 
-      const url = URL.createObjectURL(file);
+      // If storage is enabled, upload image and store its key; otherwise fallback to blob URL
+      const enableStorage = process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
+      const doUpload = async () => {
+        let imageUrl = "";
+        let key: string | undefined = undefined;
+        if (enableStorage && sceneSettings?.projectId && sceneSettings?.chapterId && sceneSettings?.sequenceId && sceneSettings?.shotId) {
+          try {
+            const bucket = "animation-scenes";
+            const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+            const ts = new Date().toISOString().replace(/[:.]/g, "-");
+            // Per-shot frame assets
+            key = `${sceneSettings.projectId}/${sceneSettings.chapterId}/${sceneSettings.sequenceId}/${sceneSettings.shotId}/assets/frames/${rowId}/${frameIndex}/${ts}-${safeName}`;
+            const { error: upErr } = await supabase.storage.from(bucket).upload(key, file, { upsert: true, contentType: file.type });
+            if (upErr) {
+              console.error("Image upload failed; falling back to blob URL", upErr);
+              imageUrl = URL.createObjectURL(file);
+            } else {
+              const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(key, 60 * 60 * 24); // 24h
+              imageUrl = signed?.signedUrl || URL.createObjectURL(file);
+            }
+          } catch (err) {
+            console.error("Unexpected image upload error; falling back to blob URL", err);
+            imageUrl = URL.createObjectURL(file);
+          }
+        } else {
+          imageUrl = URL.createObjectURL(file);
+        }
+
+        // Save asset key reference for later re-signing
+        if (key) {
+          setFrameAssetKeys((prev) => ({ ...prev, [`${rowId}|${frameIndex}`]: key! }));
+        }
+
+        const url = imageUrl;
 
       setDrawingFrames((prev) => {
         const existingFrame = prev.find(
@@ -1514,6 +1585,10 @@ export function AnimationEditor({
       setSelectedFrameNumber(frameIndex + 1);
 
       setTimeout(() => saveToUndoStack(), 0);
+      };
+
+      // Run async upload + state update
+      void doUpload();
     },
     [saveToUndoStack]
   );
