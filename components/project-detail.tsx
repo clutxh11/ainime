@@ -216,6 +216,27 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   const [setupFps, setSetupFps] = useState<number>(24);
   const [isStoryboardSetupOpen, setIsStoryboardSetupOpen] = useState<string | null>(null); // holds sequenceId when open
   const [storyboardLoading, setStoryboardLoading] = useState(false);
+  const [storyboardsBySequence, setStoryboardsBySequence] = useState<Record<string, { exists: boolean; id?: string; width?: number; height?: number; title?: string }>>({});
+
+  // Preload storyboard existence for sequences once loaded
+  useEffect(() => {
+    const loadStoryboardFlags = async () => {
+      const entries = Object.values(sequencesByChapter).flat();
+      await Promise.all(
+        entries.map(async (seq) => {
+          if (!seq?.id || storyboardsBySequence[seq.id]) return;
+          const sb = await getStoryboardBySequence(seq.id);
+          setStoryboardsBySequence((prev) => ({
+            ...prev,
+            [seq.id]: sb
+              ? { exists: true, id: sb.id, width: sb?.data?.width, height: sb?.data?.height, title: sb.title }
+              : { exists: false },
+          }));
+        })
+      );
+    };
+    loadStoryboardFlags();
+  }, [sequencesByChapter]);
   const [isCreatingSequence, setIsCreatingSequence] = useState<string | null>(null); // chapterId
   const [newSequenceCode, setNewSequenceCode] = useState("");
   const [isCreatingShot, setIsCreatingShot] = useState<string | null>(null); // sequenceId
@@ -1315,10 +1336,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                         size="sm"
                                         className="h-8 px-3 bg-purple-600 hover:bg-purple-700"
                                         onClick={async () => {
-                                          setStoryboardLoading(true);
-                                          const existing = await getStoryboardBySequence(seq.id);
-                                          setStoryboardLoading(false);
-                                          if (existing) {
+                                          const cached = storyboardsBySequence[seq.id];
+                                          const existing = cached?.exists ? { id: cached.id, data: { width: cached.width, height: cached.height }, title: cached.title } as any : await getStoryboardBySequence(seq.id);
+                                          if (existing && (existing as any).id) {
                                             onViewChange("animation-editor", {
                                               projectId,
                                               chapterId: chapter.id,
@@ -1326,11 +1346,11 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                               sequenceCode: seq.code,
                                               mode: "storyboard",
                                               projectTitle: project?.title || "Project",
-                                              sceneName: existing.title || `Storyboard: ${seq.code}`,
-                                              canvasWidth: existing.data?.width || 1920,
-                                              canvasHeight: existing.data?.height || 1080,
+                                              sceneName: (existing as any).title || `Storyboard: ${seq.code}`,
+                                              canvasWidth: (existing as any).data?.width || 1920,
+                                              canvasHeight: (existing as any).data?.height || 1080,
                                               frameRate: 24,
-                                              storyboardId: existing.id,
+                                              storyboardId: (existing as any).id,
                                             });
                                           } else {
                                             setIsStoryboardSetupOpen(seq.id);
@@ -1338,7 +1358,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                         }}
                                         title="Create/Open storyboard for this sequence"
                                       >
-                                        <BookOpen className="w-3 h-3 mr-1" /> {storyboardLoading ? "Checking..." : "Storyboard"}
+                                        <BookOpen className="w-3 h-3 mr-1" /> {storyboardsBySequence[seq.id]?.exists ? "Open Storyboard" : "Create Storyboard"}
                                       </Button>
                                       {/* Per-sequence Create Composition button removed */}
                                       {isCreatingShot === seq.id ? (
@@ -1477,15 +1497,16 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                     if (!seq) { setIsStoryboardSetupOpen(null); return; }
                     const created = await createStoryboard({
                       projectId: projectId!,
-                      chapterId: (project?.volumes?.[0]?.chapters?.[0]?.id as string) || seqId, -- fallback
+                      chapterId: chapter.id,
                       sequenceId: seqId,
                       title: `Storyboard: ${seq.code}`,
                       width: setupWidth,
                       height: setupHeight,
                     });
+                    setStoryboardsBySequence((prev)=>({ ...prev, [seqId]: { exists: true, id: created?.id, width: setupWidth, height: setupHeight, title: created?.title } }));
                     onViewChange("animation-editor", {
                       projectId,
-                      chapterId: (project?.volumes?.[0]?.chapters?.[0]?.id as string) || seqId,
+                      chapterId: chapter.id,
                       sequenceId: seqId,
                       sequenceCode: seq.code,
                       mode: "storyboard",
