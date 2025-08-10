@@ -67,6 +67,7 @@ interface AnimationEditorProps {
     chapterId?: string;
     sequenceId?: string;
     shotId?: string;
+    storyboardId?: string;
   };
   mode?: EditorMode; // defaults to 'animate'
 }
@@ -394,7 +395,9 @@ export function AnimationEditor({
   const [undoStack, setUndoStack] = useState<any[]>([]);
   const [redoStack, setRedoStack] = useState<any[]>([]);
   // Map of timeline cell → storage key for the image placed there (rowId|frameIndex → key)
-  const [frameAssetKeys, setFrameAssetKeys] = useState<Record<string, string>>({});
+  const [frameAssetKeys, setFrameAssetKeys] = useState<Record<string, string>>(
+    {}
+  );
 
   // -------- Persistence helpers (now that timeline state exists) --------
   const serializeDocument = useCallback(() => {
@@ -452,7 +455,8 @@ export function AnimationEditor({
 
       // 2) Upload versioned JSON into Storage
       const bucket = "animation-scenes"; // Ensure this bucket exists and allows authenticated uploads
-      const enableStorage = process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
+      const enableStorage =
+        process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const pId = sceneSettings.projectId || "unknown-project";
       const cId = sceneSettings.chapterId || "unknown-chapter";
@@ -463,10 +467,17 @@ export function AnimationEditor({
       let uploadOk = false;
       if (enableStorage) {
         try {
-          const blob = new Blob([JSON.stringify(doc)], { type: "application/json" });
-          const { error: upErr } = await supabase.storage.from(bucket).upload(key, blob, { upsert: true });
+          const blob = new Blob([JSON.stringify(doc)], {
+            type: "application/json",
+          });
+          const { error: upErr } = await supabase.storage
+            .from(bucket)
+            .upload(key, blob, { upsert: true });
           if (upErr) {
-            console.error("Storage upload failed, will still update DB row:", upErr);
+            console.error(
+              "Storage upload failed, will still update DB row:",
+              upErr
+            );
           } else {
             uploadOk = true;
           }
@@ -476,7 +487,9 @@ export function AnimationEditor({
       }
 
       // 3) Merge DB row data with latest settings and manifest
-      const prevManifest: any[] = Array.isArray(baseData?.manifest) ? baseData.manifest : [];
+      const prevManifest: any[] = Array.isArray(baseData?.manifest)
+        ? baseData.manifest
+        : [];
       const nextManifest = uploadOk
         ? [
             ...prevManifest,
@@ -512,7 +525,16 @@ export function AnimationEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [sceneSettings?.shotId, sceneSettings?.projectId, sceneSettings?.chapterId, sceneSettings?.sequenceId, appliedWidth, appliedHeight, appliedFps, serializeDocument]);
+  }, [
+    sceneSettings?.shotId,
+    sceneSettings?.projectId,
+    sceneSettings?.chapterId,
+    sceneSettings?.sequenceId,
+    appliedWidth,
+    appliedHeight,
+    appliedFps,
+    serializeDocument,
+  ]);
 
   useEffect(() => {
     const load = async () => {
@@ -531,7 +553,8 @@ export function AnimationEditor({
       // Prefer storage-saved latest version; fallback to inline document
       let doc: any = null;
       const latestKey: string | undefined = data?.latest_key;
-      const enableStorage = process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
+      const enableStorage =
+        process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
       if (enableStorage && latestKey) {
         try {
           const { data: file, error: dlErr } = await supabase.storage
@@ -542,7 +565,10 @@ export function AnimationEditor({
             doc = JSON.parse(text);
           }
         } catch (e) {
-          console.warn("Failed to download latest scene version; will fallback to inline document", e);
+          console.warn(
+            "Failed to download latest scene version; will fallback to inline document",
+            e
+          );
         }
       }
       if (!doc) {
@@ -553,22 +579,29 @@ export function AnimationEditor({
       try {
         if (Array.isArray(doc.rows)) setRows(doc.rows);
         if (typeof doc.frameCount === "number") setFrameCount(doc.frameCount);
-        if (doc.timeline?.drawingFrames) setDrawingFrames(doc.timeline.drawingFrames);
+        if (doc.timeline?.drawingFrames)
+          setDrawingFrames(doc.timeline.drawingFrames);
         if (doc.timeline?.layerOrder) setLayerOrder(doc.timeline.layerOrder);
         if (doc.layers?.folderLayers) setFolderLayers(doc.layers.folderLayers);
         if (doc.layers?.layerStrokes) setLayerStrokes(doc.layers.layerStrokes);
-        if (doc.uiState?.currentFrame) setCurrentFrame(doc.uiState.currentFrame);
+        if (doc.uiState?.currentFrame)
+          setCurrentFrame(doc.uiState.currentFrame);
         if (doc.uiState?.selectedRow) setSelectedRow(doc.uiState.selectedRow);
         if (typeof doc.uiState?.zoom === "number") setZoom(doc.uiState.zoom);
-        if (typeof doc.uiState?.onionSkin === "boolean") setOnionSkin(doc.uiState.onionSkin);
-        if (typeof doc.uiState?.showGrid === "boolean") setShowGrid(doc.uiState.showGrid);
+        if (typeof doc.uiState?.onionSkin === "boolean")
+          setOnionSkin(doc.uiState.onionSkin);
+        if (typeof doc.uiState?.showGrid === "boolean")
+          setShowGrid(doc.uiState.showGrid);
         if (doc.frameAssetKeys && typeof doc.frameAssetKeys === "object") {
           setFrameAssetKeys(doc.frameAssetKeys);
           // If storage enabled, re-sign URLs for any drawingFrames that have a stored key
-          const enableStorage = process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
+          const enableStorage =
+            process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
           if (enableStorage) {
             const bucket = "animation-scenes";
-            const entries: Array<[string, string]> = Object.entries(doc.frameAssetKeys);
+            const entries: Array<[string, string]> = Object.entries(
+              doc.frameAssetKeys
+            );
             if (entries.length > 0) {
               try {
                 const urlMap: Record<string, string> = {};
@@ -1525,27 +1558,44 @@ export function AnimationEditor({
       if (!file || !file.type.startsWith("image/")) return;
 
       // If storage is enabled, upload image and store its key; otherwise fallback to blob URL
-      const enableStorage = process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
+      const enableStorage =
+        process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
       const doUpload = async () => {
         let imageUrl = "";
         let key: string | undefined = undefined;
-        if (enableStorage && sceneSettings?.projectId && sceneSettings?.chapterId && sceneSettings?.sequenceId && sceneSettings?.shotId) {
+        if (
+          enableStorage &&
+          sceneSettings?.projectId &&
+          sceneSettings?.chapterId &&
+          sceneSettings?.sequenceId &&
+          sceneSettings?.shotId
+        ) {
           try {
             const bucket = "animation-scenes";
             const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
             const ts = new Date().toISOString().replace(/[:.]/g, "-");
             // Per-shot frame assets
             key = `${sceneSettings.projectId}/${sceneSettings.chapterId}/${sceneSettings.sequenceId}/${sceneSettings.shotId}/assets/frames/${rowId}/${frameIndex}/${ts}-${safeName}`;
-            const { error: upErr } = await supabase.storage.from(bucket).upload(key, file, { upsert: true, contentType: file.type });
+            const { error: upErr } = await supabase.storage
+              .from(bucket)
+              .upload(key, file, { upsert: true, contentType: file.type });
             if (upErr) {
-              console.error("Image upload failed; falling back to blob URL", upErr);
+              console.error(
+                "Image upload failed; falling back to blob URL",
+                upErr
+              );
               imageUrl = URL.createObjectURL(file);
             } else {
-              const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(key, 60 * 60 * 24); // 24h
+              const { data: signed } = await supabase.storage
+                .from(bucket)
+                .createSignedUrl(key, 60 * 60 * 24); // 24h
               imageUrl = signed?.signedUrl || URL.createObjectURL(file);
             }
           } catch (err) {
-            console.error("Unexpected image upload error; falling back to blob URL", err);
+            console.error(
+              "Unexpected image upload error; falling back to blob URL",
+              err
+            );
             imageUrl = URL.createObjectURL(file);
           }
         } else {
@@ -1554,41 +1604,44 @@ export function AnimationEditor({
 
         // Save asset key reference for later re-signing
         if (key) {
-          setFrameAssetKeys((prev) => ({ ...prev, [`${rowId}|${frameIndex}`]: key! }));
+          setFrameAssetKeys((prev) => ({
+            ...prev,
+            [`${rowId}|${frameIndex}`]: key!,
+          }));
         }
 
         const url = imageUrl;
 
-      setDrawingFrames((prev) => {
-        const existingFrame = prev.find(
-          (df) => df.rowId === rowId && df.frameIndex === frameIndex
-        );
-
-        if (existingFrame) {
-          return prev.map((df) =>
-            df.rowId === rowId && df.frameIndex === frameIndex
-              ? { ...df, imageUrl: url, fileName: file.name }
-              : df
+        setDrawingFrames((prev) => {
+          const existingFrame = prev.find(
+            (df) => df.rowId === rowId && df.frameIndex === frameIndex
           );
-        } else {
-          return [
-            ...prev,
-            {
-              rowId,
-              frameIndex,
-              length: 1,
-              imageUrl: url,
-              fileName: file.name,
-            },
-          ];
-        }
-      });
 
-      // Select the new frame
-      setSelectedLayerId(`${rowId}-${frameIndex}-main`);
-      setSelectedFrameNumber(frameIndex + 1);
+          if (existingFrame) {
+            return prev.map((df) =>
+              df.rowId === rowId && df.frameIndex === frameIndex
+                ? { ...df, imageUrl: url, fileName: file.name }
+                : df
+            );
+          } else {
+            return [
+              ...prev,
+              {
+                rowId,
+                frameIndex,
+                length: 1,
+                imageUrl: url,
+                fileName: file.name,
+              },
+            ];
+          }
+        });
 
-      setTimeout(() => saveToUndoStack(), 0);
+        // Select the new frame
+        setSelectedLayerId(`${rowId}-${frameIndex}-main`);
+        setSelectedFrameNumber(frameIndex + 1);
+
+        setTimeout(() => saveToUndoStack(), 0);
       };
 
       // Run async upload + state update
@@ -1914,7 +1967,7 @@ export function AnimationEditor({
   // Export
   const exportAnimation = () => {
     const canvas = canvasRef.current;
-    if (!canvas || typeof window === 'undefined') return;
+    if (!canvas || typeof window === "undefined") return;
 
     const link = document.createElement("a");
     link.download = "animation.png";
@@ -1972,7 +2025,7 @@ export function AnimationEditor({
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
     // Only add event listeners on the client side
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
@@ -2611,11 +2664,11 @@ export function AnimationEditor({
   // Add event listeners for keyboard shortcuts
   useEffect(() => {
     // Only add event listeners on the client side
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("keyup", handleKeyUp);
-    
+
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("keyup", handleKeyUp);
@@ -2638,7 +2691,13 @@ export function AnimationEditor({
               Back to Creator Hub
             </Button>
             <Separator orientation="vertical" className="h-6" />
-            <h1 className="text-lg font-semibold">{mode === "storyboard" ? "Storyboard Editor" : mode === "composite" ? "Compositing Editor" : "Animation Editor"}</h1>
+            <h1 className="text-lg font-semibold">
+              {mode === "storyboard"
+                ? "Storyboard Editor"
+                : mode === "composite"
+                ? "Compositing Editor"
+                : "Animation Editor"}
+            </h1>
           </div>
           <div className="flex items-center gap-4">
             {/* Undo/Redo Controls */}
@@ -3154,34 +3213,34 @@ export function AnimationEditor({
 
           {/* Timeline - hidden in storyboard mode */}
           {mode !== "storyboard" && (
-          <div className="fixed bottom-0 left-20 right-80 z-20 bg-gray-800 border-t border-gray-700">
-            <TimelineGrid
-              rows={rows}
-              setRows={setRows}
-              frames={frameCount}
-              setFrames={setFrameCount}
-              drawingFrames={drawingFrames}
-              setDrawingFrames={setDrawingFrames}
-              selectedRow={selectedRow}
-              setSelectedRow={setSelectedRow}
-              selectedLayerId={selectedLayerId}
-              setSelectedLayerId={setSelectedLayerId}
-              selectedFrameNumber={selectedFrameNumber}
-              setSelectedFrameNumber={setSelectedFrameNumber}
-              onDrop={handleDrop}
-              isPlaying={isPlaying}
-              onPlayPause={handlePlayPause}
-              onPrevFrame={handlePrevFrame}
-              onNextFrame={handleNextFrame}
-              onFirstFrame={handleFirstFrame}
-              onLastFrame={handleLastFrame}
-              isLooping={isLooping}
-              onToggleLoop={handleToggleLoop}
-              onDeleteFrame={handleDeleteFrame}
-              onDeleteRow={handleDeleteRow}
-              onAddRow={handleAddRow}
-            />
-          </div>
+            <div className="fixed bottom-0 left-20 right-80 z-20 bg-gray-800 border-t border-gray-700">
+              <TimelineGrid
+                rows={rows}
+                setRows={setRows}
+                frames={frameCount}
+                setFrames={setFrameCount}
+                drawingFrames={drawingFrames}
+                setDrawingFrames={setDrawingFrames}
+                selectedRow={selectedRow}
+                setSelectedRow={setSelectedRow}
+                selectedLayerId={selectedLayerId}
+                setSelectedLayerId={setSelectedLayerId}
+                selectedFrameNumber={selectedFrameNumber}
+                setSelectedFrameNumber={setSelectedFrameNumber}
+                onDrop={handleDrop}
+                isPlaying={isPlaying}
+                onPlayPause={handlePlayPause}
+                onPrevFrame={handlePrevFrame}
+                onNextFrame={handleNextFrame}
+                onFirstFrame={handleFirstFrame}
+                onLastFrame={handleLastFrame}
+                isLooping={isLooping}
+                onToggleLoop={handleToggleLoop}
+                onDeleteFrame={handleDeleteFrame}
+                onDeleteRow={handleDeleteRow}
+                onAddRow={handleAddRow}
+              />
+            </div>
           )}
         </div>
 
@@ -3461,43 +3520,97 @@ export function AnimationEditor({
       {/* Settings Modal */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setIsSettingsOpen(false)} />
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setIsSettingsOpen(false)}
+          />
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-white mb-4">Scene Settings</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">
+              Scene Settings
+            </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-300 mb-1">Scene Name</label>
-                <input className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-300" value={sceneSettings?.sceneName ?? "Scene"} disabled />
+                <label className="block text-sm text-gray-300 mb-1">
+                  Scene Name
+                </label>
+                <input
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-300"
+                  value={sceneSettings?.sceneName ?? "Scene"}
+                  disabled
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Width</label>
-                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={draftWidth} onChange={(e) => setDraftWidth(parseInt(e.target.value || "0", 10))} />
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Width
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                    value={draftWidth}
+                    onChange={(e) =>
+                      setDraftWidth(parseInt(e.target.value || "0", 10))
+                    }
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Height</label>
-                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={draftHeight} onChange={(e) => setDraftHeight(parseInt(e.target.value || "0", 10))} />
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Height
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                    value={draftHeight}
+                    onChange={(e) =>
+                      setDraftHeight(parseInt(e.target.value || "0", 10))
+                    }
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Units</label>
-                  <input className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-300" value="px" disabled />
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Units
+                  </label>
+                  <input
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-300"
+                    value="px"
+                    disabled
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Frame Rate</label>
-                  <input type="number" className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value={draftFps} onChange={(e) => setDraftFps(parseInt(e.target.value || "0", 10))} />
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Frame Rate
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                    value={draftFps}
+                    onChange={(e) =>
+                      setDraftFps(parseInt(e.target.value || "0", 10))
+                    }
+                  />
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <button className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded px-3 py-2" onClick={async () => {
-                  // Commit draft → applied
-                  setAppliedWidth(draftWidth);
-                  setAppliedHeight(draftHeight);
-                  setAppliedFps(draftFps);
-                  setIsSettingsOpen(false);
-                }}>Apply</button>
-                <button className="border border-gray-600 text-gray-300 rounded px-3 py-2" onClick={() => setIsSettingsOpen(false)}>Cancel</button>
+                <button
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded px-3 py-2"
+                  onClick={async () => {
+                    // Commit draft → applied
+                    setAppliedWidth(draftWidth);
+                    setAppliedHeight(draftHeight);
+                    setAppliedFps(draftFps);
+                    setIsSettingsOpen(false);
+                  }}
+                >
+                  Apply
+                </button>
+                <button
+                  className="border border-gray-600 text-gray-300 rounded px-3 py-2"
+                  onClick={() => setIsSettingsOpen(false)}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>

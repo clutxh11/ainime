@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import type { CurrentView } from "@/types";
 import { supabase } from "@/lib/supabase";
-import { listSequences, listShots, createSequence, createShot } from "@/lib/sequences";
+import { listSequences, listShots, createSequence, createShot, getStoryboardBySequence, createStoryboard } from "@/lib/sequences";
 import { toast } from "sonner";
 
 interface ProjectDetailProps {
@@ -214,6 +214,8 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   const [setupWidth, setSetupWidth] = useState<number>(1920);
   const [setupHeight, setSetupHeight] = useState<number>(1080);
   const [setupFps, setSetupFps] = useState<number>(24);
+  const [isStoryboardSetupOpen, setIsStoryboardSetupOpen] = useState<string | null>(null); // holds sequenceId when open
+  const [storyboardLoading, setStoryboardLoading] = useState(false);
   const [isCreatingSequence, setIsCreatingSequence] = useState<string | null>(null); // chapterId
   const [newSequenceCode, setNewSequenceCode] = useState("");
   const [isCreatingShot, setIsCreatingShot] = useState<string | null>(null); // sequenceId
@@ -685,6 +687,10 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
       sequenceCode,
       mode: "storyboard",
       projectTitle: project?.title || "Project",
+      sceneName: `Storyboard: ${sequenceCode}`,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      frameRate: 24,
     });
   };
 
@@ -1308,10 +1314,31 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                       <Button
                                         size="sm"
                                         className="h-8 px-3 bg-purple-600 hover:bg-purple-700"
-                                        onClick={() => handleOpenSequenceStoryboard(chapter.id, seq.code, seq.id)}
-                                        title="Open storyboard for this sequence"
+                                        onClick={async () => {
+                                          setStoryboardLoading(true);
+                                          const existing = await getStoryboardBySequence(seq.id);
+                                          setStoryboardLoading(false);
+                                          if (existing) {
+                                            onViewChange("animation-editor", {
+                                              projectId,
+                                              chapterId: chapter.id,
+                                              sequenceId: seq.id,
+                                              sequenceCode: seq.code,
+                                              mode: "storyboard",
+                                              projectTitle: project?.title || "Project",
+                                              sceneName: existing.title || `Storyboard: ${seq.code}`,
+                                              canvasWidth: existing.data?.width || 1920,
+                                              canvasHeight: existing.data?.height || 1080,
+                                              frameRate: 24,
+                                              storyboardId: existing.id,
+                                            });
+                                          } else {
+                                            setIsStoryboardSetupOpen(seq.id);
+                                          }
+                                        }}
+                                        title="Create/Open storyboard for this sequence"
                                       >
-                                        <BookOpen className="w-3 h-3 mr-1" /> Storyboard
+                                        <BookOpen className="w-3 h-3 mr-1" /> {storyboardLoading ? "Checking..." : "Storyboard"}
                                       </Button>
                                       {/* Per-sequence Create Composition button removed */}
                                       {isCreatingShot === seq.id ? (
@@ -1411,6 +1438,72 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
             ))}
           </CardContent>
         </Card>
+
+        {/* Storyboard Setup Modal */}
+        {isStoryboardSetupOpen && (
+          <div className="fixed inset-0 z-50">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setIsStoryboardSetupOpen(null)} />
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-white mb-4">Create Storyboard</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-300 mb-1">Storyboard Name</label>
+                  <Input value={`Storyboard: ${Object.values(sequencesByChapter).flat().find(s=>s.id===isStoryboardSetupOpen)?.code || "Seq"}`} disabled className="bg-gray-700 border-gray-600 text-gray-300" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-300 mb-1">Width</label>
+                    <Input type="number" value={setupWidth} onChange={(e) => setSetupWidth(parseInt(e.target.value || "0", 10))} className="bg-gray-700 border-gray-600 text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-300 mb-1">Height</label>
+                    <Input type="number" value={setupHeight} onChange={(e) => setSetupHeight(parseInt(e.target.value || "0", 10))} className="bg-gray-700 border-gray-600 text-white" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-300 mb-1">Resolution</label>
+                    <Input value="72 dpi" disabled className="bg-gray-700 border-gray-600 text-gray-300" />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-300 mb-1">Units</label>
+                    <Input value="px" disabled className="bg-gray-700 border-gray-600 text-gray-300" />
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button className="flex-1 bg-red-600 hover:bg-red-700 text-white" onClick={async () => {
+                    const seqId = isStoryboardSetupOpen;
+                    const seq = Object.values(sequencesByChapter).flat().find(s=>s.id===seqId);
+                    if (!seq) { setIsStoryboardSetupOpen(null); return; }
+                    const created = await createStoryboard({
+                      projectId: projectId!,
+                      chapterId: (project?.volumes?.[0]?.chapters?.[0]?.id as string) || seqId, -- fallback
+                      sequenceId: seqId,
+                      title: `Storyboard: ${seq.code}`,
+                      width: setupWidth,
+                      height: setupHeight,
+                    });
+                    onViewChange("animation-editor", {
+                      projectId,
+                      chapterId: (project?.volumes?.[0]?.chapters?.[0]?.id as string) || seqId,
+                      sequenceId: seqId,
+                      sequenceCode: seq.code,
+                      mode: "storyboard",
+                      projectTitle: project?.title || "Project",
+                      sceneName: `Storyboard: ${seq.code}`,
+                      canvasWidth: setupWidth,
+                      canvasHeight: setupHeight,
+                      frameRate: 24,
+                      storyboardId: created?.id,
+                    });
+                    setIsStoryboardSetupOpen(null);
+                  }}>Create Storyboard</Button>
+                  <Button variant="outline" className="border-gray-600 text-gray-300" onClick={() => setIsStoryboardSetupOpen(null)}>Cancel</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Team Discussion - Only show if user is in a team */}
         {isInTeam && userTeam && (
