@@ -154,6 +154,8 @@ export default function Home() {
             <AnimationEditor
               onViewChange={handleViewChange}
               sceneSettings={sceneSettings}
+              // Pass through mode if provided in sceneSettings
+              mode={(sceneSettings as any)?.mode || 'animate'}
             />
           </Suspense>
         );

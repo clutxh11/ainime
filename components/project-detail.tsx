@@ -675,11 +675,13 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
 
   const handleOpenSequenceStoryboard = (
     chapterId: string,
-    sequenceCode: string
+    sequenceCode: string,
+    sequenceId?: string
   ) => {
     onViewChange("animation-editor", {
       projectId,
       chapterId,
+      sequenceId,
       sequenceCode,
       mode: "storyboard",
       projectTitle: project?.title || "Project",
@@ -1306,7 +1308,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                       <Button
                                         size="sm"
                                         className="h-8 px-3 bg-purple-600 hover:bg-purple-700"
-                                        onClick={() => handleOpenSequenceStoryboard(chapter.id, seq.code)}
+                                        onClick={() => handleOpenSequenceStoryboard(chapter.id, seq.code, seq.id)}
                                         title="Open storyboard for this sequence"
                                       >
                                         <BookOpen className="w-3 h-3 mr-1" /> Storyboard

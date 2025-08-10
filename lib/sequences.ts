@@ -26,6 +26,61 @@ export interface Shot {
   updated_at: string;
 }
 
+export interface Storyboard {
+  id: string;
+  project_id: string;
+  chapter_id: string;
+  sequence_id: string;
+  title?: string;
+  thumbnail_url?: string;
+  data?: any;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getStoryboardBySequence(sequenceId: string): Promise<Storyboard | null> {
+  const { data, error } = await supabase
+    .from("storyboards")
+    .select("*")
+    .eq("sequence_id", sequenceId)
+    .maybeSingle();
+  if (error) return null;
+  return data as Storyboard | null;
+}
+
+export async function createStoryboard(params: {
+  projectId: string;
+  chapterId: string;
+  sequenceId: string;
+  title?: string;
+  width: number;
+  height: number;
+}): Promise<Storyboard | null> {
+  const payload: any = {
+    project_id: params.projectId,
+    chapter_id: params.chapterId,
+    sequence_id: params.sequenceId,
+    title: params.title,
+    data: {
+      initialized: true,
+      width: params.width,
+      height: params.height,
+      units: "px",
+      document: {
+        version: 1,
+        mode: "storyboard",
+      },
+    },
+  };
+  const { data, error } = await supabase
+    .from("storyboards")
+    .insert(payload)
+    .select()
+    .single();
+  if (error) return null;
+  return data as Storyboard;
+}
+
 export async function listSequences(chapterId: string): Promise<Sequence[]> {
   const { data, error } = await supabase
     .from("sequences")

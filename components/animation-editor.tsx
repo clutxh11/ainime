@@ -54,6 +54,8 @@ import type { CurrentView } from "@/types";
 import TimelineGrid, { DrawingFrame } from "./timeline-grid";
 import { supabase } from "@/lib/supabase";
 
+type EditorMode = "animate" | "storyboard" | "composite";
+
 interface AnimationEditorProps {
   onViewChange: (view: CurrentView) => void;
   sceneSettings?: {
@@ -66,6 +68,7 @@ interface AnimationEditorProps {
     sequenceId?: string;
     shotId?: string;
   };
+  mode?: EditorMode; // defaults to 'animate'
 }
 
 interface Point {
@@ -183,7 +186,8 @@ const getLassoBoundingBox = (points: Point[]) => {
 export function AnimationEditor({
   onViewChange,
   sceneSettings,
-}: AnimationEditorProps) {
+  mode = "animate",
+}: AnimationEditorProps & { mode?: EditorMode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -2634,7 +2638,7 @@ export function AnimationEditor({
               Back to Creator Hub
             </Button>
             <Separator orientation="vertical" className="h-6" />
-            <h1 className="text-lg font-semibold">Animation Editor</h1>
+            <h1 className="text-lg font-semibold">{mode === "storyboard" ? "Storyboard Editor" : mode === "composite" ? "Compositing Editor" : "Animation Editor"}</h1>
           </div>
           <div className="flex items-center gap-4">
             {/* Undo/Redo Controls */}
@@ -3148,7 +3152,8 @@ export function AnimationEditor({
             </div>
           )}
 
-          {/* Timeline - Fixed at bottom of viewport */}
+          {/* Timeline - hidden in storyboard mode */}
+          {mode !== "storyboard" && (
           <div className="fixed bottom-0 left-20 right-80 z-20 bg-gray-800 border-t border-gray-700">
             <TimelineGrid
               rows={rows}
@@ -3177,6 +3182,7 @@ export function AnimationEditor({
               onAddRow={handleAddRow}
             />
           </div>
+          )}
         </div>
 
         {/* Right Sidebar (Layer Panel) */}
