@@ -399,6 +399,9 @@ export function AnimationEditor({
     {}
   );
 
+  // -------- Folder CRUD (for storyboard mode or when timeline hidden) --------
+  // Moved below to ensure saveToUndoStack is declared first
+
   // -------- Persistence helpers (now that timeline state exists) --------
   const serializeDocument = useCallback(() => {
     return {
@@ -2022,6 +2025,55 @@ export function AnimationEditor({
     setUndoStack((prev) => [...prev, currentState]);
   }, [redoStack, layerStrokes, folderLayers, drawingFrames, layerOrder]);
 
+  // Folder CRUD now that saveToUndoStack exists
+  const addFolder = useCallback(() => {
+    const targetRowId = selectedRow || "row-1";
+    const rowFrames = drawingFrames.filter((df) => df.rowId === targetRowId);
+    const nextIndex =
+      rowFrames.length > 0
+        ? Math.max(...rowFrames.map((f) => f.frameIndex)) + 1
+        : 0;
+    const folderId = `${targetRowId}-${nextIndex}`;
+
+    setDrawingFrames((prev) => [
+      ...prev,
+      { rowId: targetRowId, frameIndex: nextIndex, length: 1, imageUrl: "", fileName: "" },
+    ]);
+    setLayerOrder((prev) => ({ ...prev, [folderId]: [`${folderId}-main`] }));
+    setFolderLayers((prev) => ({ ...prev, [folderId]: [] }));
+    setOpenFolders((prev) => ({ ...prev, [folderId]: true }));
+    setSelectedLayerId(`${folderId}-main`);
+    setSelectedFrameNumber(nextIndex + 1);
+    saveToUndoStack();
+  }, [drawingFrames, selectedRow, saveToUndoStack]);
+
+  const deleteSelectedFolder = useCallback(() => {
+    const folderId = getActiveFrameFolderId(selectedLayerId || "");
+    if (!folderId) return;
+    setDrawingFrames((prev) =>
+      prev.filter((df) => `${df.rowId}-${df.frameIndex}` !== folderId)
+    );
+    setLayerStrokes((prev) => {
+      const next: Record<string, DrawingStroke[]> = {} as any;
+      for (const [key, value] of Object.entries(prev)) {
+        if (!key.startsWith(folderId)) next[key] = value as any;
+      }
+      return next as any;
+    });
+    setFolderLayers((prev) => {
+      const copy = { ...prev } as any;
+      delete copy[folderId];
+      return copy;
+    });
+    setLayerOrder((prev) => {
+      const copy = { ...prev } as any;
+      delete copy[folderId];
+      return copy;
+    });
+    setSelectedLayerId(null);
+    saveToUndoStack();
+  }, [selectedLayerId, saveToUndoStack]);
+
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
     // Only add event listeners on the client side
@@ -3249,7 +3301,7 @@ export function AnimationEditor({
           {/* Top Controls Area */}
           <div className="flex-shrink-0">
             {/* Header: Layers Title + Action Buttons */}
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-semibold">Layers</h2>
               <div className="flex items-center gap-2">
                 <Button
@@ -3293,6 +3345,31 @@ export function AnimationEditor({
                   className="w-8 h-8 text-red-500 hover:text-red-400"
                   disabled={!selectedLayerId}
                   title="Delete Layer"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Folders header (Storyboard-friendly) */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-200">Folders</h3>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={addFolder}
+                  className="w-8 h-8"
+                  title="Add Folder"
+                >
+                  <Plus className="w-5 h-5" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={deleteSelectedFolder}
+                  className="w-8 h-8 text-red-500 hover:text-red-400"
+                  title="Delete Folder"
                 >
                   <Trash2 className="w-5 h-5" />
                 </Button>
