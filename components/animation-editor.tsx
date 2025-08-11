@@ -3236,7 +3236,7 @@ export function AnimationEditor({
                           frameIndex: nextIndex,
                           length: 1,
                           imageUrl: "",
-                          fileName: file.name,
+                          fileName: "",
                         },
                       ]);
                       setLayerOrder((prev) => ({
@@ -3371,7 +3371,7 @@ export function AnimationEditor({
                       if (exists) {
                         return prev.map((df) =>
                           df.rowId === rowId && df.frameIndex === frameIndex
-                            ? { ...df, imageUrl, fileName: file.name }
+                            ? { ...df, imageUrl }
                             : df
                         );
                       }
@@ -3382,7 +3382,7 @@ export function AnimationEditor({
                           frameIndex,
                           length: 1,
                           imageUrl,
-                          fileName: file.name,
+                          fileName: "",
                         },
                       ];
                     });
