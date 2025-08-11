@@ -4042,6 +4042,33 @@ export function AnimationEditor({
                   Cancel
                 </button>
               </div>
+
+              {/* Danger zone */}
+              {mode !== "storyboard" && sceneSettings?.shotId && (
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <button
+                    className="w-full bg-red-900/60 hover:bg-red-900 text-white rounded px-3 py-2"
+                    onClick={async () => {
+                      const ok = window.confirm(
+                        "Delete this shot? This action cannot be undone."
+                      );
+                      if (!ok) return;
+                      try {
+                        await supabase
+                          .from("shots")
+                          .delete()
+                          .eq("id", sceneSettings.shotId);
+                        setIsSettingsOpen(false);
+                        onViewChange("project-detail");
+                      } catch (e) {
+                        console.error("Failed to delete shot", e);
+                      }
+                    }}
+                  >
+                    Delete Shot
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
