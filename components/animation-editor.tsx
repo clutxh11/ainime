@@ -3306,30 +3306,32 @@ export function AnimationEditor({
         <div className="w-80 bg-gray-800 border-l border-gray-700 p-4 flex flex-col">
           {/* Top Controls Area */}
           <div className="flex-shrink-0">
-            {/* Folders toolbar (Add/Delete Frame) shown above Layers */}
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-semibold">Folders</h3>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={addFolder}
-                  className="w-8 h-8"
-                  title="Add Frame"
-                >
-                  <Plus className="w-5 h-5" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={deleteSelectedFolder}
-                  className="w-8 h-8 text-red-500 hover:text-red-400"
-                  title="Delete Frame"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </Button>
+            {/* Folders toolbar (Storyboard only) */}
+            {mode === "storyboard" && (
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-semibold">Folders</h3>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={addFolder}
+                    className="w-8 h-8"
+                    title="Add Frame"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={deleteSelectedFolder}
+                    className="w-8 h-8 text-red-500 hover:text-red-400"
+                    title="Delete Frame"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Header: Layers Title + Action Buttons */}
             <div className="flex items-center justify-between mb-2">
