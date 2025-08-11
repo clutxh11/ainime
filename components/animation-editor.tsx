@@ -68,6 +68,8 @@ interface AnimationEditorProps {
     sequenceId?: string;
     shotId?: string;
     storyboardId?: string;
+    sequenceCode?: string;
+    shotCode?: string;
   };
   mode?: EditorMode; // defaults to 'animate'
 }
@@ -2779,10 +2781,10 @@ export function AnimationEditor({
                   : "Animation Editor"}
               </h1>
               <span className="text-sm text-gray-400">
-                {mode === "storyboard" && sceneSettings?.sequenceId
-                  ? `(seq ${sceneSettings.sequenceId.slice(0, 4)})`
-                  : mode === "animate" && sceneSettings?.shotId
-                  ? `(shot ${sceneSettings.shotId.slice(0, 4)})`
+                {mode === "storyboard" && (sceneSettings?.sequenceCode || sceneSettings?.sequenceId)
+                  ? `(seq ${sceneSettings?.sequenceCode || sceneSettings?.sequenceId?.slice(0, 4)})`
+                  : mode === "animate" && (sceneSettings?.shotCode || sceneSettings?.shotId)
+                  ? `(shot ${sceneSettings?.shotCode || sceneSettings?.shotId?.slice(0, 4)})`
                   : mode === "composite" && sceneSettings?.chapterId
                   ? `(chapter ${sceneSettings.chapterId.slice(0, 4)})`
                   : null}
