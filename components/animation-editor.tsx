@@ -2786,11 +2786,11 @@ export function AnimationEditor({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onViewChange("creator")}
+              onClick={() => onViewChange("project-detail")}
               className="text-gray-300 hover:text-white"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Creator Hub
+              Back to Project
             </Button>
             <Separator orientation="vertical" className="h-6" />
             <div className="flex items-baseline gap-2">
@@ -2804,16 +2804,26 @@ export function AnimationEditor({
               <span className="text-sm text-gray-400">
                 {(() => {
                   if (mode === "storyboard") {
-                    const seq = nameOverride || sceneSettings?.sequenceCode || sceneSettings?.sequenceId?.slice(0, 4);
+                    const seq =
+                      nameOverride ||
+                      sceneSettings?.sequenceCode ||
+                      sceneSettings?.sequenceId?.slice(0, 4);
                     return seq || null;
                   }
                   if (mode === "animate") {
-                    const seq = sceneSettings?.sequenceCode || sceneSettings?.sequenceId?.slice(0, 4);
-                    const shot = nameOverride || sceneSettings?.shotCode || sceneSettings?.shotId?.slice(0, 4);
+                    const seq =
+                      sceneSettings?.sequenceCode ||
+                      sceneSettings?.sequenceId?.slice(0, 4);
+                    const shot =
+                      nameOverride ||
+                      sceneSettings?.shotCode ||
+                      sceneSettings?.shotId?.slice(0, 4);
                     return seq && shot ? `${seq} - ${shot}` : shot || null;
                   }
                   if (mode === "composite") {
-                    return sceneSettings?.chapterId ? `chapter ${sceneSettings.chapterId.slice(0, 4)}` : null;
+                    return sceneSettings?.chapterId
+                      ? `chapter ${sceneSettings.chapterId.slice(0, 4)}`
+                      : null;
                   }
                   return null;
                 })()}
