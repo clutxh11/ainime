@@ -398,6 +398,10 @@ export function AnimationEditor({
   const [frameAssetKeys, setFrameAssetKeys] = useState<Record<string, string>>(
     {}
   );
+  // Custom folder display names (e.g., Page 1) keyed by folderId "row-1-0"
+  const [folderNames, setFolderNames] = useState<Record<string, string>>({});
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderValue, setEditingFolderValue] = useState<string>("");
 
   // -------- Folder CRUD (for storyboard mode or when timeline hidden) --------
   // Moved below to ensure saveToUndoStack is declared first
@@ -2153,20 +2157,23 @@ export function AnimationEditor({
   }, [drawingFrames]);
 
   // Derived sidebar folders from drawingFrames
-  const sidebarFolders = drawingFrames.map((df) => {
+  const sidebarFolders = drawingFrames.map((df, index) => {
+    const id = `${df.rowId}-${df.frameIndex}`;
     const isExtended = df.length > 1;
+    const defaultLabel = isExtended
+      ? `Row ${parseInt(df.rowId.split("-")[1])} Frame ${df.frameIndex + 1}:${
+          df.frameIndex + df.length
+        }`
+      : `Row ${parseInt(df.rowId.split("-")[1])} Frame ${df.frameIndex + 1}`;
+    const storyboardLabel = folderNames[id] || `Page ${index + 1}`;
     return {
-      id: `${df.rowId}-${df.frameIndex}`,
-      label: isExtended
-        ? `Row ${parseInt(df.rowId.split("-")[1])} Frame ${df.frameIndex + 1}:${
-            df.frameIndex + df.length
-          }`
-        : `Row ${parseInt(df.rowId.split("-")[1])} Frame ${df.frameIndex + 1}`,
+      id,
+      label: mode === "storyboard" ? storyboardLabel : defaultLabel,
       imageUrl: df.imageUrl,
       fileName: df.fileName,
-      opacity: layerOpacities[`${df.rowId}-${df.frameIndex}`] ?? 1,
-      visible: true, // for now
-      locked: false, // for now
+      opacity: layerOpacities[id] ?? 1,
+      visible: true,
+      locked: false,
     };
   });
 
@@ -3452,9 +3459,32 @@ export function AnimationEditor({
                       onClick={() => handleSidebarSelection(folder.id)}
                     >
                       <Folder className="w-4 h-4 text-gray-400" />
-                      <span className="font-medium text-xs">
-                        {folder.label}
-                      </span>
+                      {editingFolderId === folder.id ? (
+                        <input
+                          className="text-xs bg-gray-800 text-white px-2 py-1 rounded border border-gray-600"
+                          value={editingFolderValue}
+                          onChange={(e) => setEditingFolderValue(e.target.value)}
+                          onBlur={() => {
+                            setFolderNames((prev) => ({ ...prev, [folder.id]: editingFolderValue || folder.label }));
+                            setEditingFolderId(null);
+                            setEditingFolderValue("");
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              setFolderNames((prev) => ({ ...prev, [folder.id]: editingFolderValue || folder.label }));
+                              setEditingFolderId(null);
+                              setEditingFolderValue("");
+                            }
+                            if (e.key === 'Escape') {
+                              setEditingFolderId(null);
+                              setEditingFolderValue("");
+                            }
+                          }}
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="font-medium text-xs">{folder.label}</span>
+                      )}
                     </div>
                     {/* Up/Down arrows for reordering */}
                     <div className="flex items-center gap-1 ml-auto">
@@ -3483,6 +3513,20 @@ export function AnimationEditor({
                         </>
                       )}
                     </div>
+                    {/* Rename pencil (Storyboard only) */}
+                    {mode === "storyboard" && (
+                      <button
+                        className="ml-2 text-gray-400 hover:text-white"
+                        title="Rename Page"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingFolderId(folder.id);
+                          setEditingFolderValue(folderNames[folder.id] || folder.label);
+                        }}
+                      >
+                        <Edit3 className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                   {/* Folder Content (Layer) */}
                   {openFolders[folder.id] && (
