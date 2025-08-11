@@ -3274,11 +3274,23 @@ export function AnimationEditor({
                     setFolderLayers((prev) => {
                       const current = prev[activeFolderId] || [];
                       newLayerId = `${activeFolderId}-extra-${current.length}`;
-                      return { ...prev, [activeFolderId]: [...current, `Untitled.${current.length + 1}`] } as any;
+                      const baseName = file.name.replace(/\.[^/.]+$/, "");
+                      return {
+                        ...prev,
+                        [activeFolderId]: [
+                          ...current,
+                          baseName || `Untitled.${current.length + 1}`,
+                        ],
+                      } as any;
                     });
                     setLayerOrder((prev) => {
-                      const base = prev[activeFolderId] || [`${activeFolderId}-main`];
-                      return { ...prev, [activeFolderId]: [...base, newLayerId] } as any;
+                      const base = prev[activeFolderId] || [
+                        `${activeFolderId}-main`,
+                      ];
+                      return {
+                        ...prev,
+                        [activeFolderId]: [...base, newLayerId],
+                      } as any;
                     });
 
                     // Create an image stroke centered; minimal stroke contains metadata
@@ -3363,7 +3375,16 @@ export function AnimationEditor({
                             : df
                         );
                       }
-                      return [...prev, { rowId, frameIndex, length: 1, imageUrl, fileName: file.name }];
+                      return [
+                        ...prev,
+                        {
+                          rowId,
+                          frameIndex,
+                          length: 1,
+                          imageUrl,
+                          fileName: file.name,
+                        },
+                      ];
                     });
 
                     // Record key for re-signing later
@@ -3378,7 +3399,9 @@ export function AnimationEditor({
                     }
 
                     setSelectedLayerId(newLayerId);
-                    setSelectedFrameNumber(parseInt(activeFolderId.split("-")[2]) + 1);
+                    setSelectedFrameNumber(
+                      parseInt(activeFolderId.split("-")[2]) + 1
+                    );
                     saveToUndoStack();
                   }}
                   onMouseDown={startDrawing}
