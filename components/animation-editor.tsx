@@ -2781,12 +2781,14 @@ export function AnimationEditor({
                   : "Animation Editor"}
               </h1>
               <span className="text-sm text-gray-400">
-                {mode === "storyboard" && (sceneSettings?.sequenceCode || sceneSettings?.sequenceId)
-                  ? `(seq ${sceneSettings?.sequenceCode || sceneSettings?.sequenceId?.slice(0, 4)})`
-                  : mode === "animate" && (sceneSettings?.shotCode || sceneSettings?.shotId)
-                  ? `(shot ${sceneSettings?.shotCode || sceneSettings?.shotId?.slice(0, 4)})`
+                {mode === "storyboard"
+                  ? sceneSettings?.sequenceCode || sceneSettings?.sequenceId?.slice(0, 4) || null
+                  : mode === "animate"
+                  ? sceneSettings?.sequenceCode && sceneSettings?.shotCode
+                    ? `${sceneSettings.sequenceCode} - ${sceneSettings.shotCode}`
+                    : sceneSettings?.shotCode || sceneSettings?.shotId?.slice(0, 4) || null
                   : mode === "composite" && sceneSettings?.chapterId
-                  ? `(chapter ${sceneSettings.chapterId.slice(0, 4)})`
+                  ? `chapter ${sceneSettings.chapterId.slice(0, 4)}`
                   : null}
               </span>
             </div>
