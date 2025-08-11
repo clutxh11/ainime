@@ -723,6 +723,20 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     setSequencesByChapter((prev) => ({ ...prev, [chapterId]: simple }));
   };
 
+  // Preload sequence counts for all chapters so the collapsed label shows correct count
+  useEffect(() => {
+    if (!project?.volumes) return;
+    for (const volume of project.volumes) {
+      for (const ch of volume.chapters) {
+        if (!sequencesByChapter[ch.id]) {
+          ensureSequencesLoaded(ch.id);
+        }
+      }
+    }
+    // We intentionally do not include sequencesByChapter in deps to avoid endless loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.volumes]);
+
   const ensureShotsLoaded = async (sequenceId: string) => {
     if (shotsBySequence[sequenceId]) return;
     const shots = await listShots(sequenceId);
