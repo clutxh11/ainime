@@ -3215,49 +3215,71 @@ export function AnimationEditor({
                     const file = e.dataTransfer?.files?.[0];
                     if (!file || !file.type.startsWith("image/")) return;
                     // Determine current folder from selectedLayerId
-                    const folderId = getActiveFrameFolderId(selectedLayerId || "");
+                    const folderId = getActiveFrameFolderId(
+                      selectedLayerId || ""
+                    );
                     if (!folderId) {
                       // If none selected, create a new folder and use its main layer
                       const targetRowId = selectedRow || "row-1";
-                      const rowFrames = drawingFrames.filter((df) => df.rowId === targetRowId);
-                      const nextIndex = rowFrames.length > 0 ? Math.max(...rowFrames.map((f) => f.frameIndex)) + 1 : 0;
+                      const rowFrames = drawingFrames.filter(
+                        (df) => df.rowId === targetRowId
+                      );
+                      const nextIndex =
+                        rowFrames.length > 0
+                          ? Math.max(...rowFrames.map((f) => f.frameIndex)) + 1
+                          : 0;
                       const newFolderId = `${targetRowId}-${nextIndex}`;
                       setDrawingFrames((prev) => [
                         ...prev,
-                        { rowId: targetRowId, frameIndex: nextIndex, length: 1, imageUrl: "", fileName: file.name },
+                        {
+                          rowId: targetRowId,
+                          frameIndex: nextIndex,
+                          length: 1,
+                          imageUrl: "",
+                          fileName: file.name,
+                        },
                       ]);
-                      setLayerOrder((prev) => ({ ...prev, [newFolderId]: [`${newFolderId}-main`] }));
-                      setFolderLayers((prev) => ({ ...prev, [newFolderId]: [] }));
-                      setOpenFolders((prev) => ({ ...prev, [newFolderId]: true }));
+                      setLayerOrder((prev) => ({
+                        ...prev,
+                        [newFolderId]: [`${newFolderId}-main`],
+                      }));
+                      setFolderLayers((prev) => ({
+                        ...prev,
+                        [newFolderId]: [],
+                      }));
+                      setOpenFolders((prev) => ({
+                        ...prev,
+                        [newFolderId]: true,
+                      }));
                       setSelectedLayerId(`${newFolderId}-main`);
                     }
 
-                    const activeFolderId = getActiveFrameFolderId(selectedLayerId || "") ||
+                    const activeFolderId =
+                      getActiveFrameFolderId(selectedLayerId || "") ||
                       (() => {
                         const targetRowId = selectedRow || "row-1";
-                        const rowFrames = drawingFrames.filter((df) => df.rowId === targetRowId);
-                        const idx = rowFrames.length > 0 ? Math.max(...rowFrames.map((f) => f.frameIndex)) + 1 : 0;
+                        const rowFrames = drawingFrames.filter(
+                          (df) => df.rowId === targetRowId
+                        );
+                        const idx =
+                          rowFrames.length > 0
+                            ? Math.max(...rowFrames.map((f) => f.frameIndex)) +
+                              1
+                            : 0;
                         return `${targetRowId}-${idx}`;
                       })();
 
-                    // Ensure a new extra layer is created for this image
+                    // Ensure a new extra layer is created for this image (compute index deterministically)
+                    let newLayerId = "";
                     setFolderLayers((prev) => {
-                      const next = { ...prev } as any;
-                      if (!next[activeFolderId]) next[activeFolderId] = [];
-                      const newName = `Untitled.${(next[activeFolderId].length || 0) + 1}`;
-                      next[activeFolderId] = [...next[activeFolderId], newName];
-                      return next;
+                      const current = prev[activeFolderId] || [];
+                      newLayerId = `${activeFolderId}-extra-${current.length}`;
+                      return { ...prev, [activeFolderId]: [...current, `Untitled.${current.length + 1}`] } as any;
                     });
                     setLayerOrder((prev) => {
-                      const next = { ...prev } as any;
-                      if (!next[activeFolderId]) next[activeFolderId] = [`${activeFolderId}-main`];
-                      const newLayerId = `${activeFolderId}-extra-${next[activeFolderId].length}`;
-                      next[activeFolderId] = [...next[activeFolderId], newLayerId];
-                      return next;
+                      const base = prev[activeFolderId] || [`${activeFolderId}-main`];
+                      return { ...prev, [activeFolderId]: [...base, newLayerId] } as any;
                     });
-
-                    const newExtraIndex = (folderLayers[activeFolderId]?.length || 0);
-                    const newLayerId = `${activeFolderId}-extra-${newExtraIndex}`;
 
                     // Create an image stroke centered; minimal stroke contains metadata
                     const stroke: DrawingStroke = {
@@ -3276,7 +3298,8 @@ export function AnimationEditor({
                     // Upload to Storage if enabled, else use blob URL
                     let imageUrl = "";
                     let key: string | undefined = undefined;
-                    const enableStorage = process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
+                    const enableStorage =
+                      process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
                     if (
                       enableStorage &&
                       sceneSettings?.projectId &&
@@ -3285,18 +3308,35 @@ export function AnimationEditor({
                     ) {
                       try {
                         const bucket = "animation-scenes";
-                        const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
-                        const ts = new Date().toISOString().replace(/[:.]/g, "-");
-                        const keyBase = `${sceneSettings.projectId}/${sceneSettings.chapterId}/${sceneSettings.sequenceId}/${mode === "storyboard" ? `storyboard-${sceneSettings?.storyboardId || "unknown"}` : `shot-${sceneSettings?.shotId || "unknown"}`}`;
+                        const safeName = file.name.replace(
+                          /[^a-zA-Z0-9_.-]/g,
+                          "_"
+                        );
+                        const ts = new Date()
+                          .toISOString()
+                          .replace(/[:.]/g, "-");
+                        const keyBase = `${sceneSettings.projectId}/${
+                          sceneSettings.chapterId
+                        }/${sceneSettings.sequenceId}/${
+                          mode === "storyboard"
+                            ? `storyboard-${
+                                sceneSettings?.storyboardId || "unknown"
+                              }`
+                            : `shot-${sceneSettings?.shotId || "unknown"}`
+                        }`;
                         key = `${keyBase}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
                         const { error: upErr } = await supabase.storage
                           .from(bucket)
-                          .upload(key, file, { upsert: true, contentType: file.type });
+                          .upload(key, file, {
+                            upsert: true,
+                            contentType: file.type,
+                          });
                         if (!upErr) {
                           const { data: signed } = await supabase.storage
                             .from(bucket)
                             .createSignedUrl(key, 60 * 60 * 24);
-                          imageUrl = signed?.signedUrl || URL.createObjectURL(file);
+                          imageUrl =
+                            signed?.signedUrl || URL.createObjectURL(file);
                         } else {
                           imageUrl = URL.createObjectURL(file);
                         }
@@ -3307,11 +3347,15 @@ export function AnimationEditor({
                       imageUrl = URL.createObjectURL(file);
                     }
 
-                    // Attach to drawingFrames cell representing this folder's main index
+                    // Attach to drawingFrames cell representing this folder's page (for preview)
                     setDrawingFrames((prev) => {
-                      const [rowId, frameIndexStr] = activeFolderId.split("-").slice(0, 2);
-                      const frameIndex = parseInt(frameIndexStr);
-                      const exists = prev.find((df) => df.rowId === rowId && df.frameIndex === frameIndex);
+                      const parts = activeFolderId.split("-");
+                      const rowId = `${parts[0]}-${parts[1]}`;
+                      const frameIndex = parseInt(parts[2]);
+                      const exists = prev.find(
+                        (df) =>
+                          df.rowId === rowId && df.frameIndex === frameIndex
+                      );
                       if (exists) {
                         return prev.map((df) =>
                           df.rowId === rowId && df.frameIndex === frameIndex
@@ -3324,13 +3368,17 @@ export function AnimationEditor({
 
                     // Record key for re-signing later
                     if (key) {
+                      const parts = activeFolderId.split("-");
+                      const rowKey = `${parts[0]}-${parts[1]}`;
+                      const frameKey = parseInt(parts[2]);
                       setFrameAssetKeys((prev) => ({
                         ...prev,
-                        [`${activeFolderId.replace("-", "|")}`]: key,
+                        [`${rowKey}|${frameKey}`]: key,
                       }));
                     }
 
                     setSelectedLayerId(newLayerId);
+                    setSelectedFrameNumber(parseInt(activeFolderId.split("-")[2]) + 1);
                     saveToUndoStack();
                   }}
                   onMouseDown={startDrawing}
