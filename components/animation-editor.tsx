@@ -231,9 +231,16 @@ export function AnimationEditor({
     const initial =
       (mode === "storyboard"
         ? sceneSettings?.sequenceCode
-        : sceneSettings?.shotCode) || sceneSettings?.sceneName || "";
+        : sceneSettings?.shotCode) ||
+      sceneSettings?.sceneName ||
+      "";
     setDraftName(initial);
-  }, [mode, sceneSettings?.sequenceCode, sceneSettings?.shotCode, sceneSettings?.sceneName]);
+  }, [
+    mode,
+    sceneSettings?.sequenceCode,
+    sceneSettings?.shotCode,
+    sceneSettings?.sceneName,
+  ]);
   // Sync applied + draft settings whenever a new shot/scene is opened
   useEffect(() => {
     if (sceneSettings) {
@@ -3990,6 +3997,24 @@ export function AnimationEditor({
                     setAppliedHeight(draftHeight);
                     setAppliedFps(draftFps);
                     setNameOverride(draftName);
+
+                    // Persist name change to database (shots or sequences)
+                    try {
+                      if (mode === "storyboard" && sceneSettings?.sequenceId) {
+                        await supabase
+                          .from("sequences")
+                          .update({ code: draftName })
+                          .eq("id", sceneSettings.sequenceId);
+                      } else if (mode !== "storyboard" && sceneSettings?.shotId) {
+                        await supabase
+                          .from("shots")
+                          .update({ code: draftName })
+                          .eq("id", sceneSettings.shotId);
+                      }
+                    } catch (e) {
+                      console.warn("Failed to update name in DB", e);
+                    }
+
                     setIsSettingsOpen(false);
                   }}
                 >
