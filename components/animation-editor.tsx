@@ -342,19 +342,16 @@ export function AnimationEditor({
   ]);
   const [frameCount, setFrameCount] = useState(20);
   const [drawingFrames, setDrawingFrames] = useState<DrawingFrame[]>(() => {
-    // Create a background layer if scene settings are provided
-    if (sceneSettings) {
-      return [
-        {
-          rowId: "row-1",
-          frameIndex: 0,
-          length: 1,
-          imageUrl: "", // No image, just a background layer
-          fileName: `${sceneSettings.sceneName} - Background`,
-        },
-      ];
-    }
-    return [];
+    // Create a blank background page; layer name comes from layers list (Untitled.1)
+    return [
+      {
+        rowId: "row-1",
+        frameIndex: 0,
+        length: 1,
+        imageUrl: "",
+        fileName: "",
+      },
+    ];
   });
 
   const maxFrame = useMemo(() => {
@@ -2773,13 +2770,24 @@ export function AnimationEditor({
               Back to Creator Hub
             </Button>
             <Separator orientation="vertical" className="h-6" />
-            <h1 className="text-lg font-semibold">
-              {mode === "storyboard"
-                ? "Storyboard Editor"
-                : mode === "composite"
-                ? "Compositing Editor"
-                : "Animation Editor"}
-            </h1>
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-lg font-semibold">
+                {mode === "storyboard"
+                  ? "Storyboard Editor"
+                  : mode === "composite"
+                  ? "Compositing Editor"
+                  : "Animation Editor"}
+              </h1>
+              <span className="text-sm text-gray-400">
+                {mode === "storyboard" && sceneSettings?.sequenceId
+                  ? `(seq ${sceneSettings.sequenceId.slice(0, 4)})`
+                  : mode === "animate" && sceneSettings?.shotId
+                  ? `(shot ${sceneSettings.shotId.slice(0, 4)})`
+                  : mode === "composite" && sceneSettings?.chapterId
+                  ? `(chapter ${sceneSettings.chapterId.slice(0, 4)})`
+                  : null}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             {/* Undo/Redo Controls */}
