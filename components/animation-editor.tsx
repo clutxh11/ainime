@@ -2802,19 +2802,21 @@ export function AnimationEditor({
                   : "Animation Editor"}
               </h1>
               <span className="text-sm text-gray-400">
-                {mode === "storyboard"
-                  ? sceneSettings?.sequenceCode ||
-                    sceneSettings?.sequenceId?.slice(0, 4) ||
-                    null
-                  : mode === "animate"
-                  ? sceneSettings?.sequenceCode && sceneSettings?.shotCode
-                    ? `${sceneSettings.sequenceCode} - ${sceneSettings.shotCode}`
-                    : sceneSettings?.shotCode ||
-                      sceneSettings?.shotId?.slice(0, 4) ||
-                      null
-                  : mode === "composite" && sceneSettings?.chapterId
-                  ? `chapter ${sceneSettings.chapterId.slice(0, 4)}`
-                  : null}
+                {(() => {
+                  if (mode === "storyboard") {
+                    const seq = nameOverride || sceneSettings?.sequenceCode || sceneSettings?.sequenceId?.slice(0, 4);
+                    return seq || null;
+                  }
+                  if (mode === "animate") {
+                    const seq = sceneSettings?.sequenceCode || sceneSettings?.sequenceId?.slice(0, 4);
+                    const shot = nameOverride || sceneSettings?.shotCode || sceneSettings?.shotId?.slice(0, 4);
+                    return seq && shot ? `${seq} - ${shot}` : shot || null;
+                  }
+                  if (mode === "composite") {
+                    return sceneSettings?.chapterId ? `chapter ${sceneSettings.chapterId.slice(0, 4)}` : null;
+                  }
+                  return null;
+                })()}
               </span>
             </div>
           </div>
@@ -4005,7 +4007,10 @@ export function AnimationEditor({
                           .from("sequences")
                           .update({ code: draftName })
                           .eq("id", sceneSettings.sequenceId);
-                      } else if (mode !== "storyboard" && sceneSettings?.shotId) {
+                      } else if (
+                        mode !== "storyboard" &&
+                        sceneSettings?.shotId
+                      ) {
                         await supabase
                           .from("shots")
                           .update({ code: draftName })
