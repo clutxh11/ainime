@@ -211,6 +211,7 @@ export function AnimationEditor({
   const [nameOverride, setNameOverride] = useState<string | undefined>(
     undefined
   );
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   // Applied settings that drive the canvas and playback
   const [appliedWidth, setAppliedWidth] = useState<number>(
     sceneSettings?.canvasWidth ?? 1920
@@ -4048,25 +4049,45 @@ export function AnimationEditor({
                 <div className="mt-3 pt-3 border-t border-gray-700">
                   <button
                     className="w-full bg-red-900/60 hover:bg-red-900 text-white rounded px-3 py-2"
-                    onClick={async () => {
-                      const ok = window.confirm(
-                        "Delete this shot? This action cannot be undone."
-                      );
-                      if (!ok) return;
-                      try {
-                        await supabase
-                          .from("shots")
-                          .delete()
-                          .eq("id", sceneSettings.shotId);
-                        setIsSettingsOpen(false);
-                        onViewChange("project-detail");
-                      } catch (e) {
-                        console.error("Failed to delete shot", e);
-                      }
-                    }}
+                    onClick={() => setConfirmDeleteOpen((v) => !v)}
                   >
                     Delete Shot
                   </button>
+                  <div
+                    className={`overflow-hidden transition-all duration-200 ${
+                      confirmDeleteOpen ? "max-h-40 opacity-100 mt-2" : "max-h-0 opacity-0"
+                    }`}
+                  >
+                    <div className="bg-red-950/50 border border-red-800 rounded px-3 py-3 text-sm text-red-200">
+                      <div className="mb-2">Delete this shot? This action cannot be undone.</div>
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          className="px-3 py-1 rounded border border-gray-600 text-gray-200"
+                          onClick={() => setConfirmDeleteOpen(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="px-3 py-1 rounded bg-red-700 hover:bg-red-800 text-white"
+                          onClick={async () => {
+                            try {
+                              await supabase
+                                .from("shots")
+                                .delete()
+                                .eq("id", sceneSettings.shotId!);
+                              setIsSettingsOpen(false);
+                              setConfirmDeleteOpen(false);
+                              onViewChange("project-detail");
+                            } catch (e) {
+                              console.error("Failed to delete shot", e);
+                            }
+                          }}
+                        >
+                          OK, Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
