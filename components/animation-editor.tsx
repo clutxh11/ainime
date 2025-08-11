@@ -208,7 +208,9 @@ export function AnimationEditor({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   // Editable name in settings (shot or sequence)
   const [draftName, setDraftName] = useState<string>("");
-  const [nameOverride, setNameOverride] = useState<string | undefined>(undefined);
+  const [nameOverride, setNameOverride] = useState<string | undefined>(
+    undefined
+  );
   // Applied settings that drive the canvas and playback
   const [appliedWidth, setAppliedWidth] = useState<number>(
     sceneSettings?.canvasWidth ?? 1920
@@ -224,6 +226,14 @@ export function AnimationEditor({
   const [draftHeight, setDraftHeight] = useState<number>(appliedHeight);
   const [draftFps, setDraftFps] = useState<number>(appliedFps);
   const [isSaving, setIsSaving] = useState(false);
+  // Initialize draftName whenever sceneSettings changes
+  useEffect(() => {
+    const initial =
+      (mode === "storyboard"
+        ? sceneSettings?.sequenceCode
+        : sceneSettings?.shotCode) || sceneSettings?.sceneName || "";
+    setDraftName(initial);
+  }, [mode, sceneSettings?.sequenceCode, sceneSettings?.shotCode, sceneSettings?.sceneName]);
   // Sync applied + draft settings whenever a new shot/scene is opened
   useEffect(() => {
     if (sceneSettings) {
@@ -413,7 +423,7 @@ export function AnimationEditor({
     return {
       version: 1,
       sceneSettings: {
-        sceneName: (nameOverride ?? sceneSettings?.sceneName) ?? "Scene",
+        sceneName: nameOverride ?? sceneSettings?.sceneName ?? "Scene",
         width: appliedWidth,
         height: appliedHeight,
         fps: appliedFps,
@@ -2765,7 +2775,7 @@ export function AnimationEditor({
       {/* Top Navigation */}
       <nav className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex-shrink-0">
         <div className="flex items-center justify-between">
-      <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4">
             <Button
               variant="ghost"
               size="sm"
