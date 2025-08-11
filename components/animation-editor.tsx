@@ -2759,7 +2759,7 @@ export function AnimationEditor({
           </div>
           <div className="flex items-center gap-4">
             {/* Undo/Redo Controls */}
-          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -2769,7 +2769,7 @@ export function AnimationEditor({
                 title="Undo"
               >
                 <Undo className="w-4 h-4" />
-            </Button>
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -2852,14 +2852,14 @@ export function AnimationEditor({
           onMouseEnter={() => setIsHoveringToolbar(true)}
           onMouseLeave={() => setIsHoveringToolbar(false)}
         >
-        {/* Tool Sidebar */}
+          {/* Tool Sidebar */}
           <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-4 gap-2 flex-shrink-0">
-          {tools.map((tool) => (
-            <Button
-              key={tool.id}
+            {tools.map((tool) => (
+              <Button
+                key={tool.id}
                 variant={currentTool === tool.id ? "default" : "ghost"}
-              size="sm"
-              className="w-12 h-12 p-0"
+                size="sm"
+                className="w-12 h-12 p-0"
                 onClick={() => {
                   setCurrentTool(tool.id as any);
                   // Reset move tool state when switching tools
@@ -2876,17 +2876,17 @@ export function AnimationEditor({
                   }
                 }}
                 title={tool.label}
-            >
-              <tool.icon className="w-5 h-5" />
-            </Button>
-          ))}
+              >
+                <tool.icon className="w-5 h-5" />
+              </Button>
+            ))}
 
-          <Separator className="w-8 my-2" />
+            <Separator className="w-8 my-2" />
 
-          <Button
-            variant={onionSkin ? "default" : "ghost"}
-            size="sm"
-            className="w-12 h-12 p-0"
+            <Button
+              variant={onionSkin ? "default" : "ghost"}
+              size="sm"
+              className="w-12 h-12 p-0"
               onClick={() => {
                 console.log("Onion skin toggled:", !onionSkin);
                 setOnionSkin(!onionSkin);
@@ -2909,7 +2909,7 @@ export function AnimationEditor({
               title="Show Grid"
             >
               <Grid className="w-5 h-5" />
-          </Button>
+            </Button>
           </div>
 
           {/* Sliding Settings Panel */}
@@ -3233,7 +3233,7 @@ export function AnimationEditor({
                 onClick={handleCutSelectedStrokes}
               >
                 Cut
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3241,7 +3241,7 @@ export function AnimationEditor({
                 onClick={handleCopySelectedStrokes}
               >
                 Copy
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3249,7 +3249,7 @@ export function AnimationEditor({
                 onClick={handleDeleteSelectedStrokes}
               >
                 Delete
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3266,7 +3266,7 @@ export function AnimationEditor({
               >
                 Resize
               </Button>
-              </div>
+            </div>
           )}
 
           {/* Timeline - hidden in storyboard mode */}
@@ -3308,7 +3308,7 @@ export function AnimationEditor({
           <div className="flex-shrink-0">
             {/* Folders toolbar (Add/Delete Frame) shown above Layers */}
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-200">Folders</h3>
+              <h3 className="text-lg font-semibold">Folders</h3>
               <div className="flex items-center gap-2">
                 <Button
                   size="icon"
@@ -3333,7 +3333,7 @@ export function AnimationEditor({
 
             {/* Header: Layers Title + Action Buttons */}
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-lg font-semibold">Layers</h2>
+              <h2 className="text-sm font-medium text-gray-200">Layers</h2>
               <div className="flex items-center gap-2">
                 <Button
                   size="icon"
@@ -3600,8 +3600,8 @@ export function AnimationEditor({
               ))}
             </div>
           </ScrollArea>
-          </div>
         </div>
+      </div>
 
       {/* Settings Modal */}
       {isSettingsOpen && (
@@ -3624,7 +3624,7 @@ export function AnimationEditor({
                   value={sceneSettings?.sceneName ?? "Scene"}
                   disabled
                 />
-      </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
@@ -3638,7 +3638,7 @@ export function AnimationEditor({
                       setDraftWidth(parseInt(e.target.value || "0", 10))
                     }
                   />
-    </div>
+                </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
                     Height
