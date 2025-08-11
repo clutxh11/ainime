@@ -424,6 +424,8 @@ export function AnimationEditor({
       uiState: { currentFrame, selectedRow, zoom, onionSkin, showGrid },
       // Persist per-frame asset keys so we can re-sign URLs on load
       frameAssetKeys,
+      // Storyboard: persist custom page names
+      folderNames,
     } as const;
   }, [
     sceneSettings?.sceneName,
@@ -442,17 +444,20 @@ export function AnimationEditor({
     onionSkin,
     showGrid,
     frameAssetKeys,
+    folderNames,
   ]);
 
   const saveScene = useCallback(async () => {
-    if (!sceneSettings?.shotId) return;
+    const isStoryboard = mode === "storyboard";
+    const targetId = isStoryboard ? sceneSettings?.storyboardId : sceneSettings?.shotId;
+    if (!targetId) return;
     try {
       setIsSaving(true);
       // Read existing data to merge manifest/history
       const { data: row, error: readErr } = await supabase
-        .from("shots")
+        .from(isStoryboard ? "storyboards" : "shots")
         .select("data")
-        .eq("id", sceneSettings.shotId)
+        .eq("id", targetId)
         .maybeSingle();
       if (readErr) console.error("Failed to read shot row:", readErr);
       const baseData = (row?.data as any) || {};
@@ -465,11 +470,10 @@ export function AnimationEditor({
       const enableStorage =
         process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
-      const pId = sceneSettings.projectId || "unknown-project";
-      const cId = sceneSettings.chapterId || "unknown-chapter";
-      const sId = sceneSettings.sequenceId || "unknown-seq";
-      const shId = sceneSettings.shotId;
-      const key = `${pId}/${cId}/${sId}/${shId}/scene/scene-${ts}.json`;
+      const pId = sceneSettings?.projectId || "unknown-project";
+      const cId = sceneSettings?.chapterId || "unknown-chapter";
+      const sId = sceneSettings?.sequenceId || "unknown-seq";
+      const key = `${pId}/${cId}/${sId}/${isStoryboard ? `storyboard-${targetId}` : `shot-${targetId}`}/scene/scene-${ts}.json`;
 
       let uploadOk = false;
       if (enableStorage) {
@@ -525,15 +529,17 @@ export function AnimationEditor({
       } as any;
 
       const { error } = await supabase
-        .from("shots")
+        .from(isStoryboard ? "storyboards" : "shots")
         .update({ data: merged })
-        .eq("id", sceneSettings.shotId);
+        .eq("id", targetId);
       if (error) console.error("Failed to save scene:", error);
     } finally {
       setIsSaving(false);
     }
   }, [
+    mode,
     sceneSettings?.shotId,
+    sceneSettings?.storyboardId,
     sceneSettings?.projectId,
     sceneSettings?.chapterId,
     sceneSettings?.sequenceId,
@@ -545,11 +551,13 @@ export function AnimationEditor({
 
   useEffect(() => {
     const load = async () => {
-      if (!sceneSettings?.shotId) return;
+      const isStoryboard = mode === "storyboard";
+      const targetId = isStoryboard ? sceneSettings?.storyboardId : sceneSettings?.shotId;
+      if (!targetId) return;
       const { data: row, error } = await supabase
-        .from("shots")
+        .from(isStoryboard ? "storyboards" : "shots")
         .select("data")
-        .eq("id", sceneSettings.shotId)
+        .eq("id", targetId)
         .maybeSingle();
       if (error) return;
       const data: any = row?.data || {};
@@ -599,6 +607,9 @@ export function AnimationEditor({
           setOnionSkin(doc.uiState.onionSkin);
         if (typeof doc.uiState?.showGrid === "boolean")
           setShowGrid(doc.uiState.showGrid);
+        if (doc.folderNames && typeof doc.folderNames === "object") {
+          setFolderNames(doc.folderNames);
+        }
         if (doc.frameAssetKeys && typeof doc.frameAssetKeys === "object") {
           setFrameAssetKeys(doc.frameAssetKeys);
           // If storage enabled, re-sign URLs for any drawingFrames that have a stored key
@@ -640,7 +651,7 @@ export function AnimationEditor({
       }
     };
     load();
-  }, [sceneSettings?.shotId]);
+  }, [mode, sceneSettings?.shotId, sceneSettings?.storyboardId]);
 
   // Set initial current layer
 
@@ -3463,19 +3474,27 @@ export function AnimationEditor({
                         <input
                           className="text-xs bg-gray-800 text-white px-2 py-1 rounded border border-gray-600"
                           value={editingFolderValue}
-                          onChange={(e) => setEditingFolderValue(e.target.value)}
+                          onChange={(e) =>
+                            setEditingFolderValue(e.target.value)
+                          }
                           onBlur={() => {
-                            setFolderNames((prev) => ({ ...prev, [folder.id]: editingFolderValue || folder.label }));
+                            setFolderNames((prev) => ({
+                              ...prev,
+                              [folder.id]: editingFolderValue || folder.label,
+                            }));
                             setEditingFolderId(null);
                             setEditingFolderValue("");
                           }}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              setFolderNames((prev) => ({ ...prev, [folder.id]: editingFolderValue || folder.label }));
+                            if (e.key === "Enter") {
+                              setFolderNames((prev) => ({
+                                ...prev,
+                                [folder.id]: editingFolderValue || folder.label,
+                              }));
                               setEditingFolderId(null);
                               setEditingFolderValue("");
                             }
-                            if (e.key === 'Escape') {
+                            if (e.key === "Escape") {
                               setEditingFolderId(null);
                               setEditingFolderValue("");
                             }
@@ -3483,7 +3502,9 @@ export function AnimationEditor({
                           autoFocus
                         />
                       ) : (
-                        <span className="font-medium text-xs">{folder.label}</span>
+                        <span className="font-medium text-xs">
+                          {folder.label}
+                        </span>
                       )}
                     </div>
                     {/* Up/Down arrows for reordering */}
@@ -3521,7 +3542,9 @@ export function AnimationEditor({
                         onClick={(e) => {
                           e.stopPropagation();
                           setEditingFolderId(folder.id);
-                          setEditingFolderValue(folderNames[folder.id] || folder.label);
+                          setEditingFolderValue(
+                            folderNames[folder.id] || folder.label
+                          );
                         }}
                       >
                         <Edit3 className="w-3 h-3" />
