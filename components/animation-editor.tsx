@@ -2782,11 +2782,15 @@ export function AnimationEditor({
               </h1>
               <span className="text-sm text-gray-400">
                 {mode === "storyboard"
-                  ? sceneSettings?.sequenceCode || sceneSettings?.sequenceId?.slice(0, 4) || null
+                  ? sceneSettings?.sequenceCode ||
+                    sceneSettings?.sequenceId?.slice(0, 4) ||
+                    null
                   : mode === "animate"
                   ? sceneSettings?.sequenceCode && sceneSettings?.shotCode
                     ? `${sceneSettings.sequenceCode} - ${sceneSettings.shotCode}`
-                    : sceneSettings?.shotCode || sceneSettings?.shotId?.slice(0, 4) || null
+                    : sceneSettings?.shotCode ||
+                      sceneSettings?.shotId?.slice(0, 4) ||
+                      null
                   : mode === "composite" && sceneSettings?.chapterId
                   ? `chapter ${sceneSettings.chapterId.slice(0, 4)}`
                   : null}

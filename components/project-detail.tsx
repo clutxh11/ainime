@@ -783,7 +783,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
         shotId: shot.id,
         shotCode: shot.code,
         projectTitle: project?.title || "Project",
-        sceneName: `SHOT ${shot.code}`,
+        sceneName: `${shot.code}`,
         canvasWidth: shot?.data?.width || 1920,
         canvasHeight: shot?.data?.height || 1080,
         frameRate: shot?.data?.fps || 24,
@@ -841,7 +841,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
         sequenceCode: shotSetup.sequenceCode,
         shotCode: shotSetup.shotCode,
         projectTitle: project?.title || "Project",
-        sceneName: `SHOT ${shotSetup.shotCode}`,
+        sceneName: `${shotSetup.shotCode}`,
         canvasWidth: setupWidth,
         canvasHeight: setupHeight,
         frameRate: setupFps,
@@ -1403,7 +1403,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                         >
                                           <span className={`w-2 h-2 rounded-full ${getShotDotClasses(shot.status)}`} />
                                           <span className="text-gray-100 font-medium tracking-wide">
-                                            SHOT {shot.code}
+                                            {shot.code}
                                           </span>
                                           {shot.status && (
                                             <span className={`rounded-full px-2 py-0.5 text-[10px] ${getShotStatusClasses(shot.status)}`}>
@@ -2351,7 +2351,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
             <div>
               <label className="text-sm text-gray-300 mb-2 block">Shot Name</label>
               <Input
-                value={shotSetup ? `SHOT ${shotSetup.shotCode}` : ""}
+                value={shotSetup ? `${shotSetup.shotCode}` : ""}
                 disabled
                 className="bg-gray-700 border-gray-600 text-white"
               />
