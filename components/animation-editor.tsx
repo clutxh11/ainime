@@ -206,6 +206,9 @@ export function AnimationEditor({
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // Editable name in settings (shot or sequence)
+  const [draftName, setDraftName] = useState<string>("");
+  const [nameOverride, setNameOverride] = useState<string | undefined>(undefined);
   // Applied settings that drive the canvas and playback
   const [appliedWidth, setAppliedWidth] = useState<number>(
     sceneSettings?.canvasWidth ?? 1920
@@ -410,7 +413,7 @@ export function AnimationEditor({
     return {
       version: 1,
       sceneSettings: {
-        sceneName: sceneSettings?.sceneName ?? "Scene",
+        sceneName: (nameOverride ?? sceneSettings?.sceneName) ?? "Scene",
         width: appliedWidth,
         height: appliedHeight,
         fps: appliedFps,
@@ -428,6 +431,7 @@ export function AnimationEditor({
     } as const;
   }, [
     sceneSettings?.sceneName,
+    nameOverride,
     appliedWidth,
     appliedHeight,
     appliedFps,
@@ -2761,7 +2765,7 @@ export function AnimationEditor({
       {/* Top Navigation */}
       <nav className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4">
             <Button
               variant="ghost"
               size="sm"
@@ -3901,17 +3905,17 @@ export function AnimationEditor({
           />
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-white mb-4">
-              Scene Settings
+              {mode === "storyboard" ? "Sequence Settings" : "Shot Settings"}
             </h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm text-gray-300 mb-1">
-                  Scene Name
+                  {mode === "storyboard" ? "Sequence Name" : "Shot Name"}
                 </label>
                 <input
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-300"
-                  value={sceneSettings?.sceneName ?? "Scene"}
-                  disabled
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -3975,6 +3979,7 @@ export function AnimationEditor({
                     setAppliedWidth(draftWidth);
                     setAppliedHeight(draftHeight);
                     setAppliedFps(draftFps);
+                    setNameOverride(draftName);
                     setIsSettingsOpen(false);
                   }}
                 >
