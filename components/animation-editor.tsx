@@ -234,10 +234,17 @@ export function AnimationEditor({
   const [exportFolderName, setExportFolderName] = useState<string>(
     (sceneSettings?.sceneName || "Export").replace(/\s+/g, "_")
   );
-  const [exportFileName, setExportFileName] = useState<string>(
-    (sceneSettings?.sceneName || "scene").replace(/\s+/g, "_")
+  // File naming scheme: for now only frame-folder shorthand (e.g., R1F1)
+  const [exportNameScheme, setExportNameScheme] = useState<"frame-folder">(
+    "frame-folder"
   );
+  const [exportFormat, setExportFormat] = useState<"png" | "jpg" | "webp">(
+    "png"
+  );
+  const [exportRowAllFrames, setExportRowAllFrames] = useState(false);
   const [exportLayersMerge, setExportLayersMerge] = useState<boolean>(true);
+  // Optional native folder picker handle (File System Access API)
+  const [exportDirHandle, setExportDirHandle] = useState<any | null>(null);
   // Initialize draftName whenever sceneSettings changes
   useEffect(() => {
     const initial =
@@ -2832,8 +2839,9 @@ export function AnimationEditor({
   }, []);
 
   // Now that drawFrame exists, define export using it
-  handleExport = useCallback(() => {
+handleExport = useCallback(async () => {
     try {
+    const exportCell = async (rowId: string, frameIndex: number) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
@@ -2852,18 +2860,43 @@ export function AnimationEditor({
       offCtx.drawImage(canvas, 0, 0);
       setShowGrid(prevShowGrid);
 
-      const dataUrl = off.toDataURL("image/png");
-      const link = document.createElement("a");
-      const safeFolder = exportFolderName || "Export";
-      const safeFile = exportFileName || "scene";
-      link.download = `${safeFolder}_${safeFile}.png`;
-      link.href = dataUrl;
-      link.click();
+      const ext = exportFormat;
+      const mime = ext === "jpg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
+      const dataUrl = off.toDataURL(mime, 0.92);
+      const fileBase = `R${rowId.split("-")[1]}F${frameIndex + 1}`; // frame-folder naming
+
+      if (exportDirHandle?.getFileHandle) {
+        const fileHandle = await exportDirHandle.getFileHandle(`${fileBase}.${ext}`, { create: true });
+        const writable = await fileHandle.createWritable();
+        const res = await fetch(dataUrl);
+        await writable.write(await res.arrayBuffer());
+        await writable.close();
+      } else {
+        const link = document.createElement("a");
+        link.download = `${exportFolderName || "Export"}_${fileBase}.${ext}`;
+        link.href = dataUrl;
+        link.click();
+      }
+    };
+
+    if (exportRowAllFrames && selectedRow) {
+      const frames = drawingFrames
+        .filter((df) => df.rowId === selectedRow)
+        .map((df) => df.frameIndex)
+        .sort((a, b) => a - b);
+      for (const fi of frames) {
+        await exportCell(selectedRow, fi);
+      }
+    } else {
+      const rowId = selectedRow || "row-1";
+      const frameIndex = selectedFrameNumber ? selectedFrameNumber - 1 : 0;
+      await exportCell(rowId, frameIndex);
+    }
       setIsExportOpen(false);
     } catch (e) {
       console.warn("Export failed", e);
     }
-  }, [appliedWidth, appliedHeight, drawFrame, exportFolderName, exportFileName, showGrid]);
+}, [appliedWidth, appliedHeight, drawFrame, exportFolderName, exportFormat, exportRowAllFrames, selectedRow, selectedFrameNumber, showGrid, drawingFrames, exportDirHandle]);
 
   return (
     <div className="h-screen bg-gray-900 text-white flex flex-col overflow-hidden">
@@ -2919,11 +2952,11 @@ export function AnimationEditor({
                   return null;
                 })()}
               </span>
-          </div>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             {/* Undo/Redo Controls */}
-          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -2933,7 +2966,7 @@ export function AnimationEditor({
                 title="Undo"
               >
                 <Undo className="w-4 h-4" />
-            </Button>
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -3029,14 +3062,14 @@ export function AnimationEditor({
             onMouseEnter={() => setIsHoveringToolbar(true)}
             onMouseLeave={() => setIsHoveringToolbar(false)}
           >
-        {/* Tool Sidebar */}
+            {/* Tool Sidebar */}
             <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-4 gap-2 flex-shrink-0">
-          {tools.map((tool) => (
-            <Button
-              key={tool.id}
+              {tools.map((tool) => (
+                <Button
+                  key={tool.id}
                   variant={currentTool === tool.id ? "default" : "ghost"}
-              size="sm"
-              className="w-12 h-12 p-0"
+                  size="sm"
+                  className="w-12 h-12 p-0"
                   onClick={() => {
                     setCurrentTool(tool.id as any);
                     // Reset move tool state when switching tools
@@ -3053,17 +3086,17 @@ export function AnimationEditor({
                     }
                   }}
                   title={tool.label}
-            >
-              <tool.icon className="w-5 h-5" />
-            </Button>
-          ))}
+                >
+                  <tool.icon className="w-5 h-5" />
+                </Button>
+              ))}
 
-          <Separator className="w-8 my-2" />
+              <Separator className="w-8 my-2" />
 
-          <Button
-            variant={onionSkin ? "default" : "ghost"}
-            size="sm"
-            className="w-12 h-12 p-0"
+              <Button
+                variant={onionSkin ? "default" : "ghost"}
+                size="sm"
+                className="w-12 h-12 p-0"
                 onClick={() => {
                   console.log("Onion skin toggled:", !onionSkin);
                   setOnionSkin(!onionSkin);
@@ -3086,67 +3119,122 @@ export function AnimationEditor({
                 title="Show Grid"
               >
                 <Grid className="w-5 h-5" />
-          </Button>
-        </div>
-
-      {/* Export Modal */}
-      {isExportOpen && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setIsExportOpen(false)}
-          />
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-white mb-4">Export</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-300 mb-1">Export folder name</label>
-                <input
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-                  value={exportFolderName}
-                  onChange={(e) => setExportFolderName(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-300 mb-1">File name</label>
-                <input
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-                  value={exportFileName}
-                  onChange={(e) => setExportFileName(e.target.value)}
-                />
-              </div>
-              {mode === "animate" && (
-                <div className="flex items-center gap-2">
-                  <input
-                    id="mergeLayers"
-                    type="checkbox"
-                    className="accent-blue-500"
-                    checked={exportLayersMerge}
-                    onChange={(e) => setExportLayersMerge(e.target.checked)}
-                  />
-                  <label htmlFor="mergeLayers" className="text-sm text-gray-300">
-                    Export layers not in animation folders
-                  </label>
-                </div>
-              )}
-              <div className="flex gap-2 pt-2 justify-end">
-                <button
-                  className="border border-gray-600 text-gray-300 rounded px-3 py-2"
-                  onClick={() => setIsExportOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-2"
-                  onClick={handleExport}
-                >
-                  Export
-                </button>
-              </div>
+              </Button>
             </div>
-          </div>
-        </div>
-      )}
+
+            {/* Export Modal */}
+            {isExportOpen && (
+              <div className="fixed inset-0 z-50">
+                <div
+                  className="absolute inset-0 bg-black/50"
+                  onClick={() => setIsExportOpen(false)}
+                />
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
+                  <h3 className="text-lg font-semibold text-white mb-4">Export</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-gray-300 mb-1">Export folder</label>
+                      <div className="flex gap-2">
+                        <input
+                          className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                          value={exportFolderName}
+                          onChange={(e) => setExportFolderName(e.target.value)}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-gray-600"
+                          onClick={async () => {
+                            try {
+                              // @ts-ignore
+                              if (window.showDirectoryPicker) {
+                                // @ts-ignore
+                                const handle = await window.showDirectoryPicker();
+                                setExportDirHandle(handle);
+                                setExportFolderName(handle.name || exportFolderName);
+                              }
+                            } catch (e) {
+                              console.warn("Folder chooser unavailable", e);
+                            }
+                          }}
+                        >
+                          Choose…
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-300 mb-1">File name</label>
+                      <select
+                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                        value={exportNameScheme}
+                        onChange={(e) => setExportNameScheme(e.target.value as any)}
+                      >
+                        <option value="frame-folder">Frame folder name</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-300 mb-1">File format</label>
+                      <select
+                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                        value={exportFormat}
+                        onChange={(e) => setExportFormat(e.target.value as any)}
+                      >
+                        <option value="png">PNG (.png)</option>
+                        <option value="jpg">JPEG (.jpg)</option>
+                        <option value="webp">WEBP (.webp)</option>
+                      </select>
+                    </div>
+                    {mode === "animate" && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          id="mergeLayers"
+                          type="checkbox"
+                          className="accent-blue-500"
+                          checked={exportLayersMerge}
+                          onChange={(e) =>
+                            setExportLayersMerge(e.target.checked)
+                          }
+                        />
+                        <label
+                          htmlFor="mergeLayers"
+                          className="text-sm text-gray-300"
+                        >
+                          Export layers not in animation folders
+                        </label>
+                      </div>
+                    )}
+                    {mode === "animate" && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          id="rowAll"
+                          type="checkbox"
+                          className="accent-blue-500"
+                          checked={exportRowAllFrames}
+                          onChange={(e) => setExportRowAllFrames(e.target.checked)}
+                        />
+                        <label htmlFor="rowAll" className="text-sm text-gray-300">
+                          Export selected entire row
+                        </label>
+                      </div>
+                    )}
+                    <div className="flex gap-2 pt-2 justify-end">
+                      <button
+                        className="border border-gray-600 text-gray-300 rounded px-3 py-2"
+                        onClick={() => setIsExportOpen(false)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-2"
+                        onClick={handleExport}
+                      >
+                        Export
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Sliding Settings Panel */}
             <div
@@ -3677,7 +3765,7 @@ export function AnimationEditor({
                 onClick={handleCutSelectedStrokes}
               >
                 Cut
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3685,7 +3773,7 @@ export function AnimationEditor({
                 onClick={handleCopySelectedStrokes}
               >
                 Copy
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3693,7 +3781,7 @@ export function AnimationEditor({
                 onClick={handleDeleteSelectedStrokes}
               >
                 Delete
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3710,7 +3798,7 @@ export function AnimationEditor({
               >
                 Resize
               </Button>
-              </div>
+            </div>
           )}
 
           {/* Timeline - hidden in storyboard mode */}
@@ -3754,7 +3842,7 @@ export function AnimationEditor({
             {mode === "storyboard" && (
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold">Folders</h3>
-              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3763,7 +3851,7 @@ export function AnimationEditor({
                     title="Add Frame"
                   >
                     <Plus className="w-5 h-5" />
-                </Button>
+                  </Button>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3772,9 +3860,9 @@ export function AnimationEditor({
                     title="Delete Frame"
                   >
                     <Trash2 className="w-5 h-5" />
-                </Button>
+                  </Button>
+                </div>
               </div>
-            </div>
             )}
 
             {/* Header: Layers Title + Action Buttons */}
@@ -4095,8 +4183,8 @@ export function AnimationEditor({
               ))}
             </div>
           </ScrollArea>
-          </div>
         </div>
+      </div>
 
       {/* Settings Modal */}
       {isSettingsOpen && (
@@ -4132,7 +4220,7 @@ export function AnimationEditor({
                   onChange={(e) => setDraftName(e.target.value)}
                   disabled={mode === "composite"}
                 />
-      </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
@@ -4146,7 +4234,7 @@ export function AnimationEditor({
                       setDraftWidth(parseInt(e.target.value || "0", 10))
                     }
                   />
-    </div>
+                </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
                     Height
