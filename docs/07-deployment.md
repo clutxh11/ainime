@@ -12,7 +12,7 @@
 
 ### Storage
 
-- Buckets: `animation-scenes` (private), `animation-compositions` (private), `series-assets` (public or signed)
+- Buckets: `animation-assets` (private), `series-assets` (public or signed)
 - Policies: authenticated read/write for scenes/compositions; public read (signed) for viewer delivery
 
 ### Realtime

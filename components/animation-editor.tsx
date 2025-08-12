@@ -65,9 +65,9 @@ interface AnimationEditorProps {
     canvasHeight: number;
     frameRate: number;
     projectId?: string;
-      projectTitle?: string;
+    projectTitle?: string;
     chapterId?: string;
-      chapterTitle?: string;
+    chapterTitle?: string;
     sequenceId?: string;
     shotId?: string;
     storyboardId?: string;
@@ -526,7 +526,7 @@ export function AnimationEditor({
       const doc = serializeDocument();
 
       // 2) Upload versioned JSON into Storage
-      const bucket = "animation-scenes"; // Ensure this bucket exists and allows authenticated uploads
+      const bucket = process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
       const enableStorage =
         process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
@@ -547,9 +547,9 @@ export function AnimationEditor({
         const sequencePart = `${slugifyName(sceneSettings?.sequenceCode)}-${
           sceneSettings?.sequenceId || "unknown-seq"
         }`;
-        key = `${projectPart}/${chapterPart}/${sequencePart}/shot-${
-          slugifyName(sceneSettings?.shotCode)
-        }-${sceneSettings?.shotId || targetId}/shot/scene-${ts}.json`;
+        key = `${projectPart}/${chapterPart}/${sequencePart}/shot-${slugifyName(
+          sceneSettings?.shotCode
+        )}-${sceneSettings?.shotId || targetId}/shot/scene-${ts}.json`;
       }
 
       let uploadOk = false;
@@ -680,7 +680,7 @@ export function AnimationEditor({
       if (enableStorage && latestKey) {
         try {
           const { data: file, error: dlErr } = await supabase.storage
-            .from("animation-scenes")
+            .from(process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets")
             .download(latestKey);
           if (!dlErr && file) {
             const text = await file.text();
@@ -723,7 +723,7 @@ export function AnimationEditor({
           const enableStorage =
             process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
           if (enableStorage) {
-            const bucket = "animation-scenes";
+            const bucket = process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
             const entries: Array<[string, string]> = Object.entries(
               doc.frameAssetKeys
             );
@@ -1797,14 +1797,22 @@ export function AnimationEditor({
           sceneSettings?.shotId
         ) {
           try {
-            const bucket = "animation-scenes";
+            const bucket = process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
             const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
             const ts = new Date().toISOString().replace(/[:.]/g, "-");
             // Per-shot frame assets
-            const projectPart = `${slugifyName(sceneSettings.projectTitle)}-${sceneSettings.projectId}`;
-            const chapterPart = `${slugifyName(sceneSettings.chapterTitle)}-${sceneSettings.chapterId}`;
-            const sequencePart = `${slugifyName(sceneSettings.sequenceCode)}-${sceneSettings.sequenceId}`;
-            const shotPart = `shot-${slugifyName(sceneSettings.shotCode)}-${sceneSettings.shotId}`;
+            const projectPart = `${slugifyName(sceneSettings.projectTitle)}-${
+              sceneSettings.projectId
+            }`;
+            const chapterPart = `${slugifyName(sceneSettings.chapterTitle)}-${
+              sceneSettings.chapterId
+            }`;
+            const sequencePart = `${slugifyName(sceneSettings.sequenceCode)}-${
+              sceneSettings.sequenceId
+            }`;
+            const shotPart = `shot-${slugifyName(sceneSettings.shotCode)}-${
+              sceneSettings.shotId
+            }`;
             key = `${projectPart}/${chapterPart}/${sequencePart}/${shotPart}/assets/frames/${rowId}/${frameIndex}/${ts}-${safeName}`;
             const { error: upErr } = await supabase.storage
               .from(bucket)
@@ -3804,7 +3812,7 @@ export function AnimationEditor({
                       sceneSettings?.sequenceId
                     ) {
                       try {
-                        const bucket = "animation-scenes";
+                        const bucket = process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
                         const safeName = file.name.replace(
                           /[^a-zA-Z0-9_.-]/g,
                           "_"
@@ -3812,14 +3820,22 @@ export function AnimationEditor({
                         const ts = new Date()
                           .toISOString()
                           .replace(/[:.]/g, "-");
-                        const projectPart = `${slugifyName(sceneSettings.projectTitle)}-${sceneSettings.projectId}`;
-                        const chapterPart = `${slugifyName(sceneSettings.chapterTitle)}-${sceneSettings.chapterId}`;
+                        const projectPart = `${slugifyName(
+                          sceneSettings.projectTitle
+                        )}-${sceneSettings.projectId}`;
+                        const chapterPart = `${slugifyName(
+                          sceneSettings.chapterTitle
+                        )}-${sceneSettings.chapterId}`;
                         if (mode === "storyboard") {
                           const sbId = sceneSettings?.storyboardId || "unknown";
                           key = `${projectPart}/${chapterPart}/storyboard-${sbId}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
                         } else {
-                          const sequencePart = `${slugifyName(sceneSettings.sequenceCode)}-${sceneSettings.sequenceId}`;
-                          const shotPart = `shot-${slugifyName(sceneSettings.shotCode)}-${sceneSettings.shotId || "unknown"}`;
+                          const sequencePart = `${slugifyName(
+                            sceneSettings.sequenceCode
+                          )}-${sceneSettings.sequenceId}`;
+                          const shotPart = `shot-${slugifyName(
+                            sceneSettings.shotCode
+                          )}-${sceneSettings.shotId || "unknown"}`;
                           key = `${projectPart}/${chapterPart}/${sequencePart}/${shotPart}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
                         }
                         const { error: upErr } = await supabase.storage

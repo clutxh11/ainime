@@ -15,7 +15,7 @@ series-assets/
 
 ### Animated scenes (editor)
 
-animation-scenes/
+animation-assets/
 
 - {projectId}/{chapterId}/{sequenceId}/{shotId}/
   - scene/scene-<timestamp>.json (snapshot)
