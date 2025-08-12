@@ -65,7 +65,9 @@ interface AnimationEditorProps {
     canvasHeight: number;
     frameRate: number;
     projectId?: string;
+      projectTitle?: string;
     chapterId?: string;
+      chapterTitle?: string;
     sequenceId?: string;
     shotId?: string;
     storyboardId?: string;
@@ -167,6 +169,18 @@ function getFileNameBase(url?: string) {
 function getFileNameBaseFromString(name?: string) {
   if (!name) return "";
   return name.split(".")[0];
+}
+
+// Helper to slugify names for storage path readability
+function slugifyName(input?: string) {
+  if (!input) return "untitled";
+  return input
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-_]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
 }
 
 const getLassoBoundingBox = (points: Point[]) => {
@@ -516,18 +530,27 @@ export function AnimationEditor({
       const enableStorage =
         process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
-      const pId = sceneSettings?.projectId || "unknown-project";
-      const cId = sceneSettings?.chapterId || "unknown-chapter";
-      const sId = isComposite
-        ? "composition"
-        : sceneSettings?.sequenceId || "unknown-seq";
-      const key = `${pId}/${cId}/${sId}/${
-        isStoryboard
-          ? `storyboard-${targetId}`
-          : isComposite
-          ? `composition-${targetId}`
-          : `shot-${targetId}`
-      }/scene/scene-${ts}.json`;
+      const projectPart = `${slugifyName(sceneSettings?.projectTitle)}-${
+        sceneSettings?.projectId || "unknown-project"
+      }`;
+      const chapterPart = `${slugifyName(sceneSettings?.chapterTitle)}-${
+        sceneSettings?.chapterId || "unknown-chapter"
+      }`;
+      let key = "";
+      if (isStoryboard) {
+        key = `${projectPart}/${chapterPart}/storyboard-${
+          sceneSettings?.storyboardId || targetId
+        }/storyboard/storyboard-${ts}.json`;
+      } else if (isComposite) {
+        key = `${projectPart}/${chapterPart}/composition-${targetId}/composition/scene-${ts}.json`;
+      } else {
+        const sequencePart = `${slugifyName(sceneSettings?.sequenceCode)}-${
+          sceneSettings?.sequenceId || "unknown-seq"
+        }`;
+        key = `${projectPart}/${chapterPart}/${sequencePart}/shot-${
+          slugifyName(sceneSettings?.shotCode)
+        }-${sceneSettings?.shotId || targetId}/shot/scene-${ts}.json`;
+      }
 
       let uploadOk = false;
       if (enableStorage) {
@@ -1778,7 +1801,11 @@ export function AnimationEditor({
             const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
             const ts = new Date().toISOString().replace(/[:.]/g, "-");
             // Per-shot frame assets
-            key = `${sceneSettings.projectId}/${sceneSettings.chapterId}/${sceneSettings.sequenceId}/${sceneSettings.shotId}/assets/frames/${rowId}/${frameIndex}/${ts}-${safeName}`;
+            const projectPart = `${slugifyName(sceneSettings.projectTitle)}-${sceneSettings.projectId}`;
+            const chapterPart = `${slugifyName(sceneSettings.chapterTitle)}-${sceneSettings.chapterId}`;
+            const sequencePart = `${slugifyName(sceneSettings.sequenceCode)}-${sceneSettings.sequenceId}`;
+            const shotPart = `shot-${slugifyName(sceneSettings.shotCode)}-${sceneSettings.shotId}`;
+            key = `${projectPart}/${chapterPart}/${sequencePart}/${shotPart}/assets/frames/${rowId}/${frameIndex}/${ts}-${safeName}`;
             const { error: upErr } = await supabase.storage
               .from(bucket)
               .upload(key, file, { upsert: true, contentType: file.type });
@@ -3071,11 +3098,11 @@ export function AnimationEditor({
                   return null;
                 })()}
               </span>
-          </div>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             {/* Undo/Redo Controls */}
-          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -3085,7 +3112,7 @@ export function AnimationEditor({
                 title="Undo"
               >
                 <Undo className="w-4 h-4" />
-            </Button>
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -3181,14 +3208,14 @@ export function AnimationEditor({
             onMouseEnter={() => setIsHoveringToolbar(true)}
             onMouseLeave={() => setIsHoveringToolbar(false)}
           >
-        {/* Tool Sidebar */}
+            {/* Tool Sidebar */}
             <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-4 gap-2 flex-shrink-0">
-          {tools.map((tool) => (
-            <Button
-              key={tool.id}
+              {tools.map((tool) => (
+                <Button
+                  key={tool.id}
                   variant={currentTool === tool.id ? "default" : "ghost"}
-              size="sm"
-              className="w-12 h-12 p-0"
+                  size="sm"
+                  className="w-12 h-12 p-0"
                   onClick={() => {
                     setCurrentTool(tool.id as any);
                     // Reset move tool state when switching tools
@@ -3205,17 +3232,17 @@ export function AnimationEditor({
                     }
                   }}
                   title={tool.label}
-            >
-              <tool.icon className="w-5 h-5" />
-            </Button>
-          ))}
+                >
+                  <tool.icon className="w-5 h-5" />
+                </Button>
+              ))}
 
-          <Separator className="w-8 my-2" />
+              <Separator className="w-8 my-2" />
 
-          <Button
-            variant={onionSkin ? "default" : "ghost"}
-            size="sm"
-            className="w-12 h-12 p-0"
+              <Button
+                variant={onionSkin ? "default" : "ghost"}
+                size="sm"
+                className="w-12 h-12 p-0"
                 onClick={() => {
                   console.log("Onion skin toggled:", !onionSkin);
                   setOnionSkin(!onionSkin);
@@ -3238,8 +3265,8 @@ export function AnimationEditor({
                 title="Show Grid"
               >
                 <Grid className="w-5 h-5" />
-          </Button>
-        </div>
+              </Button>
+            </div>
 
             {/* Export Modal */}
             {isExportOpen && (
@@ -3785,16 +3812,16 @@ export function AnimationEditor({
                         const ts = new Date()
                           .toISOString()
                           .replace(/[:.]/g, "-");
-                        const keyBase = `${sceneSettings.projectId}/${
-                          sceneSettings.chapterId
-                        }/${sceneSettings.sequenceId}/${
-                          mode === "storyboard"
-                            ? `storyboard-${
-                                sceneSettings?.storyboardId || "unknown"
-                              }`
-                            : `shot-${sceneSettings?.shotId || "unknown"}`
-                        }`;
-                        key = `${keyBase}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
+                        const projectPart = `${slugifyName(sceneSettings.projectTitle)}-${sceneSettings.projectId}`;
+                        const chapterPart = `${slugifyName(sceneSettings.chapterTitle)}-${sceneSettings.chapterId}`;
+                        if (mode === "storyboard") {
+                          const sbId = sceneSettings?.storyboardId || "unknown";
+                          key = `${projectPart}/${chapterPart}/storyboard-${sbId}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
+                        } else {
+                          const sequencePart = `${slugifyName(sceneSettings.sequenceCode)}-${sceneSettings.sequenceId}`;
+                          const shotPart = `shot-${slugifyName(sceneSettings.shotCode)}-${sceneSettings.shotId || "unknown"}`;
+                          key = `${projectPart}/${chapterPart}/${sequencePart}/${shotPart}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
+                        }
                         const { error: upErr } = await supabase.storage
                           .from(bucket)
                           .upload(key, file, {
@@ -3913,7 +3940,7 @@ export function AnimationEditor({
                 onClick={handleCutSelectedStrokes}
               >
                 Cut
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3921,7 +3948,7 @@ export function AnimationEditor({
                 onClick={handleCopySelectedStrokes}
               >
                 Copy
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3929,7 +3956,7 @@ export function AnimationEditor({
                 onClick={handleDeleteSelectedStrokes}
               >
                 Delete
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3946,7 +3973,7 @@ export function AnimationEditor({
               >
                 Resize
               </Button>
-              </div>
+            </div>
           )}
 
           {/* Timeline - hidden in storyboard mode */}
@@ -3990,7 +4017,7 @@ export function AnimationEditor({
             {mode === "storyboard" && (
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold">Folders</h3>
-              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3999,7 +4026,7 @@ export function AnimationEditor({
                     title="Add Frame"
                   >
                     <Plus className="w-5 h-5" />
-                </Button>
+                  </Button>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -4008,9 +4035,9 @@ export function AnimationEditor({
                     title="Delete Frame"
                   >
                     <Trash2 className="w-5 h-5" />
-                </Button>
+                  </Button>
+                </div>
               </div>
-            </div>
             )}
 
             {/* Header: Layers Title + Action Buttons */}
@@ -4331,8 +4358,8 @@ export function AnimationEditor({
               ))}
             </div>
           </ScrollArea>
-          </div>
         </div>
+      </div>
 
       {/* Settings Modal */}
       {isSettingsOpen && (
@@ -4368,7 +4395,7 @@ export function AnimationEditor({
                   onChange={(e) => setDraftName(e.target.value)}
                   disabled={mode === "composite"}
                 />
-      </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
@@ -4382,7 +4409,7 @@ export function AnimationEditor({
                       setDraftWidth(parseInt(e.target.value || "0", 10))
                     }
                   />
-    </div>
+                </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
                     Height
