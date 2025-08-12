@@ -53,6 +53,7 @@ import {
 import type { CurrentView } from "@/types";
 import TimelineGrid, { DrawingFrame } from "./timeline-grid";
 import { supabase } from "@/lib/supabase";
+import { getOrCreateComposition, updateCompositionData } from "@/lib/sequences";
 
 type EditorMode = "animate" | "storyboard" | "composite";
 
@@ -228,6 +229,7 @@ export function AnimationEditor({
   const [draftHeight, setDraftHeight] = useState<number>(appliedHeight);
   const [draftFps, setDraftFps] = useState<number>(appliedFps);
   const [isSaving, setIsSaving] = useState(false);
+  const [compositionId, setCompositionId] = useState<string | null>(null);
   // Initialize draftName whenever sceneSettings changes
   useEffect(() => {
     const initial =
@@ -471,15 +473,18 @@ export function AnimationEditor({
 
   const saveScene = useCallback(async () => {
     const isStoryboard = mode === "storyboard";
+    const isComposite = mode === "composite";
     const targetId = isStoryboard
       ? sceneSettings?.storyboardId
+      : isComposite
+      ? compositionId
       : sceneSettings?.shotId;
     if (!targetId) return;
     try {
       setIsSaving(true);
       // Read existing data to merge manifest/history
       const { data: row, error: readErr } = await supabase
-        .from(isStoryboard ? "storyboards" : "shots")
+        .from(isStoryboard ? "storyboards" : isComposite ? "compositions" : "shots")
         .select("data")
         .eq("id", targetId)
         .maybeSingle();
@@ -496,9 +501,9 @@ export function AnimationEditor({
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const pId = sceneSettings?.projectId || "unknown-project";
       const cId = sceneSettings?.chapterId || "unknown-chapter";
-      const sId = sceneSettings?.sequenceId || "unknown-seq";
+      const sId = isComposite ? "composition" : sceneSettings?.sequenceId || "unknown-seq";
       const key = `${pId}/${cId}/${sId}/${
-        isStoryboard ? `storyboard-${targetId}` : `shot-${targetId}`
+        isStoryboard ? `storyboard-${targetId}` : isComposite ? `composition-${targetId}` : `shot-${targetId}`
       }/scene/scene-${ts}.json`;
 
       let uploadOk = false;
@@ -555,7 +560,7 @@ export function AnimationEditor({
       } as any;
 
       const { error } = await supabase
-        .from(isStoryboard ? "storyboards" : "shots")
+        .from(isStoryboard ? "storyboards" : isComposite ? "compositions" : "shots")
         .update({ data: merged })
         .eq("id", targetId);
       if (error) console.error("Failed to save scene:", error);
@@ -578,12 +583,28 @@ export function AnimationEditor({
   useEffect(() => {
     const load = async () => {
       const isStoryboard = mode === "storyboard";
+      // Ensure composition exists
+      if (mode === "composite" && sceneSettings?.projectId && sceneSettings?.chapterId) {
+        try {
+          const comp = await getOrCreateComposition({
+            projectId: sceneSettings.projectId,
+            chapterId: sceneSettings.chapterId,
+            title: sceneSettings.sceneName,
+          });
+          if (comp) setCompositionId(comp.id);
+        } catch (e) {
+          console.warn("Failed to initialize composition", e);
+        }
+      }
+      const isCompositeLoad = mode === "composite";
       const targetId = isStoryboard
         ? sceneSettings?.storyboardId
+        : isCompositeLoad
+        ? compositionId
         : sceneSettings?.shotId;
       if (!targetId) return;
       const { data: row, error } = await supabase
-        .from(isStoryboard ? "storyboards" : "shots")
+        .from(isStoryboard ? "storyboards" : isCompositeLoad ? "compositions" : "shots")
         .select("data")
         .eq("id", targetId)
         .maybeSingle();

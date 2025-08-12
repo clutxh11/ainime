@@ -26,6 +26,47 @@ export interface Shot {
   updated_at: string;
 }
 
+// Composition model for chapter-level compositing
+export interface Composition {
+  id: string;
+  project_id: string;
+  chapter_id: string;
+  title?: string;
+  data?: any;
+}
+
+export async function getOrCreateComposition(params: {
+  projectId: string;
+  chapterId: string;
+  title?: string;
+}): Promise<Composition | null> {
+  const { projectId, chapterId, title } = params;
+  const { data: existing, error: selErr } = await supabase
+    .from("compositions")
+    .select("id, project_id, chapter_id, title, data")
+    .eq("chapter_id", chapterId)
+    .maybeSingle();
+  if (!selErr && existing) return existing as Composition;
+
+  const { data: created, error: insErr } = await supabase
+    .from("compositions")
+    .insert({ project_id: projectId, chapter_id: chapterId, title })
+    .select("id, project_id, chapter_id, title, data")
+    .single();
+  if (insErr) {
+    console.warn("Failed to create composition", insErr);
+    return null;
+  }
+  return created as Composition;
+}
+
+export async function updateCompositionData(
+  compositionId: string,
+  data: any
+) {
+  await supabase.from("compositions").update({ data }).eq("id", compositionId);
+}
+
 export interface Storyboard {
   id: string;
   project_id: string;
