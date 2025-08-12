@@ -230,6 +230,14 @@ export function AnimationEditor({
   const [draftFps, setDraftFps] = useState<number>(appliedFps);
   const [isSaving, setIsSaving] = useState(false);
   const [compositionId, setCompositionId] = useState<string | null>(null);
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [exportFolderName, setExportFolderName] = useState<string>(
+    (sceneSettings?.sceneName || "Export").replace(/\s+/g, "_")
+  );
+  const [exportFileName, setExportFileName] = useState<string>(
+    (sceneSettings?.sceneName || "scene").replace(/\s+/g, "_")
+  );
+  const [exportLayersMerge, setExportLayersMerge] = useState<boolean>(true);
   // Initialize draftName whenever sceneSettings changes
   useEffect(() => {
     const initial =
@@ -484,7 +492,9 @@ export function AnimationEditor({
       setIsSaving(true);
       // Read existing data to merge manifest/history
       const { data: row, error: readErr } = await supabase
-        .from(isStoryboard ? "storyboards" : isComposite ? "compositions" : "shots")
+        .from(
+          isStoryboard ? "storyboards" : isComposite ? "compositions" : "shots"
+        )
         .select("data")
         .eq("id", targetId)
         .maybeSingle();
@@ -501,9 +511,15 @@ export function AnimationEditor({
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const pId = sceneSettings?.projectId || "unknown-project";
       const cId = sceneSettings?.chapterId || "unknown-chapter";
-      const sId = isComposite ? "composition" : sceneSettings?.sequenceId || "unknown-seq";
+      const sId = isComposite
+        ? "composition"
+        : sceneSettings?.sequenceId || "unknown-seq";
       const key = `${pId}/${cId}/${sId}/${
-        isStoryboard ? `storyboard-${targetId}` : isComposite ? `composition-${targetId}` : `shot-${targetId}`
+        isStoryboard
+          ? `storyboard-${targetId}`
+          : isComposite
+          ? `composition-${targetId}`
+          : `shot-${targetId}`
       }/scene/scene-${ts}.json`;
 
       let uploadOk = false;
@@ -560,7 +576,9 @@ export function AnimationEditor({
       } as any;
 
       const { error } = await supabase
-        .from(isStoryboard ? "storyboards" : isComposite ? "compositions" : "shots")
+        .from(
+          isStoryboard ? "storyboards" : isComposite ? "compositions" : "shots"
+        )
         .update({ data: merged })
         .eq("id", targetId);
       if (error) console.error("Failed to save scene:", error);
@@ -584,7 +602,11 @@ export function AnimationEditor({
     const load = async () => {
       const isStoryboard = mode === "storyboard";
       // Ensure composition exists
-      if (mode === "composite" && sceneSettings?.projectId && sceneSettings?.chapterId) {
+      if (
+        mode === "composite" &&
+        sceneSettings?.projectId &&
+        sceneSettings?.chapterId
+      ) {
         try {
           const comp = await getOrCreateComposition({
             projectId: sceneSettings.projectId,
@@ -604,7 +626,13 @@ export function AnimationEditor({
         : sceneSettings?.shotId;
       if (!targetId) return;
       const { data: row, error } = await supabase
-        .from(isStoryboard ? "storyboards" : isCompositeLoad ? "compositions" : "shots")
+        .from(
+          isStoryboard
+            ? "storyboards"
+            : isCompositeLoad
+            ? "compositions"
+            : "shots"
+        )
         .select("data")
         .eq("id", targetId)
         .maybeSingle();
@@ -853,6 +881,9 @@ export function AnimationEditor({
     },
     [layerVisibility, layerOpacities, layerStrokes, drawStrokes]
   );
+
+  // Export handler: defined after drawFrame to avoid hoist ordering issues
+  let handleExport = useCallback(() => {}, []);
 
   // Update drawFrame to render images from drawingFrames
   const drawFrame = useCallback(() => {
@@ -2800,6 +2831,40 @@ export function AnimationEditor({
     };
   }, []);
 
+  // Now that drawFrame exists, define export using it
+  handleExport = useCallback(() => {
+    try {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const off = document.createElement("canvas");
+      off.width = appliedWidth;
+      off.height = appliedHeight;
+      const offCtx = off.getContext("2d");
+      if (!offCtx) return;
+
+      offCtx.fillStyle = "#ffffff";
+      offCtx.fillRect(0, 0, off.width, off.height);
+
+      const prevShowGrid = showGrid;
+      setShowGrid(false);
+      drawFrame();
+      offCtx.drawImage(canvas, 0, 0);
+      setShowGrid(prevShowGrid);
+
+      const dataUrl = off.toDataURL("image/png");
+      const link = document.createElement("a");
+      const safeFolder = exportFolderName || "Export";
+      const safeFile = exportFileName || "scene";
+      link.download = `${safeFolder}_${safeFile}.png`;
+      link.href = dataUrl;
+      link.click();
+      setIsExportOpen(false);
+    } catch (e) {
+      console.warn("Export failed", e);
+    }
+  }, [appliedWidth, appliedHeight, drawFrame, exportFolderName, exportFileName, showGrid]);
+
   return (
     <div className="h-screen bg-gray-900 text-white flex flex-col overflow-hidden">
       {/* Top Navigation */}
@@ -2854,11 +2919,11 @@ export function AnimationEditor({
                   return null;
                 })()}
               </span>
-            </div>
+          </div>
           </div>
           <div className="flex items-center gap-4">
             {/* Undo/Redo Controls */}
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -2868,7 +2933,7 @@ export function AnimationEditor({
                 title="Undo"
               >
                 <Undo className="w-4 h-4" />
-              </Button>
+            </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -2929,6 +2994,18 @@ export function AnimationEditor({
               Settings
             </Button>
 
+            {/* Export */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-gray-400 bg-transparent border-gray-600"
+              onClick={() => setIsExportOpen(true)}
+              title="Export"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -2952,14 +3029,14 @@ export function AnimationEditor({
             onMouseEnter={() => setIsHoveringToolbar(true)}
             onMouseLeave={() => setIsHoveringToolbar(false)}
           >
-            {/* Tool Sidebar */}
+        {/* Tool Sidebar */}
             <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-4 gap-2 flex-shrink-0">
-              {tools.map((tool) => (
-                <Button
-                  key={tool.id}
+          {tools.map((tool) => (
+            <Button
+              key={tool.id}
                   variant={currentTool === tool.id ? "default" : "ghost"}
-                  size="sm"
-                  className="w-12 h-12 p-0"
+              size="sm"
+              className="w-12 h-12 p-0"
                   onClick={() => {
                     setCurrentTool(tool.id as any);
                     // Reset move tool state when switching tools
@@ -2976,17 +3053,17 @@ export function AnimationEditor({
                     }
                   }}
                   title={tool.label}
-                >
-                  <tool.icon className="w-5 h-5" />
-                </Button>
-              ))}
+            >
+              <tool.icon className="w-5 h-5" />
+            </Button>
+          ))}
 
-              <Separator className="w-8 my-2" />
+          <Separator className="w-8 my-2" />
 
-              <Button
-                variant={onionSkin ? "default" : "ghost"}
-                size="sm"
-                className="w-12 h-12 p-0"
+          <Button
+            variant={onionSkin ? "default" : "ghost"}
+            size="sm"
+            className="w-12 h-12 p-0"
                 onClick={() => {
                   console.log("Onion skin toggled:", !onionSkin);
                   setOnionSkin(!onionSkin);
@@ -3009,8 +3086,67 @@ export function AnimationEditor({
                 title="Show Grid"
               >
                 <Grid className="w-5 h-5" />
-              </Button>
+          </Button>
+        </div>
+
+      {/* Export Modal */}
+      {isExportOpen && (
+        <div className="fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setIsExportOpen(false)}
+          />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-white mb-4">Export</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">Export folder name</label>
+                <input
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                  value={exportFolderName}
+                  onChange={(e) => setExportFolderName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">File name</label>
+                <input
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                  value={exportFileName}
+                  onChange={(e) => setExportFileName(e.target.value)}
+                />
+              </div>
+              {mode === "animate" && (
+                <div className="flex items-center gap-2">
+                  <input
+                    id="mergeLayers"
+                    type="checkbox"
+                    className="accent-blue-500"
+                    checked={exportLayersMerge}
+                    onChange={(e) => setExportLayersMerge(e.target.checked)}
+                  />
+                  <label htmlFor="mergeLayers" className="text-sm text-gray-300">
+                    Export layers not in animation folders
+                  </label>
+                </div>
+              )}
+              <div className="flex gap-2 pt-2 justify-end">
+                <button
+                  className="border border-gray-600 text-gray-300 rounded px-3 py-2"
+                  onClick={() => setIsExportOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-2"
+                  onClick={handleExport}
+                >
+                  Export
+                </button>
+              </div>
             </div>
+          </div>
+        </div>
+      )}
 
             {/* Sliding Settings Panel */}
             <div
@@ -3541,7 +3677,7 @@ export function AnimationEditor({
                 onClick={handleCutSelectedStrokes}
               >
                 Cut
-              </Button>
+                </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3549,7 +3685,7 @@ export function AnimationEditor({
                 onClick={handleCopySelectedStrokes}
               >
                 Copy
-              </Button>
+                </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3557,7 +3693,7 @@ export function AnimationEditor({
                 onClick={handleDeleteSelectedStrokes}
               >
                 Delete
-              </Button>
+                </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3574,7 +3710,7 @@ export function AnimationEditor({
               >
                 Resize
               </Button>
-            </div>
+              </div>
           )}
 
           {/* Timeline - hidden in storyboard mode */}
@@ -3618,7 +3754,7 @@ export function AnimationEditor({
             {mode === "storyboard" && (
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold">Folders</h3>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3627,7 +3763,7 @@ export function AnimationEditor({
                     title="Add Frame"
                   >
                     <Plus className="w-5 h-5" />
-                  </Button>
+                </Button>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3636,9 +3772,9 @@ export function AnimationEditor({
                     title="Delete Frame"
                   >
                     <Trash2 className="w-5 h-5" />
-                  </Button>
-                </div>
+                </Button>
               </div>
+            </div>
             )}
 
             {/* Header: Layers Title + Action Buttons */}
@@ -3959,8 +4095,8 @@ export function AnimationEditor({
               ))}
             </div>
           </ScrollArea>
+          </div>
         </div>
-      </div>
 
       {/* Settings Modal */}
       {isSettingsOpen && (
@@ -3996,7 +4132,7 @@ export function AnimationEditor({
                   onChange={(e) => setDraftName(e.target.value)}
                   disabled={mode === "composite"}
                 />
-              </div>
+      </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
@@ -4010,7 +4146,7 @@ export function AnimationEditor({
                       setDraftWidth(parseInt(e.target.value || "0", 10))
                     }
                   />
-                </div>
+    </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
                     Height
