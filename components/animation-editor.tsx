@@ -908,7 +908,12 @@ export function AnimationEditor({
       includeGrid: boolean
     ) => {
       targetCtx.save();
-      targetCtx.clearRect(0, 0, targetCtx.canvas.width, targetCtx.canvas.height);
+      targetCtx.clearRect(
+        0,
+        0,
+        targetCtx.canvas.width,
+        targetCtx.canvas.height
+      );
 
       // White background
       targetCtx.fillStyle = "#ffffff";
@@ -2934,15 +2939,15 @@ export function AnimationEditor({
   // Now that drawFrame exists, define export using it
   handleExport = useCallback(async () => {
     try {
-    const exportCell = async (rowId: string, frameIndex: number) => {
-      const off = document.createElement("canvas");
-      off.width = appliedWidth;
-      off.height = appliedHeight;
-      const offCtx = off.getContext("2d");
-      if (!offCtx) return;
+      const exportCell = async (rowId: string, frameIndex: number) => {
+        const off = document.createElement("canvas");
+        off.width = appliedWidth;
+        off.height = appliedHeight;
+        const offCtx = off.getContext("2d");
+        if (!offCtx) return;
 
-      // Render exact frame directly to offscreen, excluding grid
-      await renderFrameToContext(frameIndex, offCtx, false);
+        // Render exact frame directly to offscreen, excluding grid
+        await renderFrameToContext(frameIndex, offCtx, false);
 
         const ext = exportFormat;
         const mime =
@@ -2972,9 +2977,9 @@ export function AnimationEditor({
       };
 
       // Helper to switch frame, wait for next paint, then export
-    const exportAt = async (_rowId: string, frameIndex: number) => {
-      await exportCell(_rowId, frameIndex);
-    };
+      const exportAt = async (_rowId: string, frameIndex: number) => {
+        await exportCell(_rowId, frameIndex);
+      };
 
       if (exportRowAllFrames && selectedRow) {
         const frames = drawingFrames
@@ -3249,9 +3254,10 @@ export function AnimationEditor({
                       </label>
                       <div className="flex gap-2">
                         <input
-                          className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                          className="flex-1 bg-gray-700/80 border border-gray-600 rounded px-3 py-2 text-gray-300 cursor-not-allowed"
                           value={exportFolderName}
-                          onChange={(e) => setExportFolderName(e.target.value)}
+                          readOnly
+                          disabled
                         />
                         <Button
                           variant="ghost"
@@ -3260,13 +3266,14 @@ export function AnimationEditor({
                           title="Choose folder"
                           onClick={async () => {
                             try {
-                              // @ts-expect-error experimental API
-                              if (window.showDirectoryPicker) {
-                                // @ts-expect-error experimental API
-                                const handle = await window.showDirectoryPicker();
+                              const anyWindow: any = window as any;
+                              if (anyWindow.showDirectoryPicker) {
+                                const handle = await anyWindow.showDirectoryPicker();
                                 setExportDirHandle(handle);
-                                const pathName =
-                                  handle.name || exportFolderName;
+                                let pathName = handle.name || exportFolderName;
+                                if (pathName.length > 48) {
+                                  pathName = pathName.slice(0, 22) + "…" + pathName.slice(-22);
+                                }
                                 setExportFolderName(pathName);
                               } else {
                                 // Fallback: inform user browser does not support folder picking
