@@ -2335,6 +2335,11 @@ export function AnimationEditor({
       const firstFrame = drawingFrames[0];
       const firstLayerId = `${firstFrame.rowId}-${firstFrame.frameIndex}-main`;
       setSelectedLayerId(firstLayerId);
+      // Ensure the timeline selection mirrors the default selection
+      setSelectedRow(firstFrame.rowId);
+      setSelectedFrameNumber(firstFrame.frameIndex + 1);
+      // Trigger an initial draw if the canvas is ready
+      requestAnimationFrame(() => drawFrame());
     }
   }, [drawingFrames]); // Run only when drawingFrames array changes
 
@@ -3066,11 +3071,11 @@ export function AnimationEditor({
                   return null;
                 })()}
               </span>
-            </div>
+          </div>
           </div>
           <div className="flex items-center gap-4">
             {/* Undo/Redo Controls */}
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -3080,7 +3085,7 @@ export function AnimationEditor({
                 title="Undo"
               >
                 <Undo className="w-4 h-4" />
-              </Button>
+            </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -3176,14 +3181,14 @@ export function AnimationEditor({
             onMouseEnter={() => setIsHoveringToolbar(true)}
             onMouseLeave={() => setIsHoveringToolbar(false)}
           >
-            {/* Tool Sidebar */}
+        {/* Tool Sidebar */}
             <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-4 gap-2 flex-shrink-0">
-              {tools.map((tool) => (
-                <Button
-                  key={tool.id}
+          {tools.map((tool) => (
+            <Button
+              key={tool.id}
                   variant={currentTool === tool.id ? "default" : "ghost"}
-                  size="sm"
-                  className="w-12 h-12 p-0"
+              size="sm"
+              className="w-12 h-12 p-0"
                   onClick={() => {
                     setCurrentTool(tool.id as any);
                     // Reset move tool state when switching tools
@@ -3200,17 +3205,17 @@ export function AnimationEditor({
                     }
                   }}
                   title={tool.label}
-                >
-                  <tool.icon className="w-5 h-5" />
-                </Button>
-              ))}
+            >
+              <tool.icon className="w-5 h-5" />
+            </Button>
+          ))}
 
-              <Separator className="w-8 my-2" />
+          <Separator className="w-8 my-2" />
 
-              <Button
-                variant={onionSkin ? "default" : "ghost"}
-                size="sm"
-                className="w-12 h-12 p-0"
+          <Button
+            variant={onionSkin ? "default" : "ghost"}
+            size="sm"
+            className="w-12 h-12 p-0"
                 onClick={() => {
                   console.log("Onion skin toggled:", !onionSkin);
                   setOnionSkin(!onionSkin);
@@ -3233,8 +3238,8 @@ export function AnimationEditor({
                 title="Show Grid"
               >
                 <Grid className="w-5 h-5" />
-              </Button>
-            </div>
+          </Button>
+        </div>
 
             {/* Export Modal */}
             {isExportOpen && (
@@ -3268,11 +3273,15 @@ export function AnimationEditor({
                             try {
                               const anyWindow: any = window as any;
                               if (anyWindow.showDirectoryPicker) {
-                                const handle = await anyWindow.showDirectoryPicker();
+                                const handle =
+                                  await anyWindow.showDirectoryPicker();
                                 setExportDirHandle(handle);
                                 let pathName = handle.name || exportFolderName;
                                 if (pathName.length > 48) {
-                                  pathName = pathName.slice(0, 22) + "…" + pathName.slice(-22);
+                                  pathName =
+                                    pathName.slice(0, 22) +
+                                    "…" +
+                                    pathName.slice(-22);
                                 }
                                 setExportFolderName(pathName);
                               } else {
@@ -3904,7 +3913,7 @@ export function AnimationEditor({
                 onClick={handleCutSelectedStrokes}
               >
                 Cut
-              </Button>
+                </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3912,7 +3921,7 @@ export function AnimationEditor({
                 onClick={handleCopySelectedStrokes}
               >
                 Copy
-              </Button>
+                </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3920,7 +3929,7 @@ export function AnimationEditor({
                 onClick={handleDeleteSelectedStrokes}
               >
                 Delete
-              </Button>
+                </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3937,7 +3946,7 @@ export function AnimationEditor({
               >
                 Resize
               </Button>
-            </div>
+              </div>
           )}
 
           {/* Timeline - hidden in storyboard mode */}
@@ -3981,7 +3990,7 @@ export function AnimationEditor({
             {mode === "storyboard" && (
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold">Folders</h3>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3990,7 +3999,7 @@ export function AnimationEditor({
                     title="Add Frame"
                   >
                     <Plus className="w-5 h-5" />
-                  </Button>
+                </Button>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3999,9 +4008,9 @@ export function AnimationEditor({
                     title="Delete Frame"
                   >
                     <Trash2 className="w-5 h-5" />
-                  </Button>
-                </div>
+                </Button>
               </div>
+            </div>
             )}
 
             {/* Header: Layers Title + Action Buttons */}
@@ -4322,8 +4331,8 @@ export function AnimationEditor({
               ))}
             </div>
           </ScrollArea>
+          </div>
         </div>
-      </div>
 
       {/* Settings Modal */}
       {isSettingsOpen && (
@@ -4359,7 +4368,7 @@ export function AnimationEditor({
                   onChange={(e) => setDraftName(e.target.value)}
                   disabled={mode === "composite"}
                 />
-              </div>
+      </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
@@ -4373,7 +4382,7 @@ export function AnimationEditor({
                       setDraftWidth(parseInt(e.target.value || "0", 10))
                     }
                   />
-                </div>
+    </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
                     Height
