@@ -203,7 +203,8 @@ export function AnimationEditor({
   const [currentFrame, setCurrentFrame] = useState(1);
   const [currentLayer, setCurrentLayer] = useState<string>("");
   const [onionSkin, setOnionSkin] = useState(false);
-  const [showGrid, setShowGrid] = useState(true);
+  // In compositing mode the grid toggle button is hidden, so default grid OFF
+  const [showGrid, setShowGrid] = useState(mode === "composite" ? false : true);
   const [zoom, setZoom] = useState(1);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   // Editable name in settings (shot or sequence)
@@ -3589,8 +3590,8 @@ export function AnimationEditor({
         <div className="w-80 bg-gray-800 border-l border-gray-700 p-4 flex flex-col">
           {/* Top Controls Area */}
           <div className="flex-shrink-0">
-            {/* Folders toolbar (Storyboard only) */}
-            {mode === "storyboard" && (
+            {/* Folders toolbar (Storyboard and Composite) */}
+            {(mode === "storyboard" || mode === "composite") && (
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold">Folders</h3>
                 <div className="flex items-center gap-2">
