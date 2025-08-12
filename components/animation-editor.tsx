@@ -963,9 +963,9 @@ export function AnimationEditor({
         }
       }
 
-      // Draw current frame layers from all rows in order
+      // Draw current frame layers from all rows in order (respect extended length)
       const framesForIndex = drawingFrames.filter(
-        (df) => df.frameIndex === frameIndex
+        (df) => frameIndex >= df.frameIndex && frameIndex < df.frameIndex + (df.length || 1)
       );
       for (const frame of framesForIndex) {
         const folderId = `${frame.rowId}-${frame.frameIndex}`;
@@ -1130,9 +1130,12 @@ export function AnimationEditor({
       }
     }
 
-    // 5. Draw current frame layers from all rows in the correct order
+    // 5. Draw current frame layers from all rows in the correct order (respect extended length)
     for (const frame of drawingFrames.filter(
-      (df) => df.frameIndex === frameNumber
+      (df) =>
+        typeof frameNumber === "number" &&
+        frameNumber >= df.frameIndex &&
+        frameNumber < df.frameIndex + (df.length || 1)
     )) {
       const folderId = `${frame.rowId}-${frame.frameIndex}`;
       const orderedLayers = layerOrder[folderId] || [];
@@ -2613,8 +2616,7 @@ export function AnimationEditor({
       const position = indicesInFrame.indexOf(currentAbsoluteIndex);
       if (position === -1) return prev;
 
-      const targetPos =
-        direction === "up" ? position - 1 : position + 1;
+      const targetPos = direction === "up" ? position - 1 : position + 1;
       if (targetPos < 0 || targetPos >= indicesInFrame.length) return prev; // no-op at edges
 
       const swapA = indicesInFrame[position];
@@ -2626,8 +2628,10 @@ export function AnimationEditor({
     saveToUndoStack();
   };
 
-  const moveFrameFolderUp = (folderId: string) => reorderFrameFolder(folderId, "up");
-  const moveFrameFolderDown = (folderId: string) => reorderFrameFolder(folderId, "down");
+  const moveFrameFolderUp = (folderId: string) =>
+    reorderFrameFolder(folderId, "up");
+  const moveFrameFolderDown = (folderId: string) =>
+    reorderFrameFolder(folderId, "down");
 
   const handleCloseContextMenu = () => {
     setContextMenu({ visible: false, x: 0, y: 0 });
