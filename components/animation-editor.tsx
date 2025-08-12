@@ -243,9 +243,8 @@ export function AnimationEditor({
   const [exportRowAllFrames, setExportRowAllFrames] = useState(false);
   const [exportLayersMerge, setExportLayersMerge] = useState<boolean>(true);
   // Optional native folder picker handle (File System Access API)
-  // We avoid using the File System Access API to prevent browser permission prompts
-  // and fall back to standard downloads. This handle is no longer used.
-  const [exportDirHandle] = useState<any | null>(null);
+  // Optional native folder handle (if user chooses one)
+  const [exportDirHandle, setExportDirHandle] = useState<any | null>(null);
   // Initialize draftName whenever sceneSettings changes
   useEffect(() => {
     const initial =
@@ -2888,27 +2887,27 @@ export function AnimationEditor({
         }
       };
 
-    // Helper to switch frame, wait for next paint, then export
-    const exportAt = async (rowId: string, frameIndex: number) => {
-      setSelectedRow(rowId);
-      setSelectedFrameNumber(frameIndex + 1);
-      await new Promise((r) => requestAnimationFrame(() => r(null)));
-      await exportCell(rowId, frameIndex);
-    };
+      // Helper to switch frame, wait for next paint, then export
+      const exportAt = async (rowId: string, frameIndex: number) => {
+        setSelectedRow(rowId);
+        setSelectedFrameNumber(frameIndex + 1);
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+        await exportCell(rowId, frameIndex);
+      };
 
-    if (exportRowAllFrames && selectedRow) {
-      const frames = drawingFrames
-        .filter((df) => df.rowId === selectedRow)
-        .map((df) => df.frameIndex)
-        .sort((a, b) => a - b);
-      for (const fi of frames) {
-        await exportAt(selectedRow, fi);
+      if (exportRowAllFrames && selectedRow) {
+        const frames = drawingFrames
+          .filter((df) => df.rowId === selectedRow)
+          .map((df) => df.frameIndex)
+          .sort((a, b) => a - b);
+        for (const fi of frames) {
+          await exportAt(selectedRow, fi);
+        }
+      } else {
+        const rowId = selectedRow || "row-1";
+        const frameIndex = selectedFrameNumber ? selectedFrameNumber - 1 : 0;
+        await exportAt(rowId, frameIndex);
       }
-    } else {
-      const rowId = selectedRow || "row-1";
-      const frameIndex = selectedFrameNumber ? selectedFrameNumber - 1 : 0;
-      await exportAt(rowId, frameIndex);
-    }
       setIsExportOpen(false);
     } catch (e) {
       console.warn("Export failed", e);
@@ -2981,11 +2980,11 @@ export function AnimationEditor({
                   return null;
                 })()}
               </span>
-            </div>
+          </div>
           </div>
           <div className="flex items-center gap-4">
             {/* Undo/Redo Controls */}
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -2995,7 +2994,7 @@ export function AnimationEditor({
                 title="Undo"
               >
                 <Undo className="w-4 h-4" />
-              </Button>
+            </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -3046,9 +3045,9 @@ export function AnimationEditor({
 
             {/* Scene Settings */}
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="text-gray-400 bg-transparent border-gray-600"
+              className="text-gray-300 hover:text-white"
               onClick={() => setIsSettingsOpen(true)}
               title="Scene settings"
             >
@@ -3058,9 +3057,9 @@ export function AnimationEditor({
 
             {/* Export */}
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="text-gray-400 bg-transparent border-gray-600"
+              className="text-gray-300 hover:text-white"
               onClick={() => setIsExportOpen(true)}
               title="Export"
             >
@@ -3091,14 +3090,14 @@ export function AnimationEditor({
             onMouseEnter={() => setIsHoveringToolbar(true)}
             onMouseLeave={() => setIsHoveringToolbar(false)}
           >
-            {/* Tool Sidebar */}
+        {/* Tool Sidebar */}
             <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-4 gap-2 flex-shrink-0">
-              {tools.map((tool) => (
-                <Button
-                  key={tool.id}
+          {tools.map((tool) => (
+            <Button
+              key={tool.id}
                   variant={currentTool === tool.id ? "default" : "ghost"}
-                  size="sm"
-                  className="w-12 h-12 p-0"
+              size="sm"
+              className="w-12 h-12 p-0"
                   onClick={() => {
                     setCurrentTool(tool.id as any);
                     // Reset move tool state when switching tools
@@ -3115,17 +3114,17 @@ export function AnimationEditor({
                     }
                   }}
                   title={tool.label}
-                >
-                  <tool.icon className="w-5 h-5" />
-                </Button>
-              ))}
+            >
+              <tool.icon className="w-5 h-5" />
+            </Button>
+          ))}
 
-              <Separator className="w-8 my-2" />
+          <Separator className="w-8 my-2" />
 
-              <Button
-                variant={onionSkin ? "default" : "ghost"}
-                size="sm"
-                className="w-12 h-12 p-0"
+          <Button
+            variant={onionSkin ? "default" : "ghost"}
+            size="sm"
+            className="w-12 h-12 p-0"
                 onClick={() => {
                   console.log("Onion skin toggled:", !onionSkin);
                   setOnionSkin(!onionSkin);
@@ -3148,8 +3147,8 @@ export function AnimationEditor({
                 title="Show Grid"
               >
                 <Grid className="w-5 h-5" />
-              </Button>
-            </div>
+          </Button>
+        </div>
 
             {/* Export Modal */}
             {isExportOpen && (
@@ -3174,10 +3173,27 @@ export function AnimationEditor({
                           onChange={(e) => setExportFolderName(e.target.value)}
                         />
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="icon"
-                          className="border-gray-600 w-10"
-                          title="Folder"
+                          className="w-10 text-gray-300 hover:text-white"
+                          title="Choose folder"
+                          onClick={async () => {
+                            try {
+                              // @ts-ignore
+                              if (window.showDirectoryPicker) {
+                                // @ts-ignore
+                                const handle = await window.showDirectoryPicker();
+                                setExportDirHandle(handle);
+                                const pathName = handle.name || exportFolderName;
+                                setExportFolderName(pathName);
+                              } else {
+                                // Fallback: inform user browser does not support folder picking
+                                alert("Your browser does not support folder picking. Files will download via the browser.");
+                              }
+                            } catch {
+                              // user cancelled
+                            }
+                          }}
                         >
                           <Folder className="w-4 h-4" />
                         </Button>
@@ -3241,7 +3257,10 @@ export function AnimationEditor({
                             setExportRowAllFrames(e.target.checked)
                           }
                         />
-                        <label htmlFor="rowAll" className="text-sm text-gray-300">
+                        <label
+                          htmlFor="rowAll"
+                          className="text-sm text-gray-300"
+                        >
                           Export entire selected row
                         </label>
                       </div>
@@ -3794,7 +3813,7 @@ export function AnimationEditor({
                 onClick={handleCutSelectedStrokes}
               >
                 Cut
-              </Button>
+                </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3802,7 +3821,7 @@ export function AnimationEditor({
                 onClick={handleCopySelectedStrokes}
               >
                 Copy
-              </Button>
+                </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3810,7 +3829,7 @@ export function AnimationEditor({
                 onClick={handleDeleteSelectedStrokes}
               >
                 Delete
-              </Button>
+                </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3827,7 +3846,7 @@ export function AnimationEditor({
               >
                 Resize
               </Button>
-            </div>
+              </div>
           )}
 
           {/* Timeline - hidden in storyboard mode */}
@@ -3871,7 +3890,7 @@ export function AnimationEditor({
             {mode === "storyboard" && (
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold">Folders</h3>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3880,7 +3899,7 @@ export function AnimationEditor({
                     title="Add Frame"
                   >
                     <Plus className="w-5 h-5" />
-                  </Button>
+                </Button>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3889,9 +3908,9 @@ export function AnimationEditor({
                     title="Delete Frame"
                   >
                     <Trash2 className="w-5 h-5" />
-                  </Button>
-                </div>
+                </Button>
               </div>
+            </div>
             )}
 
             {/* Header: Layers Title + Action Buttons */}
@@ -4212,8 +4231,8 @@ export function AnimationEditor({
               ))}
             </div>
           </ScrollArea>
+          </div>
         </div>
-      </div>
 
       {/* Settings Modal */}
       {isSettingsOpen && (
@@ -4249,7 +4268,7 @@ export function AnimationEditor({
                   onChange={(e) => setDraftName(e.target.value)}
                   disabled={mode === "composite"}
                 />
-              </div>
+      </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
@@ -4263,7 +4282,7 @@ export function AnimationEditor({
                       setDraftWidth(parseInt(e.target.value || "0", 10))
                     }
                   />
-                </div>
+    </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
                     Height
