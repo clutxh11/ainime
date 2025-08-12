@@ -2589,17 +2589,45 @@ export function AnimationEditor({
     });
   };
 
-  const moveFrameFolderUp = (folderId: string) => {
-    // This function would move a frame folder up in the timeline
-    // For now, we'll implement a placeholder that saves to undo stack
+  const reorderFrameFolder = (folderId: string, direction: "up" | "down") => {
+    setDrawingFrames((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+
+      // folderId is `${rowId}-${frameIndex}` where rowId looks like `row-1`
+      const parts = folderId.split("-");
+      if (parts.length < 3) return prev;
+      const rowId = `${parts[0]}-${parts[1]}`;
+      const frameIndex = parseInt(parts[2], 10);
+
+      // indices of all folders sharing the same frameIndex (z-order for that frame)
+      const indicesInFrame: number[] = [];
+      prev.forEach((df, i) => {
+        if (df.frameIndex === frameIndex) indicesInFrame.push(i);
+      });
+
+      const currentAbsoluteIndex = prev.findIndex(
+        (df) => df.rowId === rowId && df.frameIndex === frameIndex
+      );
+      if (currentAbsoluteIndex === -1) return prev;
+
+      const position = indicesInFrame.indexOf(currentAbsoluteIndex);
+      if (position === -1) return prev;
+
+      const targetPos =
+        direction === "up" ? position - 1 : position + 1;
+      if (targetPos < 0 || targetPos >= indicesInFrame.length) return prev; // no-op at edges
+
+      const swapA = indicesInFrame[position];
+      const swapB = indicesInFrame[targetPos];
+      const next = [...prev];
+      [next[swapA], next[swapB]] = [next[swapB], next[swapA]];
+      return next;
+    });
     saveToUndoStack();
   };
 
-  const moveFrameFolderDown = (folderId: string) => {
-    // This function would move a frame folder down in the timeline
-    // For now, we'll implement a placeholder that saves to undo stack
-    saveToUndoStack();
-  };
+  const moveFrameFolderUp = (folderId: string) => reorderFrameFolder(folderId, "up");
+  const moveFrameFolderDown = (folderId: string) => reorderFrameFolder(folderId, "down");
 
   const handleCloseContextMenu = () => {
     setContextMenu({ visible: false, x: 0, y: 0 });
