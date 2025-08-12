@@ -1094,22 +1094,7 @@ export function AnimationEditor({
       }
     };
 
-    // 3. Render images for onion skin (underneath strokes)
-    if (onionSkin) {
-      const prevFrameNumber = frameNumber - 1;
-      if (prevFrameNumber >= 0) {
-        context.globalAlpha = 0.3;
-        drawingFrames
-          .filter(
-            (df) =>
-              df.imageUrl &&
-              prevFrameNumber >= df.frameIndex &&
-              prevFrameNumber < df.frameIndex + df.length
-          )
-          .forEach((frame) => drawImage(frame.imageUrl!));
-        context.globalAlpha = 1.0;
-      }
-    }
+    // 3. (moved) We'll render onion skin after current images so it isn't occluded
 
     // 4. Draw onion-skinned strokes
     if (onionSkin) {
@@ -1161,13 +1146,40 @@ export function AnimationEditor({
       }
     }
 
-    // 6. Draw the current stroke on top
+    // 6. Render onion skin on top of current images so it remains visible
+    if (onionSkin) {
+      const prevFrameNumber = frameNumber - 1;
+      if (prevFrameNumber >= 0) {
+        context.globalAlpha = 0.3;
+        const prevFrameFolders = drawingFrames.filter(
+          (df) =>
+            prevFrameNumber >= df.frameIndex &&
+            prevFrameNumber < df.frameIndex + (df.length || 1)
+        );
+        for (const prevFrame of prevFrameFolders) {
+          const prevFolderId = `${prevFrame.rowId}-${prevFrame.frameIndex}`;
+          const orderedLayers = layerOrder[prevFolderId] || [];
+          for (const layerId of orderedLayers) {
+            if (layerVisibility[layerId] === false) continue;
+            if (layerId.endsWith("-main") && prevFrame.imageUrl) {
+              drawImage(prevFrame.imageUrl);
+            }
+            if (layerStrokes[layerId]) {
+              drawStrokes(layerStrokes[layerId]);
+            }
+          }
+        }
+        context.globalAlpha = 1.0;
+      }
+    }
+
+    // 7. Draw the current stroke on top
     if (currentStroke && selectedLayerId?.includes(`-${frameNumber}`)) {
       context.globalAlpha = 1;
       drawStrokes([currentStroke]);
     }
 
-    // 7. Draw eraser circle if active
+    // 8. Draw eraser circle if active
     if (eraserCircle && currentTool === "eraser") {
       context.save();
       context.fillStyle = "rgba(128, 128, 128, 0.3)";
