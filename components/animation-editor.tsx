@@ -889,6 +889,99 @@ export function AnimationEditor({
     [layerVisibility, layerOpacities, layerStrokes, drawStrokes]
   );
 
+  // Helper to load an image for export rendering
+  const loadImage = useCallback((src: string) => {
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }, []);
+
+  // Render a specific frame index directly into the provided 2D context (used by export)
+  const renderFrameToContext = useCallback(
+    async (
+      frameIndex: number,
+      targetCtx: CanvasRenderingContext2D,
+      includeGrid: boolean
+    ) => {
+      targetCtx.save();
+      targetCtx.clearRect(0, 0, targetCtx.canvas.width, targetCtx.canvas.height);
+
+      // White background
+      targetCtx.fillStyle = "#ffffff";
+      targetCtx.fillRect(0, 0, targetCtx.canvas.width, targetCtx.canvas.height);
+
+      if (includeGrid) {
+        targetCtx.strokeStyle = "#e0e0e0";
+        targetCtx.lineWidth = 0.5;
+        const gridSize = 20;
+        for (let x = 0; x <= targetCtx.canvas.width; x += gridSize) {
+          targetCtx.beginPath();
+          targetCtx.moveTo(x, 0);
+          targetCtx.lineTo(x, targetCtx.canvas.height);
+          targetCtx.stroke();
+        }
+        for (let y = 0; y <= targetCtx.canvas.height; y += gridSize) {
+          targetCtx.beginPath();
+          targetCtx.moveTo(0, y);
+          targetCtx.lineTo(targetCtx.canvas.width, y);
+          targetCtx.stroke();
+        }
+      }
+
+      // Draw current frame layers from all rows in order
+      const framesForIndex = drawingFrames.filter(
+        (df) => df.frameIndex === frameIndex
+      );
+      for (const frame of framesForIndex) {
+        const folderId = `${frame.rowId}-${frame.frameIndex}`;
+        const orderedLayers = layerOrder[folderId] || [];
+        for (const layerId of orderedLayers) {
+          if (layerVisibility[layerId] === false) continue;
+          targetCtx.globalAlpha = layerOpacities[layerId] ?? 1;
+          // Main image layer
+          if (layerId.endsWith("-main") && frame.imageUrl) {
+            try {
+              const img = await loadImage(frame.imageUrl);
+              targetCtx.drawImage(img, 0, 0);
+            } catch {
+              // ignore image load errors during export
+            }
+          }
+          // Stroke layers
+          const strokes = layerStrokes[layerId];
+          if (strokes && strokes.length > 0) {
+            targetCtx.lineCap = "round";
+            targetCtx.lineJoin = "round";
+            strokes.forEach((stroke) => {
+              targetCtx.strokeStyle = stroke.color;
+              targetCtx.lineWidth = stroke.brushSize ?? 2;
+              targetCtx.beginPath();
+              stroke.points.forEach((p, i) => {
+                if (i === 0) targetCtx.moveTo(p.x, p.y);
+                else targetCtx.lineTo(p.x, p.y);
+              });
+              targetCtx.stroke();
+            });
+          }
+        }
+      }
+
+      targetCtx.restore();
+    },
+    [
+      drawingFrames,
+      layerOrder,
+      layerVisibility,
+      layerOpacities,
+      layerStrokes,
+      loadImage,
+    ]
+  );
+
   // Export handler: defined after drawFrame to avoid hoist ordering issues
   let handleExport = useCallback(() => {}, []);
 
@@ -2841,24 +2934,15 @@ export function AnimationEditor({
   // Now that drawFrame exists, define export using it
   handleExport = useCallback(async () => {
     try {
-      const exportCell = async (rowId: string, frameIndex: number) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
+    const exportCell = async (rowId: string, frameIndex: number) => {
+      const off = document.createElement("canvas");
+      off.width = appliedWidth;
+      off.height = appliedHeight;
+      const offCtx = off.getContext("2d");
+      if (!offCtx) return;
 
-        const off = document.createElement("canvas");
-        off.width = appliedWidth;
-        off.height = appliedHeight;
-        const offCtx = off.getContext("2d");
-        if (!offCtx) return;
-
-        offCtx.fillStyle = "#ffffff";
-        offCtx.fillRect(0, 0, off.width, off.height);
-
-        const prevShowGrid = showGrid;
-        setShowGrid(false);
-        drawFrame();
-        offCtx.drawImage(canvas, 0, 0);
-        setShowGrid(prevShowGrid);
+      // Render exact frame directly to offscreen, excluding grid
+      await renderFrameToContext(frameIndex, offCtx, false);
 
         const ext = exportFormat;
         const mime =
@@ -2888,12 +2972,9 @@ export function AnimationEditor({
       };
 
       // Helper to switch frame, wait for next paint, then export
-      const exportAt = async (rowId: string, frameIndex: number) => {
-        setSelectedRow(rowId);
-        setSelectedFrameNumber(frameIndex + 1);
-        await new Promise((r) => requestAnimationFrame(() => r(null)));
-        await exportCell(rowId, frameIndex);
-      };
+    const exportAt = async (_rowId: string, frameIndex: number) => {
+      await exportCell(_rowId, frameIndex);
+    };
 
       if (exportRowAllFrames && selectedRow) {
         const frames = drawingFrames
@@ -2980,11 +3061,11 @@ export function AnimationEditor({
                   return null;
                 })()}
               </span>
-          </div>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             {/* Undo/Redo Controls */}
-          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -2994,7 +3075,7 @@ export function AnimationEditor({
                 title="Undo"
               >
                 <Undo className="w-4 h-4" />
-            </Button>
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -3090,14 +3171,14 @@ export function AnimationEditor({
             onMouseEnter={() => setIsHoveringToolbar(true)}
             onMouseLeave={() => setIsHoveringToolbar(false)}
           >
-        {/* Tool Sidebar */}
+            {/* Tool Sidebar */}
             <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-4 gap-2 flex-shrink-0">
-          {tools.map((tool) => (
-            <Button
-              key={tool.id}
+              {tools.map((tool) => (
+                <Button
+                  key={tool.id}
                   variant={currentTool === tool.id ? "default" : "ghost"}
-              size="sm"
-              className="w-12 h-12 p-0"
+                  size="sm"
+                  className="w-12 h-12 p-0"
                   onClick={() => {
                     setCurrentTool(tool.id as any);
                     // Reset move tool state when switching tools
@@ -3114,17 +3195,17 @@ export function AnimationEditor({
                     }
                   }}
                   title={tool.label}
-            >
-              <tool.icon className="w-5 h-5" />
-            </Button>
-          ))}
+                >
+                  <tool.icon className="w-5 h-5" />
+                </Button>
+              ))}
 
-          <Separator className="w-8 my-2" />
+              <Separator className="w-8 my-2" />
 
-          <Button
-            variant={onionSkin ? "default" : "ghost"}
-            size="sm"
-            className="w-12 h-12 p-0"
+              <Button
+                variant={onionSkin ? "default" : "ghost"}
+                size="sm"
+                className="w-12 h-12 p-0"
                 onClick={() => {
                   console.log("Onion skin toggled:", !onionSkin);
                   setOnionSkin(!onionSkin);
@@ -3147,8 +3228,8 @@ export function AnimationEditor({
                 title="Show Grid"
               >
                 <Grid className="w-5 h-5" />
-          </Button>
-        </div>
+              </Button>
+            </div>
 
             {/* Export Modal */}
             {isExportOpen && (
@@ -3179,16 +3260,19 @@ export function AnimationEditor({
                           title="Choose folder"
                           onClick={async () => {
                             try {
-                              // @ts-ignore
+                              // @ts-expect-error experimental API
                               if (window.showDirectoryPicker) {
-                                // @ts-ignore
+                                // @ts-expect-error experimental API
                                 const handle = await window.showDirectoryPicker();
                                 setExportDirHandle(handle);
-                                const pathName = handle.name || exportFolderName;
+                                const pathName =
+                                  handle.name || exportFolderName;
                                 setExportFolderName(pathName);
                               } else {
                                 // Fallback: inform user browser does not support folder picking
-                                alert("Your browser does not support folder picking. Files will download via the browser.");
+                                alert(
+                                  "Your browser does not support folder picking. Files will download via the browser."
+                                );
                               }
                             } catch {
                               // user cancelled
@@ -3813,7 +3897,7 @@ export function AnimationEditor({
                 onClick={handleCutSelectedStrokes}
               >
                 Cut
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3821,7 +3905,7 @@ export function AnimationEditor({
                 onClick={handleCopySelectedStrokes}
               >
                 Copy
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3829,7 +3913,7 @@ export function AnimationEditor({
                 onClick={handleDeleteSelectedStrokes}
               >
                 Delete
-                </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3846,7 +3930,7 @@ export function AnimationEditor({
               >
                 Resize
               </Button>
-              </div>
+            </div>
           )}
 
           {/* Timeline - hidden in storyboard mode */}
@@ -3890,7 +3974,7 @@ export function AnimationEditor({
             {mode === "storyboard" && (
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold">Folders</h3>
-              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3899,7 +3983,7 @@ export function AnimationEditor({
                     title="Add Frame"
                   >
                     <Plus className="w-5 h-5" />
-                </Button>
+                  </Button>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3908,9 +3992,9 @@ export function AnimationEditor({
                     title="Delete Frame"
                   >
                     <Trash2 className="w-5 h-5" />
-                </Button>
+                  </Button>
+                </div>
               </div>
-            </div>
             )}
 
             {/* Header: Layers Title + Action Buttons */}
@@ -4231,8 +4315,8 @@ export function AnimationEditor({
               ))}
             </div>
           </ScrollArea>
-          </div>
         </div>
+      </div>
 
       {/* Settings Modal */}
       {isSettingsOpen && (
@@ -4268,7 +4352,7 @@ export function AnimationEditor({
                   onChange={(e) => setDraftName(e.target.value)}
                   disabled={mode === "composite"}
                 />
-      </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
@@ -4282,7 +4366,7 @@ export function AnimationEditor({
                       setDraftWidth(parseInt(e.target.value || "0", 10))
                     }
                   />
-    </div>
+                </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
                     Height
