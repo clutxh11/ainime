@@ -2824,7 +2824,8 @@ export function AnimationEditor({
                   }
                   if (mode === "composite") {
                     // Prefer a human-readable name passed via sceneName (e.g., "chapter 1")
-                    if (sceneSettings?.sceneName) return sceneSettings.sceneName;
+                    if (sceneSettings?.sceneName)
+                      return sceneSettings.sceneName;
                     return sceneSettings?.chapterId
                       ? `chapter ${sceneSettings.chapterId.slice(0, 4)}`
                       : null;
@@ -3621,7 +3622,7 @@ export function AnimationEditor({
 
             {/* Header: Layers Title + Action Buttons */}
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-medium text-gray-200">Layers</h2>
+              <h2 className="text-base font-semibold text-gray-200">Layers</h2>
               <div className="flex items-center gap-2">
                 <Button
                   size="icon"
@@ -3949,17 +3950,30 @@ export function AnimationEditor({
           />
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-white mb-4">
-              {mode === "storyboard" ? "Sequence Settings" : "Shot Settings"}
+              {mode === "storyboard"
+                ? "Sequence Settings"
+                : mode === "composite"
+                ? "Compositing Settings"
+                : "Shot Settings"}
             </h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm text-gray-300 mb-1">
-                  {mode === "storyboard" ? "Sequence Name" : "Shot Name"}
+                  {mode === "storyboard"
+                    ? "Sequence Name"
+                    : mode === "composite"
+                    ? "Composition Name"
+                    : "Shot Name"}
                 </label>
                 <input
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                  className={`w-full border rounded px-3 py-2 ${
+                    mode === "composite"
+                      ? "bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed"
+                      : "bg-gray-700 border-gray-600 text-white"
+                  }`}
                   value={draftName}
                   onChange={(e) => setDraftName(e.target.value)}
+                  disabled={mode === "composite"}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -4059,7 +4073,7 @@ export function AnimationEditor({
               </div>
 
               {/* Danger zone */}
-              {mode !== "storyboard" && sceneSettings?.shotId && (
+              {mode === "animate" && sceneSettings?.shotId && (
                 <div className="mt-3 pt-3 border-t border-gray-700">
                   <button
                     className="w-full bg-red-900/60 hover:bg-red-900 text-white rounded px-3 py-2"
@@ -4099,6 +4113,49 @@ export function AnimationEditor({
                             } catch (e) {
                               console.error("Failed to delete shot", e);
                             }
+                          }}
+                        >
+                          OK, Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {mode === "composite" && (
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <button
+                    className="w-full bg-red-900/60 hover:bg-red-900 text-white rounded px-3 py-2"
+                    onClick={() => setConfirmDeleteOpen((v) => !v)}
+                  >
+                    Delete Composition
+                  </button>
+                  <div
+                    className={`overflow-hidden transition-all duration-200 ${
+                      confirmDeleteOpen
+                        ? "max-h-40 opacity-100 mt-2"
+                        : "max-h-0 opacity-0"
+                    }`}
+                  >
+                    <div className="bg-red-950/50 border border-red-800 rounded px-3 py-3 text-sm text-red-200">
+                      <div className="mb-2">
+                        Delete this composition? This action cannot be undone.
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          className="px-3 py-1 rounded border border-gray-600 text-gray-200"
+                          onClick={() => setConfirmDeleteOpen(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="px-3 py-1 rounded bg-red-700 hover:bg-red-800 text-white"
+                          onClick={() => {
+                            // For now, just close and go back to the Project Details page
+                            setIsSettingsOpen(false);
+                            setConfirmDeleteOpen(false);
+                            onViewChange("project-detail");
                           }}
                         >
                           OK, Delete

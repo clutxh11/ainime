@@ -287,7 +287,9 @@ export default function ContentExplorer({
     // Sort
     switch (sortBy) {
       case "rating":
-        filtered = [...filtered].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+        filtered = [...filtered].sort(
+          (a, b) => (b.rating || 0) - (a.rating || 0)
+        );
         break;
       case "title":
         filtered = [...filtered].sort((a, b) => a.title.localeCompare(b.title));
@@ -325,26 +327,20 @@ export default function ContentExplorer({
 
   const handleWatchEpisode = (content: ContentItem, episodeTitle: string) => {
     const episode = content.episodes?.find((ep) => ep.title === episodeTitle);
-    onViewChange(
-      "video",
-      {
-        ...(content as any),
-        selectedEpisode: episodeTitle,
-        selectedEpisodeId: episode?.id || content.id,
-      } as any
-    );
+    onViewChange("video", {
+      ...(content as any),
+      selectedEpisode: episodeTitle,
+      selectedEpisodeId: episode?.id || content.id,
+    } as any);
   };
 
   const handleReadChapter = (content: ContentItem, chapterTitle: string) => {
     const chapter = content.chapters?.find((ch) => ch.title === chapterTitle);
-    onViewChange(
-      "manga",
-      {
-        ...(content as any),
-        selectedChapter: chapterTitle,
-        selectedChapterId: chapter?.id || content.id,
-      } as any
-    );
+    onViewChange("manga", {
+      ...(content as any),
+      selectedChapter: chapterTitle,
+      selectedChapterId: chapter?.id || content.id,
+    } as any);
   };
 
   const handleRatingChange = async (projectId: string, rating: number) => {
@@ -429,9 +425,7 @@ export default function ContentExplorer({
                   {item.authors && item.authors.length > 0 && (
                     <div className="text-xs text-gray-300">
                       <span className="font-medium">By: </span>
-                      {item.authors
-                        .map((author) => author.name)
-                        .join(", ")}
+                      {item.authors.map((author) => author.name).join(", ")}
                     </div>
                   )}
                 </div>
@@ -449,8 +443,7 @@ export default function ContentExplorer({
               </div>
               {item.authors && item.authors.length > 0 && (
                 <div className="text-xs text-gray-400 mb-2">
-                  by{" "}
-                  {item.authors.map((author) => author.name).join(", ")}
+                  by {item.authors.map((author) => author.name).join(", ")}
                 </div>
               )}
               <div className="flex flex-wrap gap-1">
