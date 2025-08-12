@@ -678,19 +678,21 @@ export function AnimationEditor({
       const enableStorage =
         process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
       if (enableStorage && latestKey) {
-        try {
-          const { data: file, error: dlErr } = await supabase.storage
-            .from(process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets")
-            .download(latestKey);
-          if (!dlErr && file) {
-            const text = await file.text();
-            doc = JSON.parse(text);
+        // Only attempt download if the key looks like the new slugified path (avoids 400s for old UUID-only keys)
+        const firstSeg = String(latestKey).split("/")[0] || "";
+        const looksNew = /[a-zA-Z]/.test(firstSeg); // new scheme starts with {projectName}-{projectId}
+        if (looksNew) {
+          try {
+            const { data: file, error: dlErr } = await supabase.storage
+              .from(process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets")
+              .download(latestKey);
+            if (!dlErr && file) {
+              const text = await file.text();
+              doc = JSON.parse(text);
+            }
+          } catch {
+            // Silently fall back to inline document
           }
-        } catch (e) {
-          console.warn(
-            "Failed to download latest scene version; will fallback to inline document",
-            e
-          );
         }
       }
       if (!doc) {
@@ -723,7 +725,8 @@ export function AnimationEditor({
           const enableStorage =
             process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
           if (enableStorage) {
-            const bucket = process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
+            const bucket =
+              process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
             const entries: Array<[string, string]> = Object.entries(
               doc.frameAssetKeys
             );
@@ -1797,7 +1800,8 @@ export function AnimationEditor({
           sceneSettings?.shotId
         ) {
           try {
-            const bucket = process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
+            const bucket =
+              process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
             const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
             const ts = new Date().toISOString().replace(/[:.]/g, "-");
             // Per-shot frame assets
@@ -3812,7 +3816,9 @@ export function AnimationEditor({
                       sceneSettings?.sequenceId
                     ) {
                       try {
-                        const bucket = process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
+                        const bucket =
+                          process.env.NEXT_PUBLIC_SCENE_BUCKET ||
+                          "animation-assets";
                         const safeName = file.name.replace(
                           /[^a-zA-Z0-9_.-]/g,
                           "_"
