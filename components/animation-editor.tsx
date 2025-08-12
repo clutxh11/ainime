@@ -2920,322 +2920,333 @@ export function AnimationEditor({
       </nav>
 
       <div className="flex flex-1 min-h-0 relative">
-        {/* Collapsible Toolbar */}
-        <div
-          className="relative flex items-stretch"
-          onMouseEnter={() => setIsHoveringToolbar(true)}
-          onMouseLeave={() => setIsHoveringToolbar(false)}
-        >
-          {/* Tool Sidebar */}
-          <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-4 gap-2 flex-shrink-0">
-            {tools.map((tool) => (
+        {/* Collapsible Toolbar - hidden in compositing mode */}
+        {mode !== "composite" && (
+          <div
+            className="relative flex items-stretch"
+            onMouseEnter={() => setIsHoveringToolbar(true)}
+            onMouseLeave={() => setIsHoveringToolbar(false)}
+          >
+            {/* Tool Sidebar */}
+            <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-4 gap-2 flex-shrink-0">
+              {tools.map((tool) => (
+                <Button
+                  key={tool.id}
+                  variant={currentTool === tool.id ? "default" : "ghost"}
+                  size="sm"
+                  className="w-12 h-12 p-0"
+                  onClick={() => {
+                    setCurrentTool(tool.id as any);
+                    // Reset move tool state when switching tools
+                    if (tool.id !== "move") {
+                      setLassoSelection(null);
+                      setOriginalLassoPoints([]);
+                      setOriginalStrokePositions({});
+                      setIsSelecting(false);
+                      setIsDragging(false);
+                    }
+                    // Hide eraser circle when switching away from eraser tool
+                    if (tool.id !== "eraser") {
+                      setEraserCircle(null);
+                    }
+                  }}
+                  title={tool.label}
+                >
+                  <tool.icon className="w-5 h-5" />
+                </Button>
+              ))}
+
+              <Separator className="w-8 my-2" />
+
               <Button
-                key={tool.id}
-                variant={currentTool === tool.id ? "default" : "ghost"}
+                variant={onionSkin ? "default" : "ghost"}
                 size="sm"
                 className="w-12 h-12 p-0"
                 onClick={() => {
-                  setCurrentTool(tool.id as any);
-                  // Reset move tool state when switching tools
-                  if (tool.id !== "move") {
-                    setLassoSelection(null);
-                    setOriginalLassoPoints([]);
-                    setOriginalStrokePositions({});
-                    setIsSelecting(false);
-                    setIsDragging(false);
-                  }
-                  // Hide eraser circle when switching away from eraser tool
-                  if (tool.id !== "eraser") {
-                    setEraserCircle(null);
-                  }
+                  console.log("Onion skin toggled:", !onionSkin);
+                  setOnionSkin(!onionSkin);
+                  drawFrame(); // Force redraw when toggling onion skin
                 }}
-                title={tool.label}
+                title="Onion Skin"
               >
-                <tool.icon className="w-5 h-5" />
+                {onionSkin ? (
+                  <Eye className="w-5 h-5" />
+                ) : (
+                  <EyeOff className="w-s h-5" />
+                )}
               </Button>
-            ))}
 
-            <Separator className="w-8 my-2" />
+              <Button
+                variant={showGrid ? "default" : "ghost"}
+                size="sm"
+                className="w-12 h-12 p-0"
+                onClick={() => setShowGrid(!showGrid)}
+                title="Show Grid"
+              >
+                <Grid className="w-5 h-5" />
+              </Button>
+            </div>
 
-            <Button
-              variant={onionSkin ? "default" : "ghost"}
-              size="sm"
-              className="w-12 h-12 p-0"
-              onClick={() => {
-                console.log("Onion skin toggled:", !onionSkin);
-                setOnionSkin(!onionSkin);
-                drawFrame(); // Force redraw when toggling onion skin
-              }}
-              title="Onion Skin"
+            {/* Sliding Settings Panel */}
+            <div
+              className={`bg-gray-800 border-r border-gray-700 transition-all duration-300 ease-in-out overflow-hidden ${
+                (isHoveringToolbar || isColorPickerOpen) &&
+                currentTool !== "move"
+                  ? "w-64"
+                  : "w-0"
+              }`}
             >
-              {onionSkin ? (
-                <Eye className="w-5 h-5" />
-              ) : (
-                <EyeOff className="w-s h-5" />
-              )}
-            </Button>
-
-            <Button
-              variant={showGrid ? "default" : "ghost"}
-              size="sm"
-              className="w-12 h-12 p-0"
-              onClick={() => setShowGrid(!showGrid)}
-              title="Show Grid"
-            >
-              <Grid className="w-5 h-5" />
-            </Button>
-          </div>
-
-          {/* Sliding Settings Panel */}
-          <div
-            className={`bg-gray-800 border-r border-gray-700 transition-all duration-300 ease-in-out overflow-hidden ${
-              (isHoveringToolbar || isColorPickerOpen) && currentTool !== "move"
-                ? "w-64"
-                : "w-0"
-            }`}
-          >
-            <div className="p-4 space-y-4 min-w-64">
-              {/* Pencil Settings */}
-              {currentTool === "pencil" && (
-                <>
-                  <div>
-                    <Label className="text-sm font-medium">
-                      Brush Size: {brushSize}px
-                    </Label>
-                    <Slider
-                      value={[brushSize]}
-                      onValueChange={(value) => setBrushSize(value[0])}
-                      max={50}
-                      min={1}
-                      step={1}
-                      className="mt-2"
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* Palette Settings */}
-              {currentTool === "palette" && (
-                <>
-                  <div>
-                    <Label className="text-sm font-medium">Color</Label>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Input
-                        type="color"
-                        value={color}
-                        onChange={(e) => setColor(e.target.value)}
-                        onFocus={() => setIsColorPickerOpen(true)}
-                        onBlur={() => setIsColorPickerOpen(false)}
-                        className="w-12 h-8 p-1 border-gray-600"
-                      />
-                      <Input
-                        value={color}
-                        onChange={(e) => setColor(e.target.value)}
-                        className="flex-1"
-                        placeholder="#000000"
+              <div className="p-4 space-y-4 min-w-64">
+                {/* Pencil Settings */}
+                {currentTool === "pencil" && (
+                  <>
+                    <div>
+                      <Label className="text-sm font-medium">
+                        Brush Size: {brushSize}px
+                      </Label>
+                      <Slider
+                        value={[brushSize]}
+                        onValueChange={(value) => setBrushSize(value[0])}
+                        max={50}
+                        min={1}
+                        step={1}
+                        className="mt-2"
                       />
                     </div>
-                  </div>
+                  </>
+                )}
 
-                  <Separator />
-
-                  <div>
-                    <Label className="text-sm font-medium">Quick Colors</Label>
-                    <div className="grid grid-cols-4 gap-2 mt-2">
-                      {[
-                        "#000000",
-                        "#ff0000",
-                        "#00ff00",
-                        "#0000ff",
-                        "#ffff00",
-                        "#ff00ff",
-                        "#00ffff",
-                        "#ffffff",
-                      ].map((c) => (
-                        <button
-                          key={c}
-                          className="w-8 h-8 rounded border-2 border-gray-600 hover:border-white"
-                          style={{ backgroundColor: c }}
-                          onClick={() => setColor(c)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Custom Color Sets */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <Label className="text-sm font-medium">Custom Sets</Label>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsCreatingSet(true)}
-                        className="h-6 px-2 text-xs"
-                      >
-                        <Plus className="w-3 h-3 mr-1" />
-                        New Set
-                      </Button>
-                    </div>
-
-                    {/* Create New Set */}
-                    {isCreatingSet && (
-                      <div className="flex items-center gap-2 mb-3 p-2 border border-gray-600 rounded">
+                {/* Palette Settings */}
+                {currentTool === "palette" && (
+                  <>
+                    <div>
+                      <Label className="text-sm font-medium">Color</Label>
+                      <div className="flex items-center gap-2 mt-2">
                         <Input
-                          value={newSetName}
-                          onChange={(e) => setNewSetName(e.target.value)}
-                          placeholder="Set name"
-                          className="flex-1 h-6 text-xs"
-                          onKeyPress={(e) =>
-                            e.key === "Enter" && createColorSet()
-                          }
+                          type="color"
+                          value={color}
+                          onChange={(e) => setColor(e.target.value)}
+                          onFocus={() => setIsColorPickerOpen(true)}
+                          onBlur={() => setIsColorPickerOpen(false)}
+                          className="w-12 h-8 p-1 border-gray-600"
                         />
+                        <Input
+                          value={color}
+                          onChange={(e) => setColor(e.target.value)}
+                          className="flex-1"
+                          placeholder="#000000"
+                        />
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div>
+                      <Label className="text-sm font-medium">
+                        Quick Colors
+                      </Label>
+                      <div className="grid grid-cols-4 gap-2 mt-2">
+                        {[
+                          "#000000",
+                          "#ff0000",
+                          "#00ff00",
+                          "#0000ff",
+                          "#ffff00",
+                          "#ff00ff",
+                          "#00ffff",
+                          "#ffffff",
+                        ].map((c) => (
+                          <button
+                            key={c}
+                            className="w-8 h-8 rounded border-2 border-gray-600 hover:border-white"
+                            style={{ backgroundColor: c }}
+                            onClick={() => setColor(c)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Custom Color Sets */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <Label className="text-sm font-medium">
+                          Custom Sets
+                        </Label>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={createColorSet}
+                          onClick={() => setIsCreatingSet(true)}
                           className="h-6 px-2 text-xs"
                         >
-                          Create
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setIsCreatingSet(false);
-                            setNewSetName("");
-                          }}
-                          className="h-6 px-2 text-xs"
-                        >
-                          <X className="w-3 h-3" />
+                          <Plus className="w-3 h-3 mr-1" />
+                          New Set
                         </Button>
                       </div>
-                    )}
 
-                    {/* Display Custom Sets */}
-                    {Object.entries(customColorSets).map(
-                      ([setName, colors]) => (
-                        <div key={setName} className="mb-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <Label className="text-sm font-medium">
-                              {setName}
-                            </Label>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => deleteColorSet(setName)}
-                              className="h-6 px-2 text-xs text-red-400 hover:text-red-300"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          </div>
-                          <div className="grid grid-cols-4 gap-2">
-                            {colors.map((c, index) => (
-                              <button
-                                key={index}
-                                className="w-8 h-8 rounded border-2 border-gray-600 hover:border-white relative group"
-                                style={{ backgroundColor: c }}
-                                onClick={() => setColor(c)}
+                      {/* Create New Set */}
+                      {isCreatingSet && (
+                        <div className="flex items-center gap-2 mb-3 p-2 border border-gray-600 rounded">
+                          <Input
+                            value={newSetName}
+                            onChange={(e) => setNewSetName(e.target.value)}
+                            placeholder="Set name"
+                            className="flex-1 h-6 text-xs"
+                            onKeyPress={(e) =>
+                              e.key === "Enter" && createColorSet()
+                            }
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={createColorSet}
+                            className="h-6 px-2 text-xs"
+                          >
+                            Create
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setIsCreatingSet(false);
+                              setNewSetName("");
+                            }}
+                            className="h-6 px-2 text-xs"
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Display Custom Sets */}
+                      {Object.entries(customColorSets).map(
+                        ([setName, colors]) => (
+                          <div key={setName} className="mb-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <Label className="text-sm font-medium">
+                                {setName}
+                              </Label>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => deleteColorSet(setName)}
+                                className="h-6 px-2 text-xs text-red-400 hover:text-red-300"
                               >
-                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 flex items-center justify-center">
-                                  <X
-                                    className="w-3 h-3 text-white opacity-0 group-hover:opacity-100"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      removeColorFromSet(setName, index);
-                                    }}
-                                  />
-                                </div>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                            <div className="grid grid-cols-4 gap-2">
+                              {colors.map((c, index) => (
+                                <button
+                                  key={index}
+                                  className="w-8 h-8 rounded border-2 border-gray-600 hover:border-white relative group"
+                                  style={{ backgroundColor: c }}
+                                  onClick={() => setColor(c)}
+                                >
+                                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 flex items-center justify-center">
+                                    <X
+                                      className="w-3 h-3 text-white opacity-0 group-hover:opacity-100"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeColorFromSet(setName, index);
+                                      }}
+                                    />
+                                  </div>
+                                </button>
+                              ))}
+                              <button
+                                className="w-8 h-8 rounded border-2 border-dashed border-gray-600 hover:border-white flex items-center justify-center"
+                                onClick={() => addColorToSet(setName, color)}
+                              >
+                                <Plus className="w-3 h-3 text-gray-400" />
                               </button>
-                            ))}
-                            <button
-                              className="w-8 h-8 rounded border-2 border-dashed border-gray-600 hover:border-white flex items-center justify-center"
-                              onClick={() => addColorToSet(setName, color)}
-                            >
-                              <Plus className="w-3 h-3 text-gray-400" />
-                            </button>
+                            </div>
                           </div>
-                        </div>
-                      )
-                    )}
-                  </div>
-                </>
-              )}
+                        )
+                      )}
+                    </div>
+                  </>
+                )}
 
-              {/* Eraser Settings */}
-              {currentTool === "eraser" && (
-                <>
-                  <div>
-                    <h3 className="text-sm font-medium mb-3">ERASER STYLE</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 p-3 border border-gray-600 rounded-lg">
-                        <div className="w-8 h-8 bg-gray-600 rounded flex items-center justify-center">
-                          <Eraser className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">
-                            Precision Eraser
+                {/* Eraser Settings */}
+                {currentTool === "eraser" && (
+                  <>
+                    <div>
+                      <h3 className="text-sm font-medium mb-3">ERASER STYLE</h3>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 p-3 border border-gray-600 rounded-lg">
+                          <div className="w-8 h-8 bg-gray-600 rounded flex items-center justify-center">
+                            <Eraser className="w-4 h-4" />
                           </div>
-                          <div className="text-xs text-gray-400">
-                            Erase exact areas touched by eraser
+                          <div className="flex-1">
+                            <div className="text-sm font-medium">
+                              Precision Eraser
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              Erase exact areas touched by eraser
+                            </div>
                           </div>
+                          <Button
+                            variant={
+                              eraserStyle === "precision"
+                                ? "default"
+                                : "outline"
+                            }
+                            size="sm"
+                            onClick={() => setEraserStyle("precision")}
+                          >
+                            Select
+                          </Button>
                         </div>
-                        <Button
-                          variant={
-                            eraserStyle === "precision" ? "default" : "outline"
-                          }
-                          size="sm"
-                          onClick={() => setEraserStyle("precision")}
-                        >
-                          Select
-                        </Button>
-                      </div>
 
-                      <div className="flex items-center gap-3 p-3 border border-gray-600 rounded-lg">
-                        <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
-                          <Eraser className="w-4 h-4 text-white" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">
-                            Stroke Eraser
+                        <div className="flex items-center gap-3 p-3 border border-gray-600 rounded-lg">
+                          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
+                            <Eraser className="w-4 h-4 text-white" />
                           </div>
-                          <div className="text-xs text-gray-400">
-                            Remove entire strokes when touched
+                          <div className="flex-1">
+                            <div className="text-sm font-medium">
+                              Stroke Eraser
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              Remove entire strokes when touched
+                            </div>
                           </div>
+                          <Button
+                            variant={
+                              eraserStyle === "stroke" ? "default" : "outline"
+                            }
+                            size="sm"
+                            onClick={() => setEraserStyle("stroke")}
+                          >
+                            Select
+                          </Button>
                         </div>
-                        <Button
-                          variant={
-                            eraserStyle === "stroke" ? "default" : "outline"
-                          }
-                          size="sm"
-                          onClick={() => setEraserStyle("stroke")}
-                        >
-                          Select
-                        </Button>
                       </div>
                     </div>
-                  </div>
 
-                  <div>
-                    <h3 className="text-sm font-medium mb-3">ERASER SIZE</h3>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm">Size: {eraserSize}px</Label>
+                    <div>
+                      <h3 className="text-sm font-medium mb-3">ERASER SIZE</h3>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm">
+                            Size: {eraserSize}px
+                          </Label>
+                        </div>
+                        <Slider
+                          value={[eraserSize]}
+                          onValueChange={(value) => setEraserSize(value[0])}
+                          max={100}
+                          min={1}
+                          step={1}
+                          className="w-full"
+                        />
                       </div>
-                      <Slider
-                        value={[eraserSize]}
-                        onValueChange={(value) => setEraserSize(value[0])}
-                        max={100}
-                        min={1}
-                        step={1}
-                        className="w-full"
-                      />
                     </div>
-                  </div>
-                </>
-              )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 relative">
@@ -4055,11 +4066,15 @@ export function AnimationEditor({
                   </button>
                   <div
                     className={`overflow-hidden transition-all duration-200 ${
-                      confirmDeleteOpen ? "max-h-40 opacity-100 mt-2" : "max-h-0 opacity-0"
+                      confirmDeleteOpen
+                        ? "max-h-40 opacity-100 mt-2"
+                        : "max-h-0 opacity-0"
                     }`}
                   >
                     <div className="bg-red-950/50 border border-red-800 rounded px-3 py-3 text-sm text-red-200">
-                      <div className="mb-2">Delete this shot? This action cannot be undone.</div>
+                      <div className="mb-2">
+                        Delete this shot? This action cannot be undone.
+                      </div>
                       <div className="flex gap-2 justify-end">
                         <button
                           className="px-3 py-1 rounded border border-gray-600 text-gray-200"

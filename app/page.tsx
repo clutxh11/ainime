@@ -163,13 +163,25 @@ export default function Home() {
       case "compositing-editor":
         return (
           <Suspense fallback={<LoadingSpinner />}>
-            {/* TODO: replace with real CompositingEditor component */}
-            <div className="min-h-screen bg-gray-900 text-gray-200 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-xl font-semibold mb-2">Compositing Editor</div>
-                <div className="text-sm opacity-80">Placeholder – opens from Project Details via Create/Open Composition</div>
-              </div>
-            </div>
+            <AnimationEditor
+              onViewChange={handleViewChange}
+              // Boot the editor in composite mode with sensible defaults.
+              // The chapter-level button passes { projectId, chapterId } as content.
+              sceneSettings={{
+                sceneName: "Composition",
+                canvasWidth: 1920,
+                canvasHeight: 1080,
+                frameRate: 24,
+                // Prefer IDs passed via onViewChange from Project Details; fall back to any existing sceneSettings
+                projectId:
+                  (selectedContent as any)?.projectId ||
+                  (sceneSettings as any)?.projectId,
+                chapterId:
+                  (selectedContent as any)?.chapterId ||
+                  (sceneSettings as any)?.chapterId,
+              } as any}
+              mode="composite"
+            />
           </Suspense>
         );
 

@@ -28,12 +28,19 @@ import {
   Hash,
   User,
   Loader2,
-    ChevronRight,
-    ChevronDown,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import type { CurrentView } from "@/types";
 import { supabase } from "@/lib/supabase";
-import { listSequences, listShots, createSequence, createShot, getStoryboardBySequence, createStoryboard } from "@/lib/sequences";
+import {
+  listSequences,
+  listShots,
+  createSequence,
+  createShot,
+  getStoryboardBySequence,
+  createStoryboard,
+} from "@/lib/sequences";
 import { toast } from "sonner";
 
 interface ProjectDetailProps {
@@ -197,27 +204,42 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     Record<string, Array<{ id: string; code: string }>>
   >({});
   const [shotsBySequence, setShotsBySequence] = useState<
-    Record<string, Array<{ id: string; code: string; status?: string; data?: any }>>
+    Record<
+      string,
+      Array<{ id: string; code: string; status?: string; data?: any }>
+    >
   >({});
   // Shot setup modal state
   const [isShotSetupOpen, setIsShotSetupOpen] = useState(false);
-  const [shotSetup, setShotSetup] = useState<
-    | {
-        chapterId: string;
-        sequenceId: string;
-        sequenceCode: string;
-        shotId: string;
-        shotCode: string;
-      }
-    | null
-  >(null);
+  const [shotSetup, setShotSetup] = useState<{
+    chapterId: string;
+    sequenceId: string;
+    sequenceCode: string;
+    shotId: string;
+    shotCode: string;
+  } | null>(null);
   const [setupWidth, setSetupWidth] = useState<number>(1920);
   const [setupHeight, setSetupHeight] = useState<number>(1080);
   const [setupFps, setSetupFps] = useState<number>(24);
-  const [isStoryboardSetupOpen, setIsStoryboardSetupOpen] = useState<string | null>(null); // holds sequenceId when open
+  const [isStoryboardSetupOpen, setIsStoryboardSetupOpen] = useState<
+    string | null
+  >(null); // holds sequenceId when open
   const [storyboardLoading, setStoryboardLoading] = useState(false);
-  const [storyboardsBySequence, setStoryboardsBySequence] = useState<Record<string, { exists: boolean; id?: string; width?: number; height?: number; title?: string }>>({});
-  const [storyboardChapterId, setStoryboardChapterId] = useState<string | null>(null);
+  const [storyboardsBySequence, setStoryboardsBySequence] = useState<
+    Record<
+      string,
+      {
+        exists: boolean;
+        id?: string;
+        width?: number;
+        height?: number;
+        title?: string;
+      }
+    >
+  >({});
+  const [storyboardChapterId, setStoryboardChapterId] = useState<string | null>(
+    null
+  );
 
   // Preload storyboard existence for sequences once loaded
   useEffect(() => {
@@ -230,7 +252,13 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
           setStoryboardsBySequence((prev) => ({
             ...prev,
             [seq.id]: sb
-              ? { exists: true, id: sb.id, width: sb?.data?.width, height: sb?.data?.height, title: sb.title }
+              ? {
+                  exists: true,
+                  id: sb.id,
+                  width: sb?.data?.width,
+                  height: sb?.data?.height,
+                  title: sb.title,
+                }
               : { exists: false },
           }));
         })
@@ -238,7 +266,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     };
     loadStoryboardFlags();
   }, [sequencesByChapter]);
-  const [isCreatingSequence, setIsCreatingSequence] = useState<string | null>(null); // chapterId
+  const [isCreatingSequence, setIsCreatingSequence] = useState<string | null>(
+    null
+  ); // chapterId
   const [newSequenceCode, setNewSequenceCode] = useState("");
   const [isCreatingShot, setIsCreatingShot] = useState<string | null>(null); // sequenceId
   const [newShotCode, setNewShotCode] = useState("");
@@ -740,7 +770,12 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   const ensureShotsLoaded = async (sequenceId: string) => {
     if (shotsBySequence[sequenceId]) return;
     const shots = await listShots(sequenceId);
-    const simple = (shots || []).map((s) => ({ id: s.id, code: s.code, status: s.status, data: (s as any).data }));
+    const simple = (shots || []).map((s) => ({
+      id: s.id,
+      code: s.code,
+      status: s.status,
+      data: (s as any).data,
+    }));
     setShotsBySequence((prev) => ({ ...prev, [sequenceId]: simple }));
   };
 
@@ -754,7 +789,10 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     if (created) {
       setSequencesByChapter((prev) => ({
         ...prev,
-        [chapterId]: [...(prev[chapterId] || []), { id: created.id, code: created.code }],
+        [chapterId]: [
+          ...(prev[chapterId] || []),
+          { id: created.id, code: created.code },
+        ],
       }));
       setNewSequenceCode("");
       setIsCreatingSequence(null);
@@ -774,7 +812,12 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
         ...prev,
         [sequenceId]: [
           ...(prev[sequenceId] || []),
-          { id: created.id, code: created.code, status: created.status, data: (created as any).data },
+          {
+            id: created.id,
+            code: created.code,
+            status: created.status,
+            data: (created as any).data,
+          },
         ],
       }));
       setNewShotCode("");
@@ -852,8 +895,10 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
       const content = {
         projectId,
         chapterId: shotSetup.chapterId,
+        sequenceId: shotSetup.sequenceId,
         sequenceCode: shotSetup.sequenceCode,
         shotCode: shotSetup.shotCode,
+        shotId: shotSetup.shotId,
         projectTitle: project?.title || "Project",
         sceneName: `${shotSetup.shotCode}`,
         canvasWidth: setupWidth,
@@ -1313,15 +1358,44 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                 <>
                                   <Input
                                     value={newSequenceCode}
-                                    onChange={(e) => setNewSequenceCode(e.target.value)}
+                                    onChange={(e) =>
+                                      setNewSequenceCode(e.target.value)
+                                    }
                                     placeholder="Sequence code e.g. SEQ 010"
                                     className="h-8 bg-gray-700 border-gray-600 text-white"
                                   />
-                                  <Button size="sm" className="h-8 bg-red-600 hover:bg-red-700" onClick={() => handleCreateSequence(chapter.id)}>Create</Button>
-                                  <Button size="sm" variant="outline" className="h-8 border-gray-600 text-gray-300" onClick={() => { setIsCreatingSequence(null); setNewSequenceCode(""); }}>Cancel</Button>
+                                  <Button
+                                    size="sm"
+                                    className="h-8 bg-red-600 hover:bg-red-700"
+                                    onClick={() =>
+                                      handleCreateSequence(chapter.id)
+                                    }
+                                  >
+                                    Create
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 border-gray-600 text-gray-300"
+                                    onClick={() => {
+                                      setIsCreatingSequence(null);
+                                      setNewSequenceCode("");
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
                                 </>
                               ) : (
-                                <Button size="sm" variant="outline" className="h-8 border-gray-600 text-gray-300" onClick={async () => { setIsCreatingSequence(chapter.id); await ensureSequencesLoaded(chapter.id); }} title="Add a new sequence to this chapter">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 border-gray-600 text-gray-300"
+                                  onClick={async () => {
+                                    setIsCreatingSequence(chapter.id);
+                                    await ensureSequencesLoaded(chapter.id);
+                                  }}
+                                  title="Add a new sequence to this chapter"
+                                >
                                   <Plus className="w-3 h-3 mr-1" /> Add Sequence
                                 </Button>
                               )}
@@ -1334,38 +1408,70 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                 // kick off load and show hint
                                 ensureSequencesLoaded(chapter.id);
                                 return (
-                                  <div className="text-xs text-gray-400">Loading sequences…</div>
+                                  <div className="text-xs text-gray-400">
+                                    Loading sequences…
+                                  </div>
                                 );
                               }
                               if (seqs.length === 0) {
                                 return (
-                                  <div className="text-xs text-gray-400">No sequences yet.</div>
+                                  <div className="text-xs text-gray-400">
+                                    No sequences yet.
+                                  </div>
                                 );
                               }
                               const seqList = seqs.map((seq) => (
-                                <div key={seq.id} className="bg-gray-700/70 rounded px-3 py-3">
+                                <div
+                                  key={seq.id}
+                                  className="bg-gray-700/70 rounded px-3 py-3"
+                                >
                                   <div className="flex items-center justify-between">
-                                    <span className="text-xs text-gray-200 font-medium tracking-wide">{seq.code}</span>
+                                    <span className="text-xs text-gray-200 font-medium tracking-wide">
+                                      {seq.code}
+                                    </span>
                                     <div className="flex items-center gap-2">
                                       <Button
                                         size="sm"
                                         className="h-8 px-3 bg-purple-600 hover:bg-purple-700"
                                         onClick={async () => {
-                                          const cached = storyboardsBySequence[seq.id];
-                                          const existing = cached?.exists ? { id: cached.id, data: { width: cached.width, height: cached.height }, title: cached.title } as any : await getStoryboardBySequence(seq.id);
-                                          if (existing && (existing as any).id) {
+                                          const cached =
+                                            storyboardsBySequence[seq.id];
+                                          const existing = cached?.exists
+                                            ? ({
+                                                id: cached.id,
+                                                data: {
+                                                  width: cached.width,
+                                                  height: cached.height,
+                                                },
+                                                title: cached.title,
+                                              } as any)
+                                            : await getStoryboardBySequence(
+                                                seq.id
+                                              );
+                                          if (
+                                            existing &&
+                                            (existing as any).id
+                                          ) {
                                             onViewChange("animation-editor", {
                                               projectId,
                                               chapterId: chapter.id,
                                               sequenceId: seq.id,
                                               sequenceCode: seq.code,
                                               mode: "storyboard",
-                                              projectTitle: project?.title || "Project",
-                                              sceneName: (existing as any).title || `Storyboard: ${seq.code}`,
-                                              canvasWidth: (existing as any).data?.width || 1920,
-                                              canvasHeight: (existing as any).data?.height || 1080,
+                                              projectTitle:
+                                                project?.title || "Project",
+                                              sceneName:
+                                                (existing as any).title ||
+                                                `Storyboard: ${seq.code}`,
+                                              canvasWidth:
+                                                (existing as any).data?.width ||
+                                                1920,
+                                              canvasHeight:
+                                                (existing as any).data
+                                                  ?.height || 1080,
                                               frameRate: 24,
-                                              storyboardId: (existing as any).id,
+                                              storyboardId: (existing as any)
+                                                .id,
                                             });
                                           } else {
                                             setIsStoryboardSetupOpen(seq.id);
@@ -1374,23 +1480,59 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                         }}
                                         title="Create/Open storyboard for this sequence"
                                       >
-                                        <BookOpen className="w-3 h-3 mr-1" /> {storyboardsBySequence[seq.id]?.exists ? "Open Storyboard" : "Create Storyboard"}
+                                        <BookOpen className="w-3 h-3 mr-1" />{" "}
+                                        {storyboardsBySequence[seq.id]?.exists
+                                          ? "Open Storyboard"
+                                          : "Create Storyboard"}
                                       </Button>
                                       {/* Per-sequence Create Composition button removed */}
                                       {isCreatingShot === seq.id ? (
                                         <>
                                           <Input
                                             value={newShotCode}
-                                            onChange={(e) => setNewShotCode(e.target.value)}
+                                            onChange={(e) =>
+                                              setNewShotCode(e.target.value)
+                                            }
                                             placeholder="Shot code e.g. 010A"
                                             className="h-8 bg-gray-700 border-gray-600 text-white px-3"
                                           />
-                                          <Button size="sm" className="h-8 px-3 bg-red-600 hover:bg-red-700" onClick={() => handleCreateShot(chapter.id, seq.id)}>Add</Button>
-                                          <Button size="sm" variant="outline" className="h-8 px-3 border-gray-600 text-gray-300" onClick={() => { setIsCreatingShot(null); setNewShotCode(""); }}>Cancel</Button>
+                                          <Button
+                                            size="sm"
+                                            className="h-8 px-3 bg-red-600 hover:bg-red-700"
+                                            onClick={() =>
+                                              handleCreateShot(
+                                                chapter.id,
+                                                seq.id
+                                              )
+                                            }
+                                          >
+                                            Add
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-8 px-3 border-gray-600 text-gray-300"
+                                            onClick={() => {
+                                              setIsCreatingShot(null);
+                                              setNewShotCode("");
+                                            }}
+                                          >
+                                            Cancel
+                                          </Button>
                                         </>
                                       ) : (
-                                        <Button size="sm" variant="outline" className="h-8 px-3 border-gray-600 text-gray-300" onClick={async () => { setIsCreatingShot(seq.id); await ensureShotsLoaded(seq.id); }} title="Add a shot to this sequence">
-                                          <Plus className="w-3 h-3 mr-1" /> Add Shot
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-8 px-3 border-gray-600 text-gray-300"
+                                          onClick={async () => {
+                                            setIsCreatingShot(seq.id);
+                                            await ensureShotsLoaded(seq.id);
+                                          }}
+                                          title="Add a shot to this sequence"
+                                        >
+                                          <Plus className="w-3 h-3 mr-1" /> Add
+                                          Shot
                                         </Button>
                                       )}
                                     </div>
@@ -1401,26 +1543,44 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                       if (!shots) {
                                         ensureShotsLoaded(seq.id);
                                         return (
-                                          <div className="text-xs text-gray-400">Loading shots…</div>
+                                          <div className="text-xs text-gray-400">
+                                            Loading shots…
+                                          </div>
                                         );
                                       }
                                       if (shots.length === 0) {
                                         return (
-                                          <div className="text-xs text-gray-400">No shots yet.</div>
+                                          <div className="text-xs text-gray-400">
+                                            No shots yet.
+                                          </div>
                                         );
                                       }
                                       return shots.map((shot) => (
                                         <div
                                           key={shot.id}
                                           className="group flex items-center gap-3 text-xs bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 hover:border-gray-500 hover:bg-gray-800 transition cursor-default"
-                                          onDoubleClick={() => handleOpenShotEditor(chapter.id, seq.code, shot.code)}
+                                          onDoubleClick={() =>
+                                            handleOpenShotEditor(
+                                              chapter.id,
+                                              seq.code,
+                                              shot.code
+                                            )
+                                          }
                                         >
-                                          <span className={`w-2 h-2 rounded-full ${getShotDotClasses(shot.status)}`} />
+                                          <span
+                                            className={`w-2 h-2 rounded-full ${getShotDotClasses(
+                                              shot.status
+                                            )}`}
+                                          />
                                           <span className="text-gray-100 font-medium tracking-wide">
                                             {shot.code}
                                           </span>
                                           {shot.status && (
-                                            <span className={`rounded-full px-2 py-0.5 text-[10px] ${getShotStatusClasses(shot.status)}`}>
+                                            <span
+                                              className={`rounded-full px-2 py-0.5 text-[10px] ${getShotStatusClasses(
+                                                shot.status
+                                              )}`}
+                                            >
                                               {shot.status}
                                             </span>
                                           )}
@@ -1429,10 +1589,22 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                             variant="outline"
                                             size="sm"
                                             className="h-7 px-3 border-gray-600 text-gray-100 hover:bg-gray-700"
-                                            onClick={() => handleShotOpenClick(chapter.id, seq, shot)}
-                                            title={shot?.data?.initialized ? "Open this shot in the editor" : "Create this shot scene"}
+                                            onClick={() =>
+                                              handleShotOpenClick(
+                                                chapter.id,
+                                                seq,
+                                                shot
+                                              )
+                                            }
+                                            title={
+                                              shot?.data?.initialized
+                                                ? "Open this shot in the editor"
+                                                : "Create this shot scene"
+                                            }
                                           >
-                                            {shot?.data?.initialized ? "Open" : "Create"}
+                                            {shot?.data?.initialized
+                                              ? "Open"
+                                              : "Create"}
                                           </Button>
                                         </div>
                                       ));
@@ -1478,64 +1650,135 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
         {/* Storyboard Setup Modal */}
         {isStoryboardSetupOpen && (
           <div className="fixed inset-0 z-50">
-            <div className="absolute inset-0 bg-black/50" onClick={() => setIsStoryboardSetupOpen(null)} />
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setIsStoryboardSetupOpen(null)}
+            />
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
-              <h3 className="text-lg font-semibold text-white mb-4">Create Storyboard</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">
+                Create Storyboard
+              </h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Storyboard Name</label>
-                  <Input value={`Storyboard: ${Object.values(sequencesByChapter).flat().find(s=>s.id===isStoryboardSetupOpen)?.code || "Seq"}`} disabled className="bg-gray-700 border-gray-600 text-gray-300" />
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Storyboard Name
+                  </label>
+                  <Input
+                    value={`Storyboard: ${
+                      Object.values(sequencesByChapter)
+                        .flat()
+                        .find((s) => s.id === isStoryboardSetupOpen)?.code ||
+                      "Seq"
+                    }`}
+                    disabled
+                    className="bg-gray-700 border-gray-600 text-gray-300"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm text-gray-300 mb-1">Width</label>
-                    <Input type="number" value={setupWidth} onChange={(e) => setSetupWidth(parseInt(e.target.value || "0", 10))} className="bg-gray-700 border-gray-600 text-white" />
+                    <label className="block text-sm text-gray-300 mb-1">
+                      Width
+                    </label>
+                    <Input
+                      type="number"
+                      value={setupWidth}
+                      onChange={(e) =>
+                        setSetupWidth(parseInt(e.target.value || "0", 10))
+                      }
+                      className="bg-gray-700 border-gray-600 text-white"
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-300 mb-1">Height</label>
-                    <Input type="number" value={setupHeight} onChange={(e) => setSetupHeight(parseInt(e.target.value || "0", 10))} className="bg-gray-700 border-gray-600 text-white" />
+                    <label className="block text-sm text-gray-300 mb-1">
+                      Height
+                    </label>
+                    <Input
+                      type="number"
+                      value={setupHeight}
+                      onChange={(e) =>
+                        setSetupHeight(parseInt(e.target.value || "0", 10))
+                      }
+                      className="bg-gray-700 border-gray-600 text-white"
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm text-gray-300 mb-1">Resolution</label>
-                    <Input value="72 dpi" disabled className="bg-gray-700 border-gray-600 text-gray-300" />
+                    <label className="block text-sm text-gray-300 mb-1">
+                      Resolution
+                    </label>
+                    <Input
+                      value="72 dpi"
+                      disabled
+                      className="bg-gray-700 border-gray-600 text-gray-300"
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-300 mb-1">Units</label>
-                    <Input value="px" disabled className="bg-gray-700 border-gray-600 text-gray-300" />
+                    <label className="block text-sm text-gray-300 mb-1">
+                      Units
+                    </label>
+                    <Input
+                      value="px"
+                      disabled
+                      className="bg-gray-700 border-gray-600 text-gray-300"
+                    />
                   </div>
                 </div>
                 <div className="flex gap-2 pt-2">
-                  <Button className="flex-1 bg-red-600 hover:bg-red-700 text-white" onClick={async () => {
-                    const seqId = isStoryboardSetupOpen;
-                    const seq = Object.values(sequencesByChapter).flat().find(s=>s.id===seqId);
-                    if (!seq) { setIsStoryboardSetupOpen(null); return; }
-                    const created = await createStoryboard({
-                      projectId: projectId!,
-                      chapterId: storyboardChapterId || "",
-                      sequenceId: seqId,
-                      title: `Storyboard: ${seq.code}`,
-                      width: setupWidth,
-                      height: setupHeight,
-                    });
-                    setStoryboardsBySequence((prev)=>({ ...prev, [seqId]: { exists: true, id: created?.id, width: setupWidth, height: setupHeight, title: created?.title } }));
-                    onViewChange("animation-editor", {
-                      projectId,
-                      chapterId: storyboardChapterId || "",
-                      sequenceId: seqId,
-                      sequenceCode: seq.code,
-                      mode: "storyboard",
-                      projectTitle: project?.title || "Project",
-                      sceneName: `Storyboard: ${seq.code}`,
-                      canvasWidth: setupWidth,
-                      canvasHeight: setupHeight,
-                      frameRate: 24,
-                      storyboardId: created?.id,
-                    });
-                    setIsStoryboardSetupOpen(null);
-                  }}>Create Storyboard</Button>
-                  <Button variant="outline" className="border-gray-600 text-gray-300" onClick={() => setIsStoryboardSetupOpen(null)}>Cancel</Button>
+                  <Button
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                    onClick={async () => {
+                      const seqId = isStoryboardSetupOpen;
+                      const seq = Object.values(sequencesByChapter)
+                        .flat()
+                        .find((s) => s.id === seqId);
+                      if (!seq) {
+                        setIsStoryboardSetupOpen(null);
+                        return;
+                      }
+                      const created = await createStoryboard({
+                        projectId: projectId!,
+                        chapterId: storyboardChapterId || "",
+                        sequenceId: seqId,
+                        title: `Storyboard: ${seq.code}`,
+                        width: setupWidth,
+                        height: setupHeight,
+                      });
+                      setStoryboardsBySequence((prev) => ({
+                        ...prev,
+                        [seqId]: {
+                          exists: true,
+                          id: created?.id,
+                          width: setupWidth,
+                          height: setupHeight,
+                          title: created?.title,
+                        },
+                      }));
+                      onViewChange("animation-editor", {
+                        projectId,
+                        chapterId: storyboardChapterId || "",
+                        sequenceId: seqId,
+                        sequenceCode: seq.code,
+                        mode: "storyboard",
+                        projectTitle: project?.title || "Project",
+                        sceneName: `Storyboard: ${seq.code}`,
+                        canvasWidth: setupWidth,
+                        canvasHeight: setupHeight,
+                        frameRate: 24,
+                        storyboardId: created?.id,
+                      });
+                      setIsStoryboardSetupOpen(null);
+                    }}
+                  >
+                    Create Storyboard
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-gray-600 text-gray-300"
+                    onClick={() => setIsStoryboardSetupOpen(null)}
+                  >
+                    Cancel
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1759,11 +2002,15 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="flex items-center gap-2">
                   <Heart className="w-4 h-4 text-gray-400" />
-                  <span className="text-gray-300">{userTeam.upvotes.toLocaleString()} Team Upvotes</span>
+                  <span className="text-gray-300">
+                    {userTeam.upvotes.toLocaleString()} Team Upvotes
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Eye className="w-4 h-4 text-gray-400" />
-                  <span className="text-gray-300">{userTeam.views.toLocaleString()} Team Views</span>
+                  <span className="text-gray-300">
+                    {userTeam.views.toLocaleString()} Team Views
+                  </span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -1771,10 +2018,15 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                 <div className="flex items-center gap-2">
                   <Avatar className="w-6 h-6">
                     <AvatarFallback className="text-xs bg-red-600 text-white">
-                      {userTeam.leader_display_name?.split(" ").map((n) => n[0]).join("") || "U"}
+                      {userTeam.leader_display_name
+                        ?.split(" ")
+                        .map((n) => n[0])
+                        .join("") || "U"}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="text-white text-sm">{userTeam.leader_display_name}</span>
+                  <span className="text-white text-sm">
+                    {userTeam.leader_display_name}
+                  </span>
                   <Crown className="w-4 h-4 text-yellow-400" />
                 </div>
               </div>
@@ -1785,15 +2037,24 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                     <div key={member.id} className="flex items-center gap-3">
                       <Avatar className="w-8 h-8">
                         <AvatarFallback className="text-xs bg-gray-600 text-white">
-                          {member.user_display_name?.split(" ").map((n) => n[0]).join("") || "U"}
+                          {member.user_display_name
+                            ?.split(" ")
+                            .map((n) => n[0])
+                            .join("") || "U"}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-white text-sm">{member.user_display_name}</span>
-                          {member.user_id === userTeam.leader_id && <Crown className="w-3 h-3 text-yellow-400" />}
+                          <span className="text-white text-sm">
+                            {member.user_display_name}
+                          </span>
+                          {member.user_id === userTeam.leader_id && (
+                            <Crown className="w-3 h-3 text-yellow-400" />
+                          )}
                         </div>
-                        <span className="text-gray-400 text-xs">{member.role}</span>
+                        <span className="text-gray-400 text-xs">
+                          {member.role}
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -1806,9 +2067,17 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
             <CardContent className="space-y-4">
               <div className="text-center py-8">
                 <Users className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-white mb-2">You're not currently in a team</h3>
-                <p className="text-gray-400 mb-6">Join an existing team or create a new one to start collaborating on this project.</p>
-                <Button className="bg-red-600 hover:bg-red-700" onClick={() => setIsStartTeamModalOpen(true)}>
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  You're not currently in a team
+                </h3>
+                <p className="text-gray-400 mb-6">
+                  Join an existing team or create a new one to start
+                  collaborating on this project.
+                </p>
+                <Button
+                  className="bg-red-600 hover:bg-red-700"
+                  onClick={() => setIsStartTeamModalOpen(true)}
+                >
                   <Plus className="w-4 h-4 mr-2" /> Start New Team
                 </Button>
               </div>
@@ -2363,7 +2632,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-300 mb-2 block">Shot Name</label>
+              <label className="text-sm text-gray-300 mb-2 block">
+                Shot Name
+              </label>
               <Input
                 value={shotSetup ? `${shotSetup.shotCode}` : ""}
                 disabled
@@ -2372,41 +2643,62 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm text-gray-300 mb-2 block">Width</label>
+                <label className="text-sm text-gray-300 mb-2 block">
+                  Width
+                </label>
                 <Input
                   type="number"
                   value={setupWidth}
-                  onChange={(e) => setSetupWidth(parseInt(e.target.value || "0", 10))}
+                  onChange={(e) =>
+                    setSetupWidth(parseInt(e.target.value || "0", 10))
+                  }
                   className="bg-gray-700 border-gray-600 text-white"
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-300 mb-2 block">Height</label>
+                <label className="text-sm text-gray-300 mb-2 block">
+                  Height
+                </label>
                 <Input
                   type="number"
                   value={setupHeight}
-                  onChange={(e) => setSetupHeight(parseInt(e.target.value || "0", 10))}
+                  onChange={(e) =>
+                    setSetupHeight(parseInt(e.target.value || "0", 10))
+                  }
                   className="bg-gray-700 border-gray-600 text-white"
                 />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm text-gray-300 mb-2 block">Units</label>
-                <Input value="px" disabled className="bg-gray-700 border-gray-600 text-gray-300" />
+                <label className="text-sm text-gray-300 mb-2 block">
+                  Units
+                </label>
+                <Input
+                  value="px"
+                  disabled
+                  className="bg-gray-700 border-gray-600 text-gray-300"
+                />
               </div>
               <div>
-                <label className="text-sm text-gray-300 mb-2 block">Frame Rate</label>
+                <label className="text-sm text-gray-300 mb-2 block">
+                  Frame Rate
+                </label>
                 <Input
                   type="number"
                   value={setupFps}
-                  onChange={(e) => setSetupFps(parseInt(e.target.value || "0", 10))}
+                  onChange={(e) =>
+                    setSetupFps(parseInt(e.target.value || "0", 10))
+                  }
                   className="bg-gray-700 border-gray-600 text-white"
                 />
               </div>
             </div>
             <div className="flex gap-2">
-              <Button onClick={confirmCreateShotScene} className="flex-1 bg-red-600 hover:bg-red-700">
+              <Button
+                onClick={confirmCreateShotScene}
+                className="flex-1 bg-red-600 hover:bg-red-700"
+              >
                 Create Shot
               </Button>
               <Button
