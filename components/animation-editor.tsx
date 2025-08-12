@@ -235,16 +235,17 @@ export function AnimationEditor({
     (sceneSettings?.sceneName || "Export").replace(/\s+/g, "_")
   );
   // File naming scheme: for now only frame-folder shorthand (e.g., R1F1)
-  const [exportNameScheme, setExportNameScheme] = useState<"frame-folder">(
-    "frame-folder"
-  );
+  const [exportNameScheme, setExportNameScheme] =
+    useState<"frame-folder">("frame-folder");
   const [exportFormat, setExportFormat] = useState<"png" | "jpg" | "webp">(
     "png"
   );
   const [exportRowAllFrames, setExportRowAllFrames] = useState(false);
   const [exportLayersMerge, setExportLayersMerge] = useState<boolean>(true);
   // Optional native folder picker handle (File System Access API)
-  const [exportDirHandle, setExportDirHandle] = useState<any | null>(null);
+  // We avoid using the File System Access API to prevent browser permission prompts
+  // and fall back to standard downloads. This handle is no longer used.
+  const [exportDirHandle] = useState<any | null>(null);
   // Initialize draftName whenever sceneSettings changes
   useEffect(() => {
     const initial =
@@ -2839,44 +2840,60 @@ export function AnimationEditor({
   }, []);
 
   // Now that drawFrame exists, define export using it
-handleExport = useCallback(async () => {
+  handleExport = useCallback(async () => {
     try {
-    const exportCell = async (rowId: string, frameIndex: number) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+      const exportCell = async (rowId: string, frameIndex: number) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
 
-      const off = document.createElement("canvas");
-      off.width = appliedWidth;
-      off.height = appliedHeight;
-      const offCtx = off.getContext("2d");
-      if (!offCtx) return;
+        const off = document.createElement("canvas");
+        off.width = appliedWidth;
+        off.height = appliedHeight;
+        const offCtx = off.getContext("2d");
+        if (!offCtx) return;
 
-      offCtx.fillStyle = "#ffffff";
-      offCtx.fillRect(0, 0, off.width, off.height);
+        offCtx.fillStyle = "#ffffff";
+        offCtx.fillRect(0, 0, off.width, off.height);
 
-      const prevShowGrid = showGrid;
-      setShowGrid(false);
-      drawFrame();
-      offCtx.drawImage(canvas, 0, 0);
-      setShowGrid(prevShowGrid);
+        const prevShowGrid = showGrid;
+        setShowGrid(false);
+        drawFrame();
+        offCtx.drawImage(canvas, 0, 0);
+        setShowGrid(prevShowGrid);
 
-      const ext = exportFormat;
-      const mime = ext === "jpg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
-      const dataUrl = off.toDataURL(mime, 0.92);
-      const fileBase = `R${rowId.split("-")[1]}F${frameIndex + 1}`; // frame-folder naming
+        const ext = exportFormat;
+        const mime =
+          ext === "jpg"
+            ? "image/jpeg"
+            : ext === "webp"
+            ? "image/webp"
+            : "image/png";
+        const dataUrl = off.toDataURL(mime, 0.92);
+        const fileBase = `R${rowId.split("-")[1]}F${frameIndex + 1}`; // frame-folder naming
 
-      if (exportDirHandle?.getFileHandle) {
-        const fileHandle = await exportDirHandle.getFileHandle(`${fileBase}.${ext}`, { create: true });
-        const writable = await fileHandle.createWritable();
-        const res = await fetch(dataUrl);
-        await writable.write(await res.arrayBuffer());
-        await writable.close();
-      } else {
-        const link = document.createElement("a");
-        link.download = `${exportFolderName || "Export"}_${fileBase}.${ext}`;
-        link.href = dataUrl;
-        link.click();
-      }
+        if (exportDirHandle?.getFileHandle) {
+          const fileHandle = await exportDirHandle.getFileHandle(
+            `${fileBase}.${ext}`,
+            { create: true }
+          );
+          const writable = await fileHandle.createWritable();
+          const res = await fetch(dataUrl);
+          await writable.write(await res.arrayBuffer());
+          await writable.close();
+        } else {
+          const link = document.createElement("a");
+          link.download = `${exportFolderName || "Export"}_${fileBase}.${ext}`;
+          link.href = dataUrl;
+          link.click();
+        }
+      };
+
+    // Helper to switch frame, wait for next paint, then export
+    const exportAt = async (rowId: string, frameIndex: number) => {
+      setSelectedRow(rowId);
+      setSelectedFrameNumber(frameIndex + 1);
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      await exportCell(rowId, frameIndex);
     };
 
     if (exportRowAllFrames && selectedRow) {
@@ -2885,18 +2902,30 @@ handleExport = useCallback(async () => {
         .map((df) => df.frameIndex)
         .sort((a, b) => a - b);
       for (const fi of frames) {
-        await exportCell(selectedRow, fi);
+        await exportAt(selectedRow, fi);
       }
     } else {
       const rowId = selectedRow || "row-1";
       const frameIndex = selectedFrameNumber ? selectedFrameNumber - 1 : 0;
-      await exportCell(rowId, frameIndex);
+      await exportAt(rowId, frameIndex);
     }
       setIsExportOpen(false);
     } catch (e) {
       console.warn("Export failed", e);
     }
-}, [appliedWidth, appliedHeight, drawFrame, exportFolderName, exportFormat, exportRowAllFrames, selectedRow, selectedFrameNumber, showGrid, drawingFrames, exportDirHandle]);
+  }, [
+    appliedWidth,
+    appliedHeight,
+    drawFrame,
+    exportFolderName,
+    exportFormat,
+    exportRowAllFrames,
+    selectedRow,
+    selectedFrameNumber,
+    showGrid,
+    drawingFrames,
+    exportDirHandle,
+  ]);
 
   return (
     <div className="h-screen bg-gray-900 text-white flex flex-col overflow-hidden">
@@ -3130,10 +3159,14 @@ handleExport = useCallback(async () => {
                   onClick={() => setIsExportOpen(false)}
                 />
                 <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
-                  <h3 className="text-lg font-semibold text-white mb-4">Export</h3>
+                  <h3 className="text-lg font-semibold text-white mb-4">
+                    Export
+                  </h3>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm text-gray-300 mb-1">Export folder</label>
+                      <label className="block text-sm text-gray-300 mb-1">
+                        Export folder
+                      </label>
                       <div className="flex gap-2">
                         <input
                           className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
@@ -3142,38 +3175,32 @@ handleExport = useCallback(async () => {
                         />
                         <Button
                           variant="outline"
-                          size="sm"
-                          className="border-gray-600"
-                          onClick={async () => {
-                            try {
-                              // @ts-ignore
-                              if (window.showDirectoryPicker) {
-                                // @ts-ignore
-                                const handle = await window.showDirectoryPicker();
-                                setExportDirHandle(handle);
-                                setExportFolderName(handle.name || exportFolderName);
-                              }
-                            } catch (e) {
-                              console.warn("Folder chooser unavailable", e);
-                            }
-                          }}
+                          size="icon"
+                          className="border-gray-600 w-10"
+                          title="Folder"
                         >
-                          Choose…
+                          <Folder className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-300 mb-1">File name</label>
+                      <label className="block text-sm text-gray-300 mb-1">
+                        File name
+                      </label>
                       <select
                         className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
                         value={exportNameScheme}
-                        onChange={(e) => setExportNameScheme(e.target.value as any)}
+                        onChange={(e) =>
+                          setExportNameScheme(e.target.value as any)
+                        }
                       >
                         <option value="frame-folder">Frame folder name</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-300 mb-1">File format</label>
+                      <label className="block text-sm text-gray-300 mb-1">
+                        File format
+                      </label>
                       <select
                         className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
                         value={exportFormat}
@@ -3210,10 +3237,12 @@ handleExport = useCallback(async () => {
                           type="checkbox"
                           className="accent-blue-500"
                           checked={exportRowAllFrames}
-                          onChange={(e) => setExportRowAllFrames(e.target.checked)}
+                          onChange={(e) =>
+                            setExportRowAllFrames(e.target.checked)
+                          }
                         />
                         <label htmlFor="rowAll" className="text-sm text-gray-300">
-                          Export selected entire row
+                          Export entire selected row
                         </label>
                       </div>
                     )}
