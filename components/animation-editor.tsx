@@ -1117,7 +1117,9 @@ export function AnimationEditor({
       if (prevFrameNumber >= 0) {
         context.globalAlpha = 0.3;
         const prevFrameFolders = drawingFrames.filter(
-          (df) => df.frameIndex === prevFrameNumber
+          (df) =>
+            prevFrameNumber >= df.frameIndex &&
+            prevFrameNumber < df.frameIndex + (df.length || 1)
         );
         for (const prevFrame of prevFrameFolders) {
           const prevFolderId = `${prevFrame.rowId}-${prevFrame.frameIndex}`;
