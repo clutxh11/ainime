@@ -168,7 +168,10 @@ export default function Home() {
               // Boot the editor in composite mode with sensible defaults.
               // The chapter-level button passes { projectId, chapterId } as content.
               sceneSettings={{
-                sceneName: "Composition",
+                sceneName:
+                  (selectedContent as any)?.chapterTitle ||
+                  (sceneSettings as any)?.sceneName ||
+                  "Composition",
                 canvasWidth: 1920,
                 canvasHeight: 1080,
                 frameRate: 24,

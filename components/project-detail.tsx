@@ -1626,6 +1626,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                         onViewChange("compositing-editor", {
                                           projectId,
                                           chapterId: chapter.id,
+                                          chapterTitle: chapter.title,
                                         })
                                       }
                                       title="Create/Open composition for this chapter"

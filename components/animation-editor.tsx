@@ -2823,6 +2823,8 @@ export function AnimationEditor({
                     return seq && shot ? `${seq} - ${shot}` : shot || null;
                   }
                   if (mode === "composite") {
+                    // Prefer a human-readable name passed via sceneName (e.g., "chapter 1")
+                    if (sceneSettings?.sceneName) return sceneSettings.sceneName;
                     return sceneSettings?.chapterId
                       ? `chapter ${sceneSettings.chapterId.slice(0, 4)}`
                       : null;
@@ -3590,8 +3592,8 @@ export function AnimationEditor({
         <div className="w-80 bg-gray-800 border-l border-gray-700 p-4 flex flex-col">
           {/* Top Controls Area */}
           <div className="flex-shrink-0">
-            {/* Folders toolbar (Storyboard and Composite) */}
-            {(mode === "storyboard" || mode === "composite") && (
+            {/* Folders toolbar (Storyboard only) */}
+            {mode === "storyboard" && (
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold">Folders</h3>
                 <div className="flex items-center gap-2">
