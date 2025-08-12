@@ -965,7 +965,9 @@ export function AnimationEditor({
 
       // Draw current frame layers from all rows in order (respect extended length)
       const framesForIndex = drawingFrames.filter(
-        (df) => frameIndex >= df.frameIndex && frameIndex < df.frameIndex + (df.length || 1)
+        (df) =>
+          frameIndex >= df.frameIndex &&
+          frameIndex < df.frameIndex + (df.length || 1)
       );
       for (const frame of framesForIndex) {
         const folderId = `${frame.rowId}-${frame.frameIndex}`;
@@ -2499,8 +2501,10 @@ export function AnimationEditor({
     const frameFolderId = getActiveFrameFolderId(selectedLayerId);
     if (!frameFolderId) return;
 
-    const [rowId, frameIndexStr] = frameFolderId.split("-");
-    const frameIndex = parseInt(frameIndexStr, 10);
+    const parts = frameFolderId.split("-");
+    // folderId format is `row-<n>-<frameIndex>`
+    const rowId = `${parts[0]}-${parts[1]}`;
+    const frameIndex = parseInt(parts[2], 10);
 
     // Remove the frame and its associated layers
     setDrawingFrames((prev) =>
