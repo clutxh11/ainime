@@ -48,6 +48,7 @@ import ToolSidebar from "@/components/editor/ToolSidebar";
 import CanvasViewport from "@/components/editor/CanvasViewport";
 import SettingsPanel from "@/components/editor/SettingsPanel";
 import LayersPanel from "@/components/editor/LayersPanel";
+import EditorSettingsModal from "@/components/editor/EditorSettingsModal";
 import type { CurrentView } from "@/types";
 import TimelineGrid, { DrawingFrame } from "./timeline-grid";
 import { supabase } from "@/lib/supabase";
@@ -3692,244 +3693,62 @@ export function AnimationEditor({
         />
       </div>
 
-      {/* Settings Modal */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setIsSettingsOpen(false)}
-          />
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-white mb-4">
-              {mode === "storyboard"
-                ? "Sequence Settings"
-                : mode === "composite"
-                ? "Compositing Settings"
-                : "Shot Settings"}
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-300 mb-1">
-                  {mode === "storyboard"
-                    ? "Sequence Name"
-                    : mode === "composite"
-                    ? "Composition Name"
-                    : "Shot Name"}
-                </label>
-                <input
-                  className={`w-full border rounded px-3 py-2 ${
-                    mode === "composite"
-                      ? "bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed"
-                      : "bg-gray-700 border-gray-600 text-white"
-                  }`}
-                  value={draftName}
-                  onChange={(e) => setDraftName(e.target.value)}
-                  disabled={mode === "composite"}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-300 mb-1">
-                    Width
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-                    value={draftWidth}
-                    onChange={(e) =>
-                      setDraftWidth(parseInt(e.target.value || "0", 10))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-300 mb-1">
-                    Height
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-                    value={draftHeight}
-                    onChange={(e) =>
-                      setDraftHeight(parseInt(e.target.value || "0", 10))
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-300 mb-1">
-                    Units
-                  </label>
-                  <input
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-300"
-                    value="px"
-                    disabled
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-300 mb-1">
-                    Frame Rate
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-                    value={draftFps}
-                    onChange={(e) =>
-                      setDraftFps(parseInt(e.target.value || "0", 10))
-                    }
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded px-3 py-2"
-                  onClick={async () => {
-                    // Commit draft → applied
-                    setAppliedWidth(draftWidth);
-                    setAppliedHeight(draftHeight);
-                    setAppliedFps(draftFps);
-                    setNameOverride(draftName);
-
-                    // Persist name change to database (shots or sequences)
-                    try {
-                      if (mode === "storyboard" && sceneSettings?.sequenceId) {
-                        await supabase
-                          .from("sequences")
-                          .update({ code: draftName })
-                          .eq("id", sceneSettings.sequenceId);
-                      } else if (
-                        mode !== "storyboard" &&
-                        sceneSettings?.shotId
-                      ) {
-                        await supabase
-                          .from("shots")
-                          .update({ code: draftName })
-                          .eq("id", sceneSettings.shotId);
-                      }
-                    } catch (e) {
-                      console.warn("Failed to update name in DB", e);
-                    }
-
-                    setIsSettingsOpen(false);
-                  }}
-                >
-                  Apply
-                </button>
-                <button
-                  className="border border-gray-600 text-gray-300 rounded px-3 py-2"
-                  onClick={() => setIsSettingsOpen(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-
-              {/* Danger zone */}
-              {mode === "animate" && sceneSettings?.shotId && (
-                <div className="mt-3 pt-3 border-t border-gray-700">
-                  <button
-                    className="w-full bg-red-900/60 hover:bg-red-900 text-white rounded px-3 py-2"
-                    onClick={() => setConfirmDeleteOpen((v) => !v)}
-                  >
-                    Delete Shot
-                  </button>
-                  <div
-                    className={`overflow-hidden transition-all duration-200 ${
-                      confirmDeleteOpen
-                        ? "max-h-40 opacity-100 mt-2"
-                        : "max-h-0 opacity-0"
-                    }`}
-                  >
-                    <div className="bg-red-950/50 border border-red-800 rounded px-3 py-3 text-sm text-red-200">
-                      <div className="mb-2">
-                        Delete this shot? This action cannot be undone.
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <button
-                          className="px-3 py-1 rounded border border-gray-600 text-gray-200"
-                          onClick={() => setConfirmDeleteOpen(false)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className="px-3 py-1 rounded bg-red-700 hover:bg-red-800 text-white"
-                          onClick={async () => {
-                            try {
-                              await supabase
-                                .from("shots")
-                                .delete()
-                                .eq("id", sceneSettings.shotId!);
-                              setIsSettingsOpen(false);
-                              setConfirmDeleteOpen(false);
-                              onViewChange("project-detail");
-                            } catch (e) {
-                              console.error("Failed to delete shot", e);
-                            }
-                          }}
-                        >
-                          OK, Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {mode === "composite" && (
-                <div className="mt-3 pt-3 border-t border-gray-700">
-                  <button
-                    className="w-full bg-red-900/60 hover:bg-red-900 text-white rounded px-3 py-2"
-                    onClick={() => setConfirmDeleteOpen((v) => !v)}
-                  >
-                    Delete Composition
-                  </button>
-                  <div
-                    className={`overflow-hidden transition-all duration-200 ${
-                      confirmDeleteOpen
-                        ? "max-h-40 opacity-100 mt-2"
-                        : "max-h-0 opacity-0"
-                    }`}
-                  >
-                    <div className="bg-red-950/50 border border-red-800 rounded px-3 py-3 text-sm text-red-200">
-                      <div className="mb-2">
-                        Delete this composition? This action cannot be undone.
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <button
-                          className="px-3 py-1 rounded border border-gray-600 text-gray-200"
-                          onClick={() => setConfirmDeleteOpen(false)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className="px-3 py-1 rounded bg-red-700 hover:bg-red-800 text-white"
-                          onClick={async () => {
-                            try {
-                              if (mode === "composite" && compositionId) {
-                                await supabase
-                                  .from("compositions")
-                                  .delete()
-                                  .eq("id", compositionId);
-                              }
-                            } catch (e) {
-                              console.error("Failed to delete composition", e);
-                            } finally {
-                              setIsSettingsOpen(false);
-                              setConfirmDeleteOpen(false);
-                              onViewChange("project-detail");
-                            }
-                          }}
-                        >
-                          OK, Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <EditorSettingsModal
+        open={isSettingsOpen}
+        mode={mode}
+        draftName={draftName}
+        canEditName={mode !== "composite"}
+        draftWidth={draftWidth}
+        draftHeight={draftHeight}
+        draftFps={draftFps}
+        onChangeName={setDraftName}
+        onChangeWidth={(v) => setDraftWidth(v)}
+        onChangeHeight={(v) => setDraftHeight(v)}
+        onChangeFps={(v) => setDraftFps(v)}
+        onApply={async () => {
+          setAppliedWidth(draftWidth);
+          setAppliedHeight(draftHeight);
+          setAppliedFps(draftFps);
+          setNameOverride(draftName);
+          try {
+            if (mode === "storyboard" && sceneSettings?.sequenceId) {
+              await supabase.from("sequences").update({ code: draftName }).eq("id", sceneSettings.sequenceId);
+            } else if (mode !== "storyboard" && sceneSettings?.shotId) {
+              await supabase.from("shots").update({ code: draftName }).eq("id", sceneSettings.shotId);
+            }
+          } catch (e) {
+            console.warn("Failed to update name in DB", e);
+          }
+          setIsSettingsOpen(false);
+        }}
+        onCancel={() => setIsSettingsOpen(false)}
+        showDeleteShot={mode === "animate" && !!sceneSettings?.shotId}
+        onDeleteShot={async () => {
+          if (!sceneSettings?.shotId) return;
+          try {
+            await supabase.from("shots").delete().eq("id", sceneSettings.shotId);
+            setIsSettingsOpen(false);
+            setConfirmDeleteOpen(false);
+            onViewChange("project-detail");
+          } catch (e) {
+            console.error("Failed to delete shot", e);
+          }
+        }}
+        showDeleteComposition={mode === "composite"}
+        onDeleteComposition={async () => {
+          try {
+            if (mode === "composite" && compositionId) {
+              await supabase.from("compositions").delete().eq("id", compositionId);
+            }
+          } catch (e) {
+            console.error("Failed to delete composition", e);
+          } finally {
+            setIsSettingsOpen(false);
+            setConfirmDeleteOpen(false);
+            onViewChange("project-detail");
+          }
+        }}
+      />
     </div>
   );
 }
