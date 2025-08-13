@@ -628,6 +628,8 @@ export function AnimationEditor({
     serializeDocument,
   ]);
 
+  const compositionBootstrapRef = useRef(false);
+
   useEffect(() => {
     const load = async () => {
       const isStoryboard = mode === "storyboard";
@@ -635,9 +637,11 @@ export function AnimationEditor({
       if (
         mode === "composite" &&
         sceneSettings?.projectId &&
-        sceneSettings?.chapterId
+        sceneSettings?.chapterId &&
+        !compositionBootstrapRef.current
       ) {
         try {
+          compositionBootstrapRef.current = true;
           const comp = await getOrCreateComposition({
             projectId: sceneSettings.projectId,
             chapterId: sceneSettings.chapterId,
