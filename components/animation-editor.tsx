@@ -1,48 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Plus,
-  Pencil,
-  Eraser,
-  Eye,
-  EyeOff,
-  Undo,
-  Redo,
-  Trash2,
-  Palette,
-  Layers,
-  Move,
-  Grid,
-  Folder,
-  FolderOpen,
-  Lock,
-  Unlock,
-  Copy,
-  ChevronDown,
-  ChevronRight,
-  Edit3,
-  Lasso,
-  X,
-  ChevronUp,
-} from "lucide-react";
+
+import { Pencil, Palette, Eraser, Move } from "lucide-react";
 import TopBar from "@/components/editor/TopBar";
 import ToolSidebar from "@/components/editor/ToolSidebar";
 import CanvasViewport from "@/components/editor/CanvasViewport";
@@ -50,14 +10,14 @@ import SettingsPanel from "@/components/editor/SettingsPanel";
 import LayersPanel from "@/components/editor/LayersPanel";
 import EditorSettingsModal from "@/components/editor/EditorSettingsModal";
 import CtxMenu from "@/components/editor/ContextMenu";
-import TimelineControls from "@/components/editor/TimelineControls";
+
 import ExportModal from "@/components/editor/ExportModal";
 import type { CurrentView } from "@/types";
-import TimelineGrid, { DrawingFrame } from "./timeline-grid";
+import type { DrawingFrame } from "./timeline-grid";
 import TimelineDock from "@/components/editor/TimelineDock";
 import { supabase } from "@/lib/supabase";
-import { getOrCreateComposition, updateCompositionData } from "@/lib/sequences";
-import { getFileNameBaseFromString, slugifyName } from "@/lib/editor/paths";
+import { getOrCreateComposition } from "@/lib/sequences";
+import { slugifyName } from "@/lib/editor/paths";
 import { renderFrameToContextImpl } from "@/lib/editor/canvas-render";
 import { drawFrameImpl } from "@/lib/editor/canvas-draw";
 import { runExport } from "@/lib/editor/export-runner";
@@ -65,24 +25,17 @@ import {
   isPointInPolygon,
   getStrokesBoundingBox,
   getResizeHandles,
+  getLassoBoundingBox,
 } from "@/lib/editor/geometry";
-import {
-  buildProjectChapterParts,
-  buildSequencePart,
-  buildShotPart,
-} from "@/lib/editor/storage";
-import {
-  exportCanvasDataURL,
-  saveDataUrlToHandle,
-  downloadDataUrl,
-} from "@/lib/editor/export";
+
+
 import {
   serializeDocument as buildDocument,
   saveSceneDoc,
   loadSceneDoc,
 } from "@/lib/editor/persistence";
 import useKeyboardShortcuts from "@/hooks/useKeyboardShortcuts";
-import { useSelectionTools } from "@/hooks/useSelectionTools";
+import useSelectionTools from "@/hooks/useSelectionTools";
 import useResizeHandlers from "@/hooks/useResizeHandlers";
 import useCanvasInteractions from "@/hooks/useCanvasInteractions";
 
@@ -142,11 +95,6 @@ interface Frame {
   thumbnail?: string;
 }
 
-interface SelectionArea {
-  points: Point[];
-  selectedStrokes: DrawingStroke[];
-}
-
 // moved to lib/editor/geometry
 
 // Helper to get the active frame folder id from selectedLayerId
@@ -158,24 +106,6 @@ function getActiveFrameFolderId(selectedLayerId: string | null) {
 }
 
 // moved helpers to lib/editor/paths
-
-const getLassoBoundingBox = (points: Point[]) => {
-  if (points.length === 0) {
-    return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
-  }
-  let minX = points[0].x;
-  let maxX = points[0].x;
-  let minY = points[0].y;
-  let maxY = points[0].y;
-
-  for (const point of points) {
-    minX = Math.min(minX, point.x);
-    maxX = Math.max(maxX, point.x);
-    minY = Math.min(minY, point.y);
-    maxY = Math.max(maxY, point.y);
-  }
-  return { minX, maxX, minY, maxY };
-};
 
 export function AnimationEditor({
   onViewChange,
@@ -191,8 +121,6 @@ export function AnimationEditor({
   const [brushSize, setBrushSize] = useState(5);
   const [color, setColor] = useState("#000000");
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentFrame, setCurrentFrame] = useState(1);
-  const [currentLayer, setCurrentLayer] = useState<string>("");
   const [onionSkin, setOnionSkin] = useState(false);
   // In compositing mode the grid toggle button is hidden, so default grid OFF
   const [showGrid, setShowGrid] = useState(mode === "composite" ? false : true);
@@ -399,24 +327,6 @@ export function AnimationEditor({
   }, []);
 
   const [selectedRow, setSelectedRow] = useState(rows[0].id);
-  const [frames, setFrames] = useState<Frame[]>([
-    {
-      id: 1,
-      name: "Frame 1",
-      expanded: true,
-      layers: [
-        {
-          id: "1-1",
-          name: "Untitled.1",
-          visible: true,
-          locked: false,
-          opacity: 100,
-          blendingMode: "Normal",
-          strokes: [],
-        },
-      ],
-    },
-  ]);
   const [currentStroke, setCurrentStroke] = useState<DrawingStroke | null>(
     null
   );
@@ -447,7 +357,6 @@ export function AnimationEditor({
       layerOrder,
       folderLayers,
       layerStrokes,
-      currentFrame,
       selectedRow,
       zoom,
       onionSkin,
@@ -467,7 +376,6 @@ export function AnimationEditor({
     layerOrder,
     folderLayers,
     layerStrokes,
-    currentFrame,
     selectedRow,
     zoom,
     onionSkin,
@@ -505,7 +413,6 @@ export function AnimationEditor({
           layerOrder,
           folderLayers,
           layerStrokes,
-          currentFrame,
           selectedRow,
           zoom,
           onionSkin,
@@ -547,7 +454,6 @@ export function AnimationEditor({
     layerOrder,
     folderLayers,
     layerStrokes,
-    currentFrame,
     selectedRow,
     zoom,
     onionSkin,
@@ -603,8 +509,7 @@ export function AnimationEditor({
         if (doc.timeline?.layerOrder) setLayerOrder(doc.timeline.layerOrder);
         if (doc.layers?.folderLayers) setFolderLayers(doc.layers.folderLayers);
         if (doc.layers?.layerStrokes) setLayerStrokes(doc.layers.layerStrokes);
-        if (doc.uiState?.currentFrame)
-          setCurrentFrame(doc.uiState.currentFrame);
+        
         if (doc.uiState?.selectedRow) setSelectedRow(doc.uiState.selectedRow);
         if (typeof doc.uiState?.zoom === "number") setZoom(doc.uiState.zoom);
         if (typeof doc.uiState?.onionSkin === "boolean")
@@ -892,10 +797,8 @@ export function AnimationEditor({
     pastePreview,
     isResizing,
     resizeBox,
-  ]);
-
-  // Drawing functions are now provided by useCanvasInteractions
-
+    ]);
+ 
   useEffect(() => {
     drawFrame();
   }, [selectedFrameNumber, layerVisibility, drawFrame]);
@@ -1259,17 +1162,59 @@ export function AnimationEditor({
   // Undo/Redo functions
   const saveToUndoStack = useCallback(() => {
     setUndoStack((prev) => {
-      // Create a deep copy of the current state
       const currentState = {
         layerStrokes: JSON.parse(JSON.stringify(layerStrokes)),
         folderLayers: JSON.parse(JSON.stringify(folderLayers)),
-        drawingFrames: JSON.parse(JSON.stringify(drawingFrames)), // Also save drawingFrames
-        layerOrder: JSON.parse(JSON.stringify(layerOrder)), // Save layerOrder
+        drawingFrames: JSON.parse(JSON.stringify(drawingFrames)),
+        layerOrder: JSON.parse(JSON.stringify(layerOrder)),
       };
       return [...prev, currentState];
     });
-    setRedoStack([]); // Clear redo stack when new action is performed
+    setRedoStack([]);
   }, [layerStrokes, folderLayers, drawingFrames, layerOrder]);
+
+  const { startDrawing, handleMouseUp } = useCanvasInteractions({
+    canvasRef,
+    contextRef,
+    getCanvasCoords,
+    drawFrame,
+    zoom,
+    panOffset,
+    setPanOffset,
+    isSpacePressed,
+    selectedLayerId,
+    currentTool,
+    color,
+    brushSize,
+    eraserSize,
+    eraserStyle,
+    setIsPanning,
+    setIsDrawing,
+    setCurrentStroke: (s: any) => setCurrentStroke(s as any),
+    generateStrokeId,
+    layerStrokes,
+    setLayerStrokes: setLayerStrokes as React.Dispatch<React.SetStateAction<Record<string, any[]>>> as any,
+    lassoSelection,
+    setLassoSelection,
+    isResizing,
+    resizeBox,
+    setResizeBox,
+    isDraggingResizeBox,
+    setIsDraggingResizeBox,
+    dragOffset,
+    setDragOffset,
+    activeHandle,
+    setActiveHandle,
+    originalLassoPoints,
+    setOriginalLassoPoints,
+    originalStrokePositions,
+    setOriginalStrokePositions,
+    isPanning,
+    saveToUndoStack,
+    getResizeHandles,
+    isPointInPolygon,
+    lastErasePointRef,
+  });
 
   const handleDrop = useCallback(
     (rowId: string, frameIndex: number, e: React.DragEvent) => {
@@ -1517,141 +1462,26 @@ export function AnimationEditor({
   ];
 
   // Frame management
-  const addFrame = () => {
-    const newFrame: Frame = {
-      id: frames.length + 1,
-      name: `Frame ${frames.length + 1}`,
-      expanded: false,
-      layers: [
-        {
-          id: `${frames.length + 1}-1`,
-          name: "Untitled.1",
-          visible: true,
-          locked: false,
-          opacity: 100,
-          blendingMode: "Normal",
-          strokes: [],
-        },
-      ],
-    };
-    setFrames((prev) => {
-      const newFrames = [...prev, newFrame];
-      setTimeout(() => saveToUndoStack(), 0);
-      return newFrames;
-    });
-  };
+  
 
-  const deleteFrame = () => {
-    if (frames.length <= 1) return;
-    setFrames((prev) => {
-      const newFrames = prev.filter((f) => f.id !== currentFrame);
-      setTimeout(() => saveToUndoStack(), 0);
-      return newFrames;
-    });
-    setCurrentFrame((prev) => Math.max(1, prev - 1));
-  };
+  
 
-  const duplicateFrame = () => {
-    const currentFrameData = frames.find((f) => f.id === currentFrame);
-    if (!currentFrameData) return;
+  
 
-    const newFrame: Frame = {
-      id: frames.length + 1,
-      name: `${currentFrameData.name} Copy`,
-      expanded: false,
-      layers: currentFrameData.layers.map((layer) => ({
-        ...layer,
-        id: `${frames.length + 1}-${layer.id.split("-")[1]}`,
-        strokes: [...layer.strokes],
-      })),
-    };
-    setFrames((prev) => {
-      const newFrames = [...prev, newFrame];
-      setTimeout(() => saveToUndoStack(), 0);
-      return newFrames;
-    });
-  };
+  
+
+  
 
   // Layer management
-  const addLayer = () => {
-    const currentFrameData = frames.find((f) => f.id === currentFrame);
-    if (!currentFrameData) return;
+  
 
-    const layerCount = currentFrameData.layers.length;
-    const newLayer: Layer = {
-      id: `${currentFrame}-${Date.now()}`,
-      name: `Untitled.${layerCount + 1}`,
-      visible: true,
-      locked: false,
-      opacity: 100,
-      blendingMode: "Normal",
-      strokes: [],
-    };
+  
 
-    setFrames((prev) => {
-      const newFrames = prev.map((frame) =>
-        frame.id === currentFrame
-          ? { ...frame, layers: [...frame.layers, newLayer] }
-          : frame
-      );
-      setTimeout(() => saveToUndoStack(), 0);
-      return newFrames;
-    });
-  };
+  
 
-  const deleteLayer = (layerId: string) => {
-    setFrames((prev) => {
-      const newFrames = prev.map((frame) =>
-        frame.id === currentFrame
-          ? { ...frame, layers: frame.layers.filter((l) => l.id !== layerId) }
-          : frame
-      );
-      setTimeout(() => saveToUndoStack(), 0);
-      return newFrames;
-    });
-  };
+  
 
-  const toggleLayerVisibility = (layerId: string) => {
-    setFrames((prev) =>
-      prev.map((frame) =>
-        frame.id === currentFrame
-          ? {
-              ...frame,
-              layers: frame.layers.map((layer) =>
-                layer.id === layerId
-                  ? { ...layer, visible: !layer.visible }
-                  : layer
-              ),
-            }
-          : frame
-      )
-    );
-  };
-
-  const toggleLayerLock = (layerId: string) => {
-    setFrames((prev) =>
-      prev.map((frame) =>
-        frame.id === currentFrame
-          ? {
-              ...frame,
-              layers: frame.layers.map((layer) =>
-                layer.id === layerId
-                  ? { ...layer, locked: !layer.locked }
-                  : layer
-              ),
-            }
-          : frame
-      )
-    );
-  };
-
-  const toggleFrameExpansion = (frameId: number) => {
-    setFrames((prev) =>
-      prev.map((frame) =>
-        frame.id === frameId ? { ...frame, expanded: !frame.expanded } : frame
-      )
-    );
-  };
+  
 
   // Layer renaming
   const startEditingLayer = (layerId: string, currentName: string) => {
@@ -1661,24 +1491,6 @@ export function AnimationEditor({
 
   const saveLayerName = () => {
     if (!editingLayer) return;
-
-    setFrames((prev) => {
-      const newFrames = prev.map((frame) =>
-        frame.id === currentFrame
-          ? {
-              ...frame,
-              layers: frame.layers.map((layer) =>
-                layer.id === editingLayer
-                  ? { ...layer, name: editingName }
-                  : layer
-              ),
-            }
-          : frame
-      );
-      setTimeout(() => saveToUndoStack(), 0);
-      return newFrames;
-    });
-
     setEditingLayer(null);
     setEditingName("");
   };
@@ -1688,7 +1500,6 @@ export function AnimationEditor({
     setEditingName("");
   };
 
-  // Handle Enter and Escape keys for layer renaming
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       saveLayerName();
@@ -1812,17 +1623,9 @@ export function AnimationEditor({
 
   // Install shortcuts after handlers are defined below (using layout effect pattern)
 
-  const currentFrameData = frames.find((f) => f.id === currentFrame);
-  const currentLayerData = currentFrameData?.layers.find(
-    (l) => l.id === currentLayer
-  );
+
 
   // Update current layer when selectedLayerId changes (from sidebar)
-  useEffect(() => {
-    if (selectedLayerId) {
-      setCurrentLayer(selectedLayerId);
-    }
-  }, [selectedLayerId]);
 
   // Auto-select the first layer on new scene creation
   useEffect(() => {
@@ -2193,7 +1996,7 @@ export function AnimationEditor({
     lassoSelection,
     selectedLayerId,
     layerStrokes,
-    setLayerStrokes,
+    setLayerStrokes: setLayerStrokes as React.Dispatch<React.SetStateAction<Record<string, any[]>>> as any,
     setLassoSelection,
     handleCloseContextMenu,
     setIsResizing,
@@ -2222,108 +2025,6 @@ export function AnimationEditor({
       });
     });
     return { minX, maxX, minY, maxY };
-  };
-
-  const handleMouseUp = () => {
-    // Panning
-    if (isPanning) {
-      setIsPanning(false);
-      return;
-    }
-
-    // Resizing
-    if (isResizing) {
-      if (activeHandle) {
-        setActiveHandle(null);
-        if (resizeBox) {
-          setResizeBox((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  originalStrokes: JSON.parse(JSON.stringify(prev.strokes)),
-                }
-              : null
-          );
-        }
-        saveToUndoStack();
-      }
-      if (isDraggingResizeBox) {
-        setIsDraggingResizeBox(false);
-        if (resizeBox) {
-          setResizeBox((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  originalStrokes: JSON.parse(JSON.stringify(prev.strokes)),
-                }
-              : null
-          );
-        }
-        saveToUndoStack();
-      }
-      return;
-    }
-
-    // Move tool - finishing a drag
-    if (isDragging) {
-      setIsDragging(false);
-      setOriginalLassoPoints([]);
-      setOriginalStrokePositions({});
-      if (lassoSelection) {
-        showContextMenuForSelection(lassoSelection);
-      }
-      saveToUndoStack();
-      return;
-    }
-
-    // Move tool - finishing a lasso selection
-    if (isSelecting && currentTool === "move" && lassoSelection) {
-      setIsSelecting(false);
-      if (lassoSelection.points.length < 3) {
-        setLassoSelection(null);
-        return;
-      }
-      const allStrokesOnLayer = layerStrokes[selectedLayerId || ""] || [];
-      const selectedStrokeIds = allStrokesOnLayer
-        .filter((stroke) =>
-          stroke.points.some((point) =>
-            isPointInPolygon(point, lassoSelection.points)
-          )
-        )
-        .map((stroke) => stroke.id);
-
-      const finalSelection = {
-        ...lassoSelection,
-        isActive: true,
-        selectedStrokeIds: selectedStrokeIds,
-      };
-      setLassoSelection(finalSelection);
-      showContextMenuForSelection(finalSelection);
-      return;
-    }
-
-    // Eraser tool - save changes to undo stack
-    if (currentTool === "eraser" && selectedLayerId) {
-      saveToUndoStack();
-      lastErasePointRef.current = null; // Clear ref on mouse up
-      return;
-    }
-
-    // Regular drawing
-    if (isDrawing && currentStroke && selectedLayerId) {
-      setIsDrawing(false);
-      if (currentStroke.points.length > 1) {
-        setLayerStrokes((prevStrokes) => ({
-          ...prevStrokes,
-          [selectedLayerId]: [
-            ...(prevStrokes[selectedLayerId] || []),
-            currentStroke,
-          ],
-        }));
-        saveToUndoStack();
-      }
-      setCurrentStroke(null);
-    }
   };
 
   // Custom color set functions
@@ -2360,42 +2061,6 @@ export function AnimationEditor({
     });
   };
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === " ") {
-      e.preventDefault();
-      undo();
-    } else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
-      e.preventDefault();
-      redo();
-    } else if ((e.ctrlKey || e.metaKey) && e.key === "c") {
-      handleCopySelectedStrokes();
-    } else if ((e.ctrlKey || e.metaKey) && e.key === "v") {
-      pasteFromClipboard();
-    } else if (e.key === "Enter" && isResizing) {
-      handleConfirmResize();
-    }
-  };
-
-  const handleKeyUp = (e: KeyboardEvent) => {
-    if (e.code === "Space") {
-      e.preventDefault();
-      setIsSpacePressed(false);
-    }
-  };
-
-  // Add event listeners for keyboard shortcuts
-  useEffect(() => {
-    // Only add event listeners on the client side
-    if (typeof window === "undefined") return;
-
-    document.addEventListener("keydown", handleKeyDown);
-    document.addEventListener("keyup", handleKeyUp);
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.removeEventListener("keyup", handleKeyUp);
-    };
-  }, []);
 
   // Now that drawFrame exists, define export using it
   handleExport = useCallback(async () => {

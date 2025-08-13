@@ -9,6 +9,8 @@ export interface DrawingStroke {
   points: Point[];
 }
 
+import { useRef, useState } from "react";
+
 export default function useSelectionTools() {
   const [lassoSelection, setLassoSelection] = useState<{
     points: Point[];

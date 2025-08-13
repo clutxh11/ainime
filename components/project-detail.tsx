@@ -482,7 +482,7 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                 err = inRes.error;
                 try {
                   const orExpr = chapterIds
-                    .map((id) => `chapter_id.eq.${id}`)
+                    .map((id: string) => `chapter_id.eq.${id}`)
                     .join(",");
                   const orRes = await supabase
                     .from("animated_chapters")

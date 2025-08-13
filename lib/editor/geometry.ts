@@ -67,3 +67,20 @@ export function getResizeHandles(box: any) {
     },
   } as const;
 }
+
+export function getLassoBoundingBox(points: Point[]) {
+  if (!Array.isArray(points) || points.length === 0) {
+    return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  }
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y);
+    maxY = Math.max(maxY, p.y);
+  }
+  return { minX, maxX, minY, maxY };
+}
