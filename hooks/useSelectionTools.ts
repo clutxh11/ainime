@@ -1,9 +1,13 @@
-"use client";
-
-import { useCallback, useRef, useState } from "react";
-
-export interface Point { x: number; y: number }
-export interface DrawingStroke { id: string; color: string; brushSize: number; points: Point[] }
+export interface Point {
+  x: number;
+  y: number;
+}
+export interface DrawingStroke {
+  id: string;
+  color: string;
+  brushSize: number;
+  points: Point[];
+}
 
 export default function useSelectionTools() {
   const [lassoSelection, setLassoSelection] = useState<{
@@ -15,7 +19,9 @@ export default function useSelectionTools() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
   const [originalLassoPoints, setOriginalLassoPoints] = useState<Point[]>([]);
-  const [originalStrokePositions, setOriginalStrokePositions] = useState<Record<string, { points: Point[] }>>({});
+  const [originalStrokePositions, setOriginalStrokePositions] = useState<
+    Record<string, { points: Point[] }>
+  >({});
 
   const mousePosRef = useRef<Point>({ x: 0, y: 0 });
 
@@ -35,5 +41,3 @@ export default function useSelectionTools() {
     mousePosRef,
   } as const;
 }
-
-

@@ -50,12 +50,22 @@ import SettingsPanel from "@/components/editor/SettingsPanel";
 import LayersPanel from "@/components/editor/LayersPanel";
 import EditorSettingsModal from "@/components/editor/EditorSettingsModal";
 import CtxMenu from "@/components/editor/ContextMenu";
+import TimelineControls from "@/components/editor/TimelineControls";
+import ExportModal from "@/components/editor/ExportModal";
 import type { CurrentView } from "@/types";
 import TimelineGrid, { DrawingFrame } from "./timeline-grid";
+import TimelineDock from "@/components/editor/TimelineDock";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateComposition, updateCompositionData } from "@/lib/sequences";
 import { getFileNameBaseFromString, slugifyName } from "@/lib/editor/paths";
 import { renderFrameToContextImpl } from "@/lib/editor/canvas-render";
+import { drawFrameImpl } from "@/lib/editor/canvas-draw";
+import { runExport } from "@/lib/editor/export-runner";
+import {
+  isPointInPolygon,
+  getStrokesBoundingBox,
+  getResizeHandles,
+} from "@/lib/editor/geometry";
 import {
   buildProjectChapterParts,
   buildSequencePart,
@@ -66,7 +76,15 @@ import {
   saveDataUrlToHandle,
   downloadDataUrl,
 } from "@/lib/editor/export";
+import {
+  serializeDocument as buildDocument,
+  saveSceneDoc,
+  loadSceneDoc,
+} from "@/lib/editor/persistence";
 import useKeyboardShortcuts from "@/hooks/useKeyboardShortcuts";
+import { useSelectionTools } from "@/hooks/useSelectionTools";
+import useResizeHandlers from "@/hooks/useResizeHandlers";
+import useCanvasInteractions from "@/hooks/useCanvasInteractions";
 
 type EditorMode = "animate" | "storyboard" | "composite";
 
@@ -129,22 +147,7 @@ interface SelectionArea {
   selectedStrokes: DrawingStroke[];
 }
 
-// Helper function to check if a point is inside a polygon
-const isPointInPolygon = (point: Point, polygon: Point[]): boolean => {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    if (
-      polygon[i].y > point.y !== polygon[j].y > point.y &&
-      point.x <
-        ((polygon[j].x - polygon[i].x) * (point.y - polygon[i].y)) /
-          (polygon[j].y - polygon[i].y) +
-          polygon[i].x
-    ) {
-      inside = !inside;
-    }
-  }
-  return inside;
-};
+// moved to lib/editor/geometry
 
 // Helper to get the active frame folder id from selectedLayerId
 function getActiveFrameFolderId(selectedLayerId: string | null) {
@@ -433,28 +436,28 @@ export function AnimationEditor({
 
   // -------- Persistence helpers (now that timeline state exists) --------
   const serializeDocument = useCallback(() => {
-    return {
-      version: 1,
-      sceneSettings: {
-        sceneName: nameOverride ?? sceneSettings?.sceneName ?? "Scene",
-        width: appliedWidth,
-        height: appliedHeight,
-        fps: appliedFps,
-        units: "px",
-      },
+    return buildDocument({
+      sceneName: nameOverride ?? sceneSettings?.sceneName ?? "Scene",
+      width: appliedWidth,
+      height: appliedHeight,
+      fps: appliedFps,
       rows,
       frameCount,
-      timeline: { drawingFrames, layerOrder },
-      layers: { folderLayers, layerStrokes },
-      uiState: { currentFrame, selectedRow, zoom, onionSkin, showGrid },
-      // Persist per-frame asset keys so we can re-sign URLs on load
+      drawingFrames,
+      layerOrder,
+      folderLayers,
+      layerStrokes,
+      currentFrame,
+      selectedRow,
+      zoom,
+      onionSkin,
+      showGrid,
       frameAssetKeys,
-      // Storyboard: persist custom page names
       folderNames,
-    } as const;
+    });
   }, [
-    sceneSettings?.sceneName,
     nameOverride,
+    sceneSettings?.sceneName,
     appliedWidth,
     appliedHeight,
     appliedFps,
@@ -484,121 +487,73 @@ export function AnimationEditor({
     if (!targetId) return;
     try {
       setIsSaving(true);
-      // Read existing data to merge manifest/history
-      const { data: row, error: readErr } = await supabase
-        .from(
-          isStoryboard ? "storyboards" : isComposite ? "compositions" : "shots"
-        )
-        .select("data")
-        .eq("id", targetId)
-        .maybeSingle();
-      if (readErr) console.error("Failed to read shot row:", readErr);
-      const baseData = (row?.data as any) || {};
-
-      // 1) Serialize current document
-      const doc = serializeDocument();
-
-      // 2) Upload versioned JSON into Storage
-      const bucket = process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
-      const enableStorage =
-        process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
-      const ts = new Date().toISOString().replace(/[:.]/g, "-");
-      const projectPart = `${slugifyName(sceneSettings?.projectTitle)}-${
-        sceneSettings?.projectId || "unknown-project"
-      }`;
-      const chapterPart = `${slugifyName(sceneSettings?.chapterTitle)}-${
-        sceneSettings?.chapterId || "unknown-chapter"
-      }`;
-      let key = "";
-      if (isStoryboard) {
-        key = `${projectPart}/${chapterPart}/storyboard-${
-          sceneSettings?.storyboardId || targetId
-        }/storyboard/storyboard-${ts}.json`;
-      } else if (isComposite) {
-        key = `${projectPart}/${chapterPart}/composition-${targetId}/composition/scene-${ts}.json`;
-      } else {
-        const sequencePart = `${slugifyName(sceneSettings?.sequenceCode)}-${
-          sceneSettings?.sequenceId || "unknown-seq"
-        }`;
-        key = `${projectPart}/${chapterPart}/${sequencePart}/shot-${slugifyName(
-          sceneSettings?.shotCode
-        )}-${sceneSettings?.shotId || targetId}/shot/scene-${ts}.json`;
-      }
-
-      let uploadOk = false;
-      if (enableStorage) {
-        try {
-          const blob = new Blob([JSON.stringify(doc)], {
-            type: "application/json",
-          });
-          const { error: upErr } = await supabase.storage
-            .from(bucket)
-            .upload(key, blob, { upsert: true });
-          if (upErr) {
-            console.error(
-              "Storage upload failed, will still update DB row:",
-              upErr
-            );
-          } else {
-            uploadOk = true;
-          }
-        } catch (e) {
-          console.error("Unexpected Storage upload error:", e);
-        }
-      }
-
-      // 3) Merge DB row data with latest settings and manifest
-      const prevManifest: any[] = Array.isArray(baseData?.manifest)
-        ? baseData.manifest
-        : [];
-      const nextManifest = uploadOk
-        ? [
-            ...prevManifest,
-            {
-              key,
-              saved_at: new Date().toISOString(),
-              width: appliedWidth,
-              height: appliedHeight,
-              fps: appliedFps,
-              version: 1,
-            },
-          ]
-        : prevManifest;
-
-      const merged = {
-        ...baseData,
-        initialized: true,
-        width: appliedWidth,
-        height: appliedHeight,
-        units: "px",
-        fps: appliedFps,
-        // Keep latest inline for backward-compatibility, but prefer Storage version
-        document: doc,
-        latest_key: uploadOk ? key : baseData?.latest_key,
-        manifest: nextManifest,
-      } as any;
-
-      const { error } = await supabase
-        .from(
-          isStoryboard ? "storyboards" : isComposite ? "compositions" : "shots"
-        )
-        .update({ data: merged })
-        .eq("id", targetId);
-      if (error) console.error("Failed to save scene:", error);
+      await saveSceneDoc({
+        mode,
+        targetId,
+        scene: {
+          sceneName:
+            nameOverride ??
+            sceneSettings?.sceneName ??
+            sceneSettings?.shotCode ??
+            "Scene",
+          width: appliedWidth,
+          height: appliedHeight,
+          fps: appliedFps,
+          rows,
+          frameCount,
+          drawingFrames,
+          layerOrder,
+          folderLayers,
+          layerStrokes,
+          currentFrame,
+          selectedRow,
+          zoom,
+          onionSkin,
+          showGrid,
+          frameAssetKeys,
+          folderNames,
+          projectTitle: sceneSettings?.projectTitle,
+          projectId: sceneSettings?.projectId,
+          chapterTitle: sceneSettings?.chapterTitle,
+          chapterId: sceneSettings?.chapterId,
+          sequenceCode: sceneSettings?.sequenceCode,
+          sequenceId: sceneSettings?.sequenceId,
+          shotCode: sceneSettings?.shotCode,
+          shotId: sceneSettings?.shotId || undefined,
+        },
+      });
     } finally {
       setIsSaving(false);
     }
   }, [
     mode,
-    sceneSettings?.shotId,
+    compositionId,
     sceneSettings?.storyboardId,
+    sceneSettings?.shotId,
+    sceneSettings?.projectTitle,
     sceneSettings?.projectId,
+    sceneSettings?.chapterTitle,
     sceneSettings?.chapterId,
+    sceneSettings?.sequenceCode,
     sceneSettings?.sequenceId,
+    sceneSettings?.shotCode,
+    nameOverride,
     appliedWidth,
     appliedHeight,
     appliedFps,
-    serializeDocument,
+    rows,
+    frameCount,
+    drawingFrames,
+    layerOrder,
+    folderLayers,
+    layerStrokes,
+    currentFrame,
+    selectedRow,
+    zoom,
+    onionSkin,
+    showGrid,
+    frameAssetKeys,
+    folderNames,
   ]);
 
   const compositionBootstrapRef = useRef(false);
@@ -632,49 +587,12 @@ export function AnimationEditor({
         ? compositionId
         : sceneSettings?.shotId;
       if (!targetId) return;
-      const { data: row, error } = await supabase
-        .from(
-          isStoryboard
-            ? "storyboards"
-            : isCompositeLoad
-            ? "compositions"
-            : "shots"
-        )
-        .select("data")
-        .eq("id", targetId)
-        .maybeSingle();
-      if (error) return;
-      const data: any = row?.data || {};
+      const { data, doc } = await loadSceneDoc({ mode, targetId });
+      if (!data) return;
       if (typeof data.width === "number") setAppliedWidth(data.width);
       if (typeof data.height === "number") setAppliedHeight(data.height);
       if (typeof data.fps === "number") setAppliedFps(data.fps);
 
-      // Prefer storage-saved latest version; fallback to inline document
-      let doc: any = null;
-      const latestKey: string | undefined = data?.latest_key;
-      const enableStorage =
-        process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
-      if (enableStorage && latestKey) {
-        // Only attempt download if the key looks like the new slugified path (avoids 400s for old UUID-only keys)
-        const firstSeg = String(latestKey).split("/")[0] || "";
-        const looksNew = /[a-zA-Z]/.test(firstSeg); // new scheme starts with {projectName}-{projectId}
-        if (looksNew) {
-          try {
-            const { data: file, error: dlErr } = await supabase.storage
-              .from(process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets")
-              .download(latestKey);
-            if (!dlErr && file) {
-              const text = await file.text();
-              doc = JSON.parse(text);
-            }
-          } catch {
-            // Silently fall back to inline document
-          }
-        }
-      }
-      if (!doc) {
-        doc = data.document;
-      }
       if (!doc) return;
 
       try {
@@ -931,407 +849,52 @@ export function AnimationEditor({
   const drawFrame = useCallback(() => {
     const context = contextRef.current;
     if (!context) return;
-    context.save();
-    context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-
     const frameNumber = selectedFrameNumber ? selectedFrameNumber - 1 : null;
-
-    // 1. Draw white background if specified
-    if (frameNumber !== null) {
-      const frame = drawingFrames.find((df) => df.frameIndex === 0);
-      if (frame) {
-        // Only for the background frame
-        context.fillStyle = "white";
-        context.fillRect(0, 0, context.canvas.width, context.canvas.height);
-      }
-    }
-
-    // 2. Draw grid on top of the background
-    if (showGrid) {
-      context.strokeStyle = "#e0e0e0";
-      context.lineWidth = 0.5;
-      const gridSize = 20;
-
-      const extendedWidth = context.canvas.width * 2;
-      const extendedHeight = context.canvas.height * 2;
-      const offsetX = -context.canvas.width / 2;
-      const offsetY = -context.canvas.height / 2;
-
-      for (let x = offsetX; x <= extendedWidth; x += gridSize) {
-        context.beginPath();
-        context.moveTo(x, offsetY);
-        context.lineTo(x, extendedHeight);
-        context.stroke();
-      }
-      for (let y = offsetY; y <= extendedHeight; y += gridSize) {
-        context.beginPath();
-        context.moveTo(offsetX, y);
-        context.lineTo(extendedWidth, y);
-        context.stroke();
-      }
-    }
-
-    if (frameNumber === null) {
-      context.restore();
-      return;
-    }
-
-    const drawImage = (imageUrl: string) => {
-      if (imageCache.current[imageUrl]) {
-        const img = imageCache.current[imageUrl];
-        const canvasWidth = context.canvas.width;
-        const canvasHeight = context.canvas.height;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > canvasWidth || height > canvasHeight) {
-          const scale = Math.min(canvasWidth / width, canvasHeight / height);
-          width *= scale;
-          height *= scale;
-        }
-
-        const x = (canvasWidth - width) / 2;
-        const y = (canvasHeight - height) / 2;
-        context.drawImage(img, x, y, width, height);
-      } else {
-        const img = new Image();
-        img.onload = () => {
-          imageCache.current[imageUrl] = img;
-          drawFrame(); // Redraw once the image is cached
-        };
-        img.src = imageUrl;
-      }
-    };
-
-    // 3. (moved) We'll render onion skin after current images so it isn't occluded
-
-    // 4. Draw onion-skinned strokes
-    if (onionSkin) {
-      const prevFrameNumber = frameNumber - 1;
-      if (prevFrameNumber >= 0) {
-        context.globalAlpha = 0.3;
-        const prevFrameFolders = drawingFrames.filter(
-          (df) =>
-            prevFrameNumber >= df.frameIndex &&
-            prevFrameNumber < df.frameIndex + (df.length || 1)
-        );
-        for (const prevFrame of prevFrameFolders) {
-          const prevFolderId = `${prevFrame.rowId}-${prevFrame.frameIndex}`;
-          const orderedLayers = layerOrder[prevFolderId] || [];
-          for (const layerId of orderedLayers) {
-            if (layerStrokes[layerId] && layerVisibility[layerId] !== false) {
-              drawStrokes(layerStrokes[layerId]);
-            }
-          }
-        }
-        context.globalAlpha = 1.0;
-      }
-    }
-
-    // 5. Draw current frame layers from all rows in the correct order (respect extended length)
-    for (const frame of drawingFrames.filter(
-      (df) =>
-        typeof frameNumber === "number" &&
-        frameNumber >= df.frameIndex &&
-        frameNumber < df.frameIndex + (df.length || 1)
-    )) {
-      const folderId = `${frame.rowId}-${frame.frameIndex}`;
-      const orderedLayers = layerOrder[folderId] || [];
-
-      for (const layerId of orderedLayers) {
-        if (layerVisibility[layerId] === false) continue;
-
-        context.globalAlpha = layerOpacities[layerId] ?? 1;
-
-        // If it's the main layer and has an image, draw it
-        if (layerId.endsWith("-main") && frame.imageUrl) {
-          drawImage(frame.imageUrl);
-        }
-
-        // Draw strokes for the layer
-        if (layerStrokes[layerId]) {
-          drawStrokes(layerStrokes[layerId]);
-        }
-      }
-    }
-
-    // 6. Render onion skin on top of current images so it remains visible
-    if (onionSkin) {
-      const prevFrameNumber = frameNumber - 1;
-      if (prevFrameNumber >= 0) {
-        context.globalAlpha = 0.3;
-        const prevFrameFolders = drawingFrames.filter(
-          (df) =>
-            prevFrameNumber >= df.frameIndex &&
-            prevFrameNumber < df.frameIndex + (df.length || 1)
-        );
-        for (const prevFrame of prevFrameFolders) {
-          const prevFolderId = `${prevFrame.rowId}-${prevFrame.frameIndex}`;
-          const orderedLayers = layerOrder[prevFolderId] || [];
-          for (const layerId of orderedLayers) {
-            if (layerVisibility[layerId] === false) continue;
-            if (layerId.endsWith("-main") && prevFrame.imageUrl) {
-              drawImage(prevFrame.imageUrl);
-            }
-            if (layerStrokes[layerId]) {
-              drawStrokes(layerStrokes[layerId]);
-            }
-          }
-        }
-        context.globalAlpha = 1.0;
-      }
-    }
-
-    // 7. Draw the current stroke on top
-    if (currentStroke && selectedLayerId?.includes(`-${frameNumber}`)) {
-      context.globalAlpha = 1;
-      drawStrokes([currentStroke]);
-    }
-
-    // 8. Draw eraser circle if active
-    if (eraserCircle && currentTool === "eraser") {
-      context.save();
-      context.fillStyle = "rgba(128, 128, 128, 0.3)";
-      context.beginPath();
-      context.arc(eraserCircle.x, eraserCircle.y, eraserSize, 0, 2 * Math.PI);
-      context.fill();
-      context.restore();
-    }
-
-    // 8. Draw lasso selection if active
-    if (lassoSelection && lassoSelection.points.length > 0) {
-      context.save();
-      context.strokeStyle = "rgba(0, 150, 255, 0.8)";
-      context.lineWidth = 1;
-      context.setLineDash([4, 4]);
-      context.beginPath();
-      context.moveTo(lassoSelection.points[0].x, lassoSelection.points[0].y);
-      for (let i = 1; i < lassoSelection.points.length; i++) {
-        context.lineTo(lassoSelection.points[i].x, lassoSelection.points[i].y);
-      }
-      if (lassoSelection.isActive) {
-        context.closePath();
-      }
-      context.stroke();
-      context.restore();
-    }
-
-    // Draw paste preview
-    if (pastePreview) {
-      const { x: cursorX, y: cursorY } = mousePosRef.current;
-      const boundingBox = getStrokesBoundingBox(pastePreview);
-      const offsetX = cursorX - boundingBox.minX;
-      const offsetY = cursorY - boundingBox.minY;
-
-      pastePreview.forEach((stroke) => {
-        context.globalAlpha = 0.5; // Make preview semi-transparent
-        context.strokeStyle = stroke.color;
-        context.lineWidth = stroke.brushSize * zoom;
-        context.lineCap = "round";
-        context.lineJoin = "round";
-        context.beginPath();
-        stroke.points.forEach((point, index) => {
-          const newX = (point.x + offsetX - panOffset.x) * zoom;
-          const newY = (point.y + offsetY - panOffset.y) * zoom;
-          if (index === 0) {
-            context.moveTo(newX, newY);
-          } else {
-            context.lineTo(newX, newY);
-          }
-        });
-        context.stroke();
-      });
-      context.globalAlpha = 1; // Reset alpha
-    }
-
-    // Draw resize box if active
-    if (isResizing && resizeBox) {
-      context.save();
-      context.strokeStyle = "#007bff";
-      context.lineWidth = 1;
-      context.setLineDash([6, 3]);
-
-      const { x, y, width, height } = resizeBox;
-      const screenX = (x - panOffset.x) * zoom;
-      const screenY = (y - panOffset.y) * zoom;
-      const screenWidth = width * zoom;
-      const screenHeight = height * zoom;
-
-      // Draw box
-      context.strokeRect(screenX, screenY, screenWidth, screenHeight);
-
-      // Draw handles
-      const handles = getResizeHandles(resizeBox);
-      context.fillStyle = "#007bff";
-      Object.values(handles).forEach((handle) => {
-        const handleScreenX = (handle.x - panOffset.x) * zoom;
-        const handleScreenY = (handle.y - panOffset.y) * zoom;
-        context.fillRect(
-          handleScreenX,
-          handleScreenY,
-          handle.size,
-          handle.size
-        );
-      });
-
-      context.restore();
-    }
-
-    context.restore();
+    drawFrameImpl(context, {
+      frameNumber,
+      showGrid,
+      drawingFrames,
+      layerOrder,
+      layerVisibility,
+      layerOpacities,
+      layerStrokes,
+      currentStroke,
+      eraserCircle,
+      currentTool,
+      eraserSize,
+      onionSkin,
+      zoom,
+      panOffset,
+      lassoSelection: lassoSelection
+        ? { points: lassoSelection.points, isActive: lassoSelection.isActive }
+        : null,
+      pastePreview,
+      isResizing,
+      resizeBox,
+      imageCache: imageCache.current,
+    });
   }, [
-    layerStrokes,
-    folderLayers,
+    selectedFrameNumber,
+    showGrid,
+    drawingFrames,
+    layerOrder,
     layerVisibility,
     layerOpacities,
-    selectedLayerId,
-    selectedFrameNumber,
-    drawStrokes,
-    showGrid,
+    layerStrokes,
     currentStroke,
     eraserCircle,
     currentTool,
     eraserSize,
     onionSkin,
-    drawingFrames,
-    layerOrder,
-    lassoSelection,
     zoom,
     panOffset,
+    lassoSelection,
     pastePreview,
     isResizing,
     resizeBox,
   ]);
 
-  // Drawing functions
-  const startDrawing = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!contextRef.current || !selectedLayerId) return;
-      const coords = getCanvasCoords(e);
-      const { x, y } = coords;
-
-      if (isResizing && resizeBox) {
-        // Check for handle clicks
-        const handles = getResizeHandles(resizeBox);
-        for (const [handleName, handle] of Object.entries(handles)) {
-          const handleScreenX = (handle.x - panOffset.x) * zoom;
-          const handleScreenY = (handle.y - panOffset.y) * zoom;
-          if (
-            x >= handleScreenX &&
-            x <= handleScreenX + handle.size &&
-            y >= handleScreenY &&
-            y <= handleScreenY + handle.size
-          ) {
-            setActiveHandle(handleName);
-            return;
-          }
-        }
-
-        // Check for clicking inside box to drag
-        const { x: boxX, y: boxY, width, height } = resizeBox;
-        if (x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height) {
-          setIsDraggingResizeBox(true);
-          setDragOffset({ x: x - boxX, y: y - boxY });
-          return;
-        }
-
-        // Clicking outside cancels resize
-        setIsResizing(false);
-        setResizeBox(null);
-        setActiveHandle(null);
-        setIsDraggingResizeBox(false);
-        return;
-      }
-
-      // Handle panning with middle mouse button or spacebar
-      if (e.button === 1 || isSpacePressed) {
-        setIsPanning(true);
-        setPanOffset({ x: e.clientX, y: e.clientY });
-        return;
-      }
-
-      if (currentTool === "move") {
-        // Check if clicking inside existing lasso selection
-        if (lassoSelection && lassoSelection.isActive) {
-          if (isPointInPolygon({ x, y }, lassoSelection.points)) {
-            // Clicking inside lasso - start moving selected strokes
-            setIsDragging(true);
-            setDragOffset({ x, y });
-            setOriginalLassoPoints([...lassoSelection.points]);
-
-            const originalPositions: {
-              [strokeId: string]: { points: Point[] };
-            } = {};
-            if (selectedLayerId) {
-              const allStrokesOnLayer = layerStrokes[selectedLayerId] || [];
-              lassoSelection.selectedStrokeIds.forEach((strokeId) => {
-                const stroke = allStrokesOnLayer.find((s) => s.id === strokeId);
-                if (stroke) {
-                  originalPositions[strokeId] = {
-                    points: JSON.parse(JSON.stringify(stroke.points)),
-                  };
-                }
-              });
-            }
-            setOriginalStrokePositions(originalPositions);
-            return;
-          } else {
-            // Clicking outside lasso - clear selection
-            setLassoSelection(null);
-            setOriginalLassoPoints([]);
-            setOriginalStrokePositions({});
-          }
-        }
-
-        // Start new lasso selection
-        setIsSelecting(true);
-        setLassoSelection({
-          points: [{ x, y }],
-          selectedStrokeIds: [],
-          isActive: false,
-        });
-        return;
-      }
-
-      setIsDrawing(true);
-
-      // For eraser tool, we'll handle stroke creation in the draw function
-      if (currentTool === "eraser") {
-        const coords = getCanvasCoords(e);
-        lastErasePointRef.current = coords;
-        // Trigger erase on initial click
-        draw(e);
-        return;
-      }
-
-      contextRef.current.beginPath();
-      contextRef.current.moveTo(x, y);
-
-      const newStroke: DrawingStroke = {
-        id: generateStrokeId(),
-        points: [{ x, y }],
-        color,
-        brushSize:
-          (currentTool as string) === "eraser" ? eraserSize : brushSize,
-        tool: currentTool,
-        layerId: selectedLayerId,
-      };
-      setCurrentStroke(newStroke);
-    },
-    [
-      color,
-      brushSize,
-      currentTool,
-      selectedLayerId,
-      zoom,
-      isSpacePressed,
-      eraserSize,
-      lassoSelection,
-      layerStrokes,
-      isResizing,
-      resizeBox,
-      panOffset,
-    ]
-  );
+  // Drawing functions are now provided by useCanvasInteractions
 
   useEffect(() => {
     drawFrame();
@@ -2620,21 +2183,25 @@ export function AnimationEditor({
     },
   });
 
-  const showContextMenuForSelection = (selection: { points: Point[] }) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const { minX, maxX, minY, maxY } = getLassoBoundingBox(selection.points);
-
-    // Convert canvas coords to screen coords for the menu
-    const scaleX = rect.width / canvas.width;
-    const scaleY = rect.height / canvas.height;
-
-    const menuX = rect.left + ((minX + maxX) / 2) * scaleX;
-    const menuY = rect.top + maxY * scaleY + 15; // 15px offset below
-
-    setContextMenu({ visible: true, x: menuX, y: menuY });
-  };
+  const {
+    handleResizeClick,
+    handleConfirmResize,
+    showContextMenuForSelection,
+  } = useResizeHandlers({
+    canvasRef,
+    setContextMenu,
+    lassoSelection,
+    selectedLayerId,
+    layerStrokes,
+    setLayerStrokes,
+    setLassoSelection,
+    handleCloseContextMenu,
+    setIsResizing,
+    setResizeBox,
+    saveToUndoStack,
+    setActiveHandle,
+    setIsDraggingResizeBox,
+  });
 
   // Helper to get bounding box of multiple strokes
   const getStrokesBoundingBox = (strokes: DrawingStroke[]) => {
@@ -2655,86 +2222,6 @@ export function AnimationEditor({
       });
     });
     return { minX, maxX, minY, maxY };
-  };
-
-  const handleResizeClick = () => {
-    if (!lassoSelection || !selectedLayerId) return;
-
-    const selectedStrokes = (layerStrokes[selectedLayerId] || []).filter(
-      (stroke) => lassoSelection.selectedStrokeIds.includes(stroke.id)
-    );
-
-    if (selectedStrokes.length === 0) return;
-
-    // Calculate bounding box
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity;
-    selectedStrokes.forEach((stroke) => {
-      stroke.points.forEach((point) => {
-        minX = Math.min(minX, point.x);
-        maxX = Math.max(maxX, point.x);
-        minY = Math.min(minY, point.y);
-        maxY = Math.max(maxY, point.y);
-      });
-    });
-
-    // Create resize box with padding
-    const padding = 10;
-    const boxX = minX - padding;
-    const boxY = minY - padding;
-    const boxWidth = maxX - minX + padding * 2;
-    const boxHeight = maxY - minY + padding * 2;
-
-    setResizeBox({
-      x: boxX,
-      y: boxY,
-      width: boxWidth,
-      height: boxHeight,
-      strokes: selectedStrokes,
-      originalStrokes: JSON.parse(JSON.stringify(selectedStrokes)), // Deep copy for reverting
-      initialX: boxX,
-      initialY: boxY,
-      initialWidth: boxWidth,
-      initialHeight: boxHeight,
-    });
-
-    setIsResizing(true);
-    setLassoSelection(null);
-    handleCloseContextMenu();
-  };
-
-  const getResizeHandles = (box: typeof resizeBox) => {
-    if (!box) return {};
-    const handleSize = 8;
-    const { x, y, width, height } = box;
-    return {
-      topLeft: {
-        x: x - handleSize / 2,
-        y: y - handleSize / 2,
-        size: handleSize,
-        cursor: "nwse-resize",
-      },
-      topRight: {
-        x: x + width - handleSize / 2,
-        y: y - handleSize / 2,
-        size: handleSize,
-        cursor: "nesw-resize",
-      },
-      bottomLeft: {
-        x: x - handleSize / 2,
-        y: y + height - handleSize / 2,
-        size: handleSize,
-        cursor: "nesw-resize",
-      },
-      bottomRight: {
-        x: x + width - handleSize / 2,
-        y: y + height - handleSize / 2,
-        size: handleSize,
-        cursor: "nwse-resize",
-      },
-    };
   };
 
   const handleMouseUp = () => {
@@ -2839,16 +2326,6 @@ export function AnimationEditor({
     }
   };
 
-  const handleConfirmResize = () => {
-    if (!isResizing) return;
-    setIsResizing(false);
-    setResizeBox(null);
-    setActiveHandle(null);
-    setIsDraggingResizeBox(false);
-    // Final state is already in layerStrokes, just need to save
-    saveToUndoStack();
-  };
-
   // Custom color set functions
   const createColorSet = () => {
     if (newSetName.trim()) {
@@ -2923,52 +2400,18 @@ export function AnimationEditor({
   // Now that drawFrame exists, define export using it
   handleExport = useCallback(async () => {
     try {
-      const exportCell = async (rowId: string, frameIndex: number) => {
-        const off = document.createElement("canvas");
-        off.width = appliedWidth;
-        off.height = appliedHeight;
-        const offCtx = off.getContext("2d");
-        if (!offCtx) return;
-
-        // Render exact frame directly to offscreen, excluding grid
-        await renderFrameToContext(frameIndex, offCtx, false);
-
-        const ext = exportFormat;
-        const dataUrl = await exportCanvasDataURL(off, ext);
-        const fileBase = `R${rowId.split("-")[1]}F${frameIndex + 1}`; // frame-folder naming
-
-        if (exportDirHandle?.getFileHandle) {
-          await saveDataUrlToHandle(
-            dataUrl,
-            `${fileBase}.${ext}`,
-            exportDirHandle
-          );
-        } else {
-          downloadDataUrl(
-            dataUrl,
-            `${exportFolderName || "Export"}_${fileBase}.${ext}`
-          );
-        }
-      };
-
-      // Helper to switch frame, wait for next paint, then export
-      const exportAt = async (_rowId: string, frameIndex: number) => {
-        await exportCell(_rowId, frameIndex);
-      };
-
-      if (exportRowAllFrames && selectedRow) {
-        const frames = drawingFrames
-          .filter((df) => df.rowId === selectedRow)
-          .map((df) => df.frameIndex)
-          .sort((a, b) => a - b);
-        for (const fi of frames) {
-          await exportAt(selectedRow, fi);
-        }
-      } else {
-        const rowId = selectedRow || "row-1";
-        const frameIndex = selectedFrameNumber ? selectedFrameNumber - 1 : 0;
-        await exportAt(rowId, frameIndex);
-      }
+      await runExport({
+        width: appliedWidth,
+        height: appliedHeight,
+        renderFrameToContext,
+        exportFormat,
+        exportDirHandle,
+        exportFolderName,
+        exportRowAllFrames,
+        selectedRow,
+        selectedFrameNumber,
+        drawingFrames,
+      });
       setIsExportOpen(false);
     } catch (e) {
       console.warn("Export failed", e);
@@ -2976,15 +2419,14 @@ export function AnimationEditor({
   }, [
     appliedWidth,
     appliedHeight,
-    drawFrame,
-    exportFolderName,
+    renderFrameToContext,
     exportFormat,
+    exportDirHandle,
+    exportFolderName,
     exportRowAllFrames,
     selectedRow,
     selectedFrameNumber,
-    showGrid,
     drawingFrames,
-    exportDirHandle,
   ]);
 
   return (
@@ -3043,7 +2485,23 @@ export function AnimationEditor({
               setShowGrid={setShowGrid}
             />
 
-            {/* Export Modal extracted in a follow-up step to reduce file size further */}
+            <ExportModal
+              open={isExportOpen}
+              onClose={() => setIsExportOpen(false)}
+              exportFolderName={exportFolderName}
+              setExportFolderName={setExportFolderName}
+              exportNameScheme={exportNameScheme}
+              setExportNameScheme={setExportNameScheme}
+              exportFormat={exportFormat}
+              setExportFormat={setExportFormat}
+              exportLayersMerge={exportLayersMerge}
+              setExportLayersMerge={setExportLayersMerge}
+              exportRowAllFrames={exportRowAllFrames}
+              setExportRowAllFrames={setExportRowAllFrames}
+              mode={mode}
+              setExportDirHandle={setExportDirHandle}
+              onExport={handleExport}
+            />
 
             <SettingsPanel
               visible={
@@ -3321,34 +2779,32 @@ export function AnimationEditor({
 
           {/* Timeline - hidden in storyboard mode */}
           {mode !== "storyboard" && (
-            <div className="fixed bottom-0 left-20 right-80 z-20 bg-gray-800 border-t border-gray-700">
-              <TimelineGrid
-                rows={rows}
-                setRows={setRows}
-                frames={frameCount}
-                setFrames={setFrameCount}
-                drawingFrames={drawingFrames}
-                setDrawingFrames={setDrawingFrames}
-                selectedRow={selectedRow}
-                setSelectedRow={setSelectedRow}
-                selectedLayerId={selectedLayerId}
-                setSelectedLayerId={setSelectedLayerId}
-                selectedFrameNumber={selectedFrameNumber}
-                setSelectedFrameNumber={setSelectedFrameNumber}
-                onDrop={handleDrop}
-                isPlaying={isPlaying}
-                onPlayPause={handlePlayPause}
-                onPrevFrame={handlePrevFrame}
-                onNextFrame={handleNextFrame}
-                onFirstFrame={handleFirstFrame}
-                onLastFrame={handleLastFrame}
-                isLooping={isLooping}
-                onToggleLoop={handleToggleLoop}
-                onDeleteFrame={handleDeleteFrame}
-                onDeleteRow={handleDeleteRow}
-                onAddRow={handleAddRow}
-              />
-            </div>
+            <TimelineDock
+              rows={rows}
+              setRows={setRows}
+              frameCount={frameCount}
+              setFrameCount={setFrameCount as any}
+              drawingFrames={drawingFrames}
+              setDrawingFrames={setDrawingFrames as any}
+              selectedRow={selectedRow}
+              setSelectedRow={setSelectedRow as any}
+              selectedLayerId={selectedLayerId}
+              setSelectedLayerId={setSelectedLayerId as any}
+              selectedFrameNumber={selectedFrameNumber}
+              setSelectedFrameNumber={setSelectedFrameNumber as any}
+              onDrop={handleDrop}
+              isPlaying={isPlaying}
+              onPlayPause={handlePlayPause}
+              onPrevFrame={handlePrevFrame}
+              onNextFrame={handleNextFrame}
+              onFirstFrame={handleFirstFrame}
+              onLastFrame={handleLastFrame}
+              isLooping={isLooping}
+              onToggleLoop={handleToggleLoop}
+              onDeleteFrame={handleDeleteFrame}
+              onDeleteRow={handleDeleteRow}
+              onAddRow={handleAddRow}
+            />
           )}
         </div>
 
