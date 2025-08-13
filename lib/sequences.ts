@@ -41,6 +41,7 @@ export async function getOrCreateComposition(params: {
   title?: string;
 }): Promise<Composition | null> {
   const { projectId, chapterId, title } = params;
+  // 1) Try to get existing first
   const { data: existing, error: selErr } = await supabase
     .from("compositions")
     .select("id, project_id, chapter_id, title, data")
@@ -48,12 +49,22 @@ export async function getOrCreateComposition(params: {
     .maybeSingle();
   if (!selErr && existing) return existing as Composition;
 
-  const { data: created, error: insErr } = await supabase
+  // 2) Create if missing, handle race (23505 conflict)
+  const { data: created, error: insErr, status } = await supabase
     .from("compositions")
     .insert({ project_id: projectId, chapter_id: chapterId, title })
     .select("id, project_id, chapter_id, title, data")
     .single();
   if (insErr) {
+    // If another client created it first, re-select
+    if ((insErr as any).code === "23505" || status === 409) {
+      const { data: after } = await supabase
+        .from("compositions")
+        .select("id, project_id, chapter_id, title, data")
+        .eq("chapter_id", chapterId)
+        .maybeSingle();
+      return (after || null) as Composition | null;
+    }
     console.warn("Failed to create composition", insErr);
     return null;
   }
