@@ -3186,8 +3186,8 @@ export function AnimationEditor({
                           readOnly
                           disabled
                         />
-            <Button
-              variant="ghost"
+                        <Button
+                          variant="ghost"
                           size="icon"
                           className="w-10 text-gray-300 hover:text-white"
                           title="Choose folder"
@@ -3218,8 +3218,8 @@ export function AnimationEditor({
                           }}
                         >
                           <Folder className="w-4 h-4" />
-            </Button>
-          </div>
+                        </Button>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm text-gray-300 mb-1">
@@ -3250,7 +3250,7 @@ export function AnimationEditor({
                       </select>
                     </div>
                     {mode === "animate" && (
-          <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                         <input
                           id="mergeLayers"
                           type="checkbox"
@@ -3266,7 +3266,7 @@ export function AnimationEditor({
                         >
                           Export layers not in animation folders
                         </label>
-          </div>
+                      </div>
                     )}
                     {mode === "animate" && (
                       <div className="flex items-center gap-2">
@@ -3285,7 +3285,7 @@ export function AnimationEditor({
                         >
                           Export entire selected row
                         </label>
-        </div>
+                      </div>
                     )}
                     <div className="flex gap-2 pt-2 justify-end">
                       <button
@@ -3307,7 +3307,10 @@ export function AnimationEditor({
             )}
 
             <SettingsPanel
-              visible={(isHoveringToolbar || isColorPickerOpen) && currentTool !== "move"}
+              visible={
+                (isHoveringToolbar || isColorPickerOpen) &&
+                currentTool !== "move"
+              }
               currentTool={currentTool as string}
               brushSize={brushSize}
               setBrushSize={(n) => setBrushSize(n)}
@@ -3577,14 +3580,14 @@ export function AnimationEditor({
               }}
               className="bg-gray-900 rounded-lg shadow-xl border border-gray-700 flex items-center p-1"
             >
-            <Button
+              <Button
                 variant="ghost"
-              size="sm"
+                size="sm"
                 className="px-3"
                 onClick={handleCutSelectedStrokes}
-            >
+              >
                 Cut
-            </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3592,7 +3595,7 @@ export function AnimationEditor({
                 onClick={handleCopySelectedStrokes}
               >
                 Copy
-          </Button>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3600,10 +3603,10 @@ export function AnimationEditor({
                 onClick={handleDeleteSelectedStrokes}
               >
                 Delete
-          </Button>
-          <Button
+              </Button>
+              <Button
                 variant="ghost"
-            size="sm"
+                size="sm"
                 className="px-3"
                 onClick={handleDuplicateSelectedStrokes}
               >
@@ -3616,8 +3619,8 @@ export function AnimationEditor({
                 onClick={handleResizeClick}
               >
                 Resize
-          </Button>
-        </div>
+              </Button>
+            </div>
           )}
 
           {/* Timeline - hidden in storyboard mode */}
@@ -3651,7 +3654,7 @@ export function AnimationEditor({
               />
             </div>
           )}
-          </div>
+        </div>
 
         {/* Right Sidebar (Layer Panel) */}
         <div className="w-80 bg-gray-800 border-l border-gray-700 p-4 flex flex-col">
@@ -3661,7 +3664,7 @@ export function AnimationEditor({
             {mode === "storyboard" && (
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold">Folders</h3>
-              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3670,7 +3673,7 @@ export function AnimationEditor({
                     title="Add Frame"
                   >
                     <Plus className="w-5 h-5" />
-                </Button>
+                  </Button>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3679,8 +3682,8 @@ export function AnimationEditor({
                     title="Delete Frame"
                   >
                     <Trash2 className="w-5 h-5" />
-                </Button>
-              </div>
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -4002,8 +4005,8 @@ export function AnimationEditor({
               ))}
             </div>
           </ScrollArea>
-          </div>
         </div>
+      </div>
 
       {/* Settings Modal */}
       {isSettingsOpen && (
@@ -4039,7 +4042,7 @@ export function AnimationEditor({
                   onChange={(e) => setDraftName(e.target.value)}
                   disabled={mode === "composite"}
                 />
-      </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
@@ -4053,7 +4056,7 @@ export function AnimationEditor({
                       setDraftWidth(parseInt(e.target.value || "0", 10))
                     }
                   />
-    </div>
+                </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
                     Height
