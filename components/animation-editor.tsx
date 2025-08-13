@@ -8,41 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Plus,
-  Pencil,
-  Eraser,
-  Eye,
-  EyeOff,
-  Undo,
-  Redo,
-  Trash2,
-  Palette,
-  Layers,
-  Move,
-  Grid,
-  Folder,
-  FolderOpen,
-  Lock,
-  Unlock,
-  Copy,
-  ChevronDown,
-  ChevronRight,
-  Edit3,
-  Lasso,
-  X,
-  ChevronUp,
-} from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Play, Pause, SkipBack, SkipForward, Plus, Pencil, Eraser, Eye, EyeOff, Undo, Redo, Trash2, Palette, Layers, Move, Grid, Folder, FolderOpen, Lock, Unlock, Copy, ChevronDown, ChevronRight, Edit3, Lasso, X, ChevronUp } from "lucide-react";
 import TopBar from "@/components/editor/TopBar";
 import ToolSidebar from "@/components/editor/ToolSidebar";
 import CanvasViewport from "@/components/editor/CanvasViewport";
@@ -53,6 +20,10 @@ import type { CurrentView } from "@/types";
 import TimelineGrid, { DrawingFrame } from "./timeline-grid";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateComposition, updateCompositionData } from "@/lib/sequences";
+import { getFileNameBaseFromString, slugifyName } from "@/lib/editor/paths";
+import { buildProjectChapterParts, buildSequencePart, buildShotPart } from "@/lib/editor/storage";
+import { exportCanvasDataURL, saveDataUrlToHandle, downloadDataUrl } from "@/lib/editor/export";
+import useKeyboardShortcuts from "@/hooks/useKeyboardShortcuts";
 
 type EditorMode = "animate" | "storyboard" | "composite";
 
@@ -140,47 +111,7 @@ function getActiveFrameFolderId(selectedLayerId: string | null) {
   return match ? match[1] : null; // Return null if no match
 }
 
-// Helper to get file name from imageUrl
-function getFileName(url?: string) {
-  if (!url) return "";
-  try {
-    const match = url.match(/([^/]+\.[a-zA-Z0-9]+)(\?|$)/);
-    if (match) return match[1];
-    return decodeURIComponent(url.split("/").pop() || "");
-  } catch {
-    return url;
-  }
-}
-
-// Helper to get file name before extension
-function getFileNameBase(url?: string) {
-  if (!url) return "";
-  try {
-    const match = url.match(/([^/]+)\.[a-zA-Z0-9]+(\?|$)/);
-    if (match) return match[1];
-    return decodeURIComponent(url.split("/").pop() || "").split(".")[0];
-  } catch {
-    return url;
-  }
-}
-
-// Helper to get file name before extension from a string
-function getFileNameBaseFromString(name?: string) {
-  if (!name) return "";
-  return name.split(".")[0];
-}
-
-// Helper to slugify names for storage path readability
-function slugifyName(input?: string) {
-  if (!input) return "untitled";
-  return input
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-_]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-}
+// moved helpers to lib/editor/paths
 
 const getLassoBoundingBox = (points: Point[]) => {
   if (points.length === 0) {
@@ -2341,41 +2272,7 @@ export function AnimationEditor({
     saveToUndoStack();
   }, [selectedLayerId, saveToUndoStack]);
 
-  // Keyboard shortcuts for undo/redo
-  useEffect(() => {
-    // Only add event listeners on the client side
-    if (typeof window === "undefined") return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
-        e.preventDefault();
-        undo();
-      } else if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) {
-        e.preventDefault();
-        redo();
-      } else if ((e.metaKey || e.ctrlKey) && e.key === "y") {
-        e.preventDefault();
-        redo();
-      } else if (e.code === "Space") {
-        e.preventDefault();
-        setIsSpacePressed(true);
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space") {
-        e.preventDefault();
-        setIsSpacePressed(false);
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    document.addEventListener("keyup", handleKeyUp);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [undo, redo]);
+  // Install shortcuts after handlers are defined below (using layout effect pattern)
 
   const currentFrameData = frames.find((f) => f.id === currentFrame);
   const currentLayerData = currentFrameData?.layers.find(
@@ -2725,6 +2622,8 @@ export function AnimationEditor({
     handleDeleteSelectedStrokes,
   ]);
 
+  // Keyboard shortcuts will be installed after pasteFromClipboard is defined
+
   const pasteFromClipboard = useCallback(() => {
     if (clipboard && selectedLayerId) {
       setPastePreview(clipboard);
@@ -2732,6 +2631,19 @@ export function AnimationEditor({
       handleCloseContextMenu();
     }
   }, [clipboard, selectedLayerId]);
+
+  // Now that handlers exist, install keyboard shortcuts
+  useKeyboardShortcuts({
+    onUndo: undo,
+    onRedo: redo,
+    onSpaceDown: () => setIsSpacePressed(true),
+    onSpaceUp: () => setIsSpacePressed(false),
+    onCopy: handleCopySelectedStrokes,
+    onPaste: pasteFromClipboard,
+    onEnter: () => {
+      if (isResizing) handleConfirmResize();
+    },
+  });
 
   const showContextMenuForSelection = (selection: { points: Point[] }) => {
     const canvas = canvasRef.current;
@@ -3047,29 +2959,13 @@ export function AnimationEditor({
         await renderFrameToContext(frameIndex, offCtx, false);
 
         const ext = exportFormat;
-        const mime =
-          ext === "jpg"
-            ? "image/jpeg"
-            : ext === "webp"
-            ? "image/webp"
-            : "image/png";
-        const dataUrl = off.toDataURL(mime, 0.92);
+        const dataUrl = await exportCanvasDataURL(off, ext);
         const fileBase = `R${rowId.split("-")[1]}F${frameIndex + 1}`; // frame-folder naming
 
         if (exportDirHandle?.getFileHandle) {
-          const fileHandle = await exportDirHandle.getFileHandle(
-            `${fileBase}.${ext}`,
-            { create: true }
-          );
-          const writable = await fileHandle.createWritable();
-          const res = await fetch(dataUrl);
-          await writable.write(await res.arrayBuffer());
-          await writable.close();
+          await saveDataUrlToHandle(dataUrl, `${fileBase}.${ext}`, exportDirHandle);
         } else {
-          const link = document.createElement("a");
-          link.download = `${exportFolderName || "Export"}_${fileBase}.${ext}`;
-          link.href = dataUrl;
-          link.click();
+          downloadDataUrl(dataUrl, `${exportFolderName || "Export"}_${fileBase}.${ext}`);
         }
       };
 
@@ -3712,9 +3608,15 @@ export function AnimationEditor({
           setNameOverride(draftName);
           try {
             if (mode === "storyboard" && sceneSettings?.sequenceId) {
-              await supabase.from("sequences").update({ code: draftName }).eq("id", sceneSettings.sequenceId);
+              await supabase
+                .from("sequences")
+                .update({ code: draftName })
+                .eq("id", sceneSettings.sequenceId);
             } else if (mode !== "storyboard" && sceneSettings?.shotId) {
-              await supabase.from("shots").update({ code: draftName }).eq("id", sceneSettings.shotId);
+              await supabase
+                .from("shots")
+                .update({ code: draftName })
+                .eq("id", sceneSettings.shotId);
             }
           } catch (e) {
             console.warn("Failed to update name in DB", e);
@@ -3726,7 +3628,10 @@ export function AnimationEditor({
         onDeleteShot={async () => {
           if (!sceneSettings?.shotId) return;
           try {
-            await supabase.from("shots").delete().eq("id", sceneSettings.shotId);
+            await supabase
+              .from("shots")
+              .delete()
+              .eq("id", sceneSettings.shotId);
             setIsSettingsOpen(false);
             setConfirmDeleteOpen(false);
             onViewChange("project-detail");
@@ -3738,7 +3643,10 @@ export function AnimationEditor({
         onDeleteComposition={async () => {
           try {
             if (mode === "composite" && compositionId) {
-              await supabase.from("compositions").delete().eq("id", compositionId);
+              await supabase
+                .from("compositions")
+                .delete()
+                .eq("id", compositionId);
             }
           } catch (e) {
             console.error("Failed to delete composition", e);
