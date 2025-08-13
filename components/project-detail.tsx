@@ -272,6 +272,29 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   const [newSequenceCode, setNewSequenceCode] = useState("");
   const [isCreatingShot, setIsCreatingShot] = useState<string | null>(null); // sequenceId
   const [newShotCode, setNewShotCode] = useState("");
+  const [compositionExistsByChapter, setCompositionExistsByChapter] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const loadCompositions = async () => {
+      try {
+        if (!project?.volumes) return;
+        const chapterIds: string[] = project.volumes.flatMap((v: any) =>
+          (v.chapters || []).map((c: any) => c.id)
+        );
+        const map: Record<string, boolean> = {};
+        for (const chId of chapterIds) {
+          const res = await supabase
+            .from("compositions")
+            .select("id")
+            .eq("chapter_id", chId)
+            .maybeSingle();
+          map[chId] = !!res.data;
+        }
+        setCompositionExistsByChapter(map);
+      } catch {}
+    };
+    loadCompositions();
+  }, [project?.volumes]);
 
   const scrollMessagesToBottom = (smooth: boolean = false) => {
     const el = messagesContainerRef.current;
@@ -1632,7 +1655,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                       }}
                                       title="Create/Open composition for this chapter"
                                     >
-                                      Open Composition
+                                      {compositionExistsByChapter[chapter.id]
+                                        ? "Open Composition"
+                                        : "Create Composition"}
                                     </Button>
                                   </div>
                                 </>
