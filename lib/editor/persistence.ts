@@ -12,7 +12,7 @@ export interface SerializeDocArgs {
   layerOrder: Record<string, string[]>;
   folderLayers: Record<string, string[]>;
   layerStrokes: Record<string, any[]>;
-  currentFrame: number;
+  currentFrame?: number;
   selectedRow: string;
   zoom: number;
   onionSkin: boolean;
@@ -48,7 +48,7 @@ export function serializeDocument(args: SerializeDocArgs) {
     frameCount,
     timeline: { drawingFrames, layerOrder },
     layers: { folderLayers, layerStrokes },
-    uiState: { currentFrame, selectedRow, zoom, onionSkin, showGrid },
+    uiState: { currentFrame: currentFrame ?? 1, selectedRow, zoom, onionSkin, showGrid },
     frameAssetKeys,
     folderNames,
   } as const;

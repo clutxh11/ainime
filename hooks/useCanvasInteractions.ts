@@ -261,7 +261,7 @@ export default function useCanvasInteractions(args: UseCanvasInteractionsArgs) {
           setLayerStrokes((prev) => {
             const other =
               prev[selectedLayerId]?.filter(
-                (s) => !movedStrokes.some((ms) => ms.id === s.id)
+                (s) => !movedStrokes.some((ms: DrawingStroke) => ms.id === s.id)
               ) || [];
             return { ...prev, [selectedLayerId]: [...other, ...movedStrokes] };
           });

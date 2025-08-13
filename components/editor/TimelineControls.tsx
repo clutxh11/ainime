@@ -24,7 +24,7 @@ export default function TimelineControls({ zoom, setZoom, isPlaying, onPlayPause
       <Button variant="outline" size="sm" className="text-gray-400 bg-transparent border-gray-600" onClick={() => setZoom((prev) => Math.min(3, prev + 0.1))}>
         <ZoomIn className="w-4 h-4" />
       </Button>
-      <Button variant="outline" size="sm" className="text-gray-400 bg-transparent border-gray-600" onClick={() => setZoom(1)}>
+      <Button variant="outline" size="sm" className="text-gray-400 bg-transparent border-gray-600" onClick={() => setZoom(() => 1)}>
         <RotateCcw className="w-4 h-4" />
       </Button>
       <div className="ml-4 flex items-center gap-2">

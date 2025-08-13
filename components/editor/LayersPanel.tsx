@@ -64,6 +64,7 @@ export default function LayersPanel(props: LayersPanelProps) {
     setLayerOpacities,
     folderLayers,
     layerOrder,
+    layerVisibility,
     moveLayer,
     moveFrameFolderUp,
     moveFrameFolderDown,
