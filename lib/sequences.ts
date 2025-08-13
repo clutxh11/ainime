@@ -67,6 +67,16 @@ export async function updateCompositionData(
   await supabase.from("compositions").update({ data }).eq("id", compositionId);
 }
 
+export async function getCompositionByChapter(chapterId: string) {
+  const { data, error } = await supabase
+    .from("compositions")
+    .select("id")
+    .eq("chapter_id", chapterId)
+    .maybeSingle();
+  if (error) return null;
+  return data;
+}
+
 export interface Storyboard {
   id: string;
   project_id: string;

@@ -1622,16 +1622,17 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
                                       size="sm"
                                       variant="outline"
                                       className="h-8 px-3 border-gray-600 text-gray-300"
-                                      onClick={() =>
+                                      onClick={async () => {
+                                        // Pass IDs to open; we also optimistically navigate
                                         onViewChange("compositing-editor", {
                                           projectId,
                                           chapterId: chapter.id,
                                           chapterTitle: chapter.title,
-                                        })
-                                      }
+                                        });
+                                      }}
                                       title="Create/Open composition for this chapter"
                                     >
-                                      Create Composition
+                                      Open Composition
                                     </Button>
                                   </div>
                                 </>
