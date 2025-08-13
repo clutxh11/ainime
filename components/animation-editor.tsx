@@ -8,21 +8,63 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Play, Pause, SkipBack, SkipForward, Plus, Pencil, Eraser, Eye, EyeOff, Undo, Redo, Trash2, Palette, Layers, Move, Grid, Folder, FolderOpen, Lock, Unlock, Copy, ChevronDown, ChevronRight, Edit3, Lasso, X, ChevronUp } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Plus,
+  Pencil,
+  Eraser,
+  Eye,
+  EyeOff,
+  Undo,
+  Redo,
+  Trash2,
+  Palette,
+  Layers,
+  Move,
+  Grid,
+  Folder,
+  FolderOpen,
+  Lock,
+  Unlock,
+  Copy,
+  ChevronDown,
+  ChevronRight,
+  Edit3,
+  Lasso,
+  X,
+  ChevronUp,
+} from "lucide-react";
 import TopBar from "@/components/editor/TopBar";
 import ToolSidebar from "@/components/editor/ToolSidebar";
 import CanvasViewport from "@/components/editor/CanvasViewport";
 import SettingsPanel from "@/components/editor/SettingsPanel";
 import LayersPanel from "@/components/editor/LayersPanel";
 import EditorSettingsModal from "@/components/editor/EditorSettingsModal";
+import CtxMenu from "@/components/editor/ContextMenu";
 import type { CurrentView } from "@/types";
 import TimelineGrid, { DrawingFrame } from "./timeline-grid";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateComposition, updateCompositionData } from "@/lib/sequences";
 import { getFileNameBaseFromString, slugifyName } from "@/lib/editor/paths";
-import { buildProjectChapterParts, buildSequencePart, buildShotPart } from "@/lib/editor/storage";
-import { exportCanvasDataURL, saveDataUrlToHandle, downloadDataUrl } from "@/lib/editor/export";
+import {
+  buildProjectChapterParts,
+  buildSequencePart,
+  buildShotPart,
+} from "@/lib/editor/storage";
+import {
+  exportCanvasDataURL,
+  saveDataUrlToHandle,
+  downloadDataUrl,
+} from "@/lib/editor/export";
 import useKeyboardShortcuts from "@/hooks/useKeyboardShortcuts";
 
 type EditorMode = "animate" | "storyboard" | "composite";
@@ -2963,9 +3005,16 @@ export function AnimationEditor({
         const fileBase = `R${rowId.split("-")[1]}F${frameIndex + 1}`; // frame-folder naming
 
         if (exportDirHandle?.getFileHandle) {
-          await saveDataUrlToHandle(dataUrl, `${fileBase}.${ext}`, exportDirHandle);
+          await saveDataUrlToHandle(
+            dataUrl,
+            `${fileBase}.${ext}`,
+            exportDirHandle
+          );
         } else {
-          downloadDataUrl(dataUrl, `${exportFolderName || "Export"}_${fileBase}.${ext}`);
+          downloadDataUrl(
+            dataUrl,
+            `${exportFolderName || "Export"}_${fileBase}.${ext}`
+          );
         }
       };
 
@@ -3467,59 +3516,16 @@ export function AnimationEditor({
           </div>
 
           {/* Context Menu */}
-          {contextMenu.visible && lassoSelection?.isActive && (
-            <div
-              style={{
-                position: "fixed",
-                top: contextMenu.y,
-                left: contextMenu.x,
-                transform: "translateX(-50%)",
-                zIndex: 100,
-              }}
-              className="bg-gray-900 rounded-lg shadow-xl border border-gray-700 flex items-center p-1"
-            >
-              <Button
-                variant="ghost"
-                size="sm"
-                className="px-3"
-                onClick={handleCutSelectedStrokes}
-              >
-                Cut
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="px-3"
-                onClick={handleCopySelectedStrokes}
-              >
-                Copy
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="px-3 text-red-500 hover:text-red-400"
-                onClick={handleDeleteSelectedStrokes}
-              >
-                Delete
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="px-3"
-                onClick={handleDuplicateSelectedStrokes}
-              >
-                Duplicate
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="px-3"
-                onClick={handleResizeClick}
-              >
-                Resize
-              </Button>
-            </div>
-          )}
+          <CtxMenu
+            visible={contextMenu.visible && !!lassoSelection?.isActive}
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onCut={handleCutSelectedStrokes}
+            onCopy={handleCopySelectedStrokes}
+            onDelete={handleDeleteSelectedStrokes}
+            onDuplicate={handleDuplicateSelectedStrokes}
+            onResize={handleResizeClick}
+          />
 
           {/* Timeline - hidden in storyboard mode */}
           {mode !== "storyboard" && (
