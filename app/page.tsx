@@ -193,7 +193,7 @@ export default function Home() {
           <Suspense fallback={<LoadingSpinner />}>
             <ProjectDetail
               onViewChange={handleViewChange}
-              projectId={selectedContent?.id}
+              projectId={(selectedContent as any)?.id || (sceneSettings as any)?.projectId}
             />
           </Suspense>
         );
