@@ -14,42 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  ArrowLeft,
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Plus,
-  Save,
-  Pencil,
-  Eraser,
-  Eye,
-  EyeOff,
-  Undo,
-  Redo,
-  Trash2,
-  Palette,
-  Layers,
-  Download,
-  RotateCcw,
-  Move,
-  ZoomIn,
-  ZoomOut,
-  Grid,
-  Folder,
-  FolderOpen,
-  Lock,
-  Unlock,
-  Copy,
-  Settings,
-  ChevronDown,
-  ChevronRight,
-  Edit3,
-  Lasso,
-  X,
-  ChevronUp,
-} from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Plus, Pencil, Eraser, Eye, EyeOff, Undo, Redo, Trash2, Palette, Layers, Move, Grid, Folder, FolderOpen, Lock, Unlock, Copy, ChevronDown, ChevronRight, Edit3, Lasso, X, ChevronUp } from "lucide-react";
+import TopBar from "@/components/editor/TopBar";
 import type { CurrentView } from "@/types";
 import TimelineGrid, { DrawingFrame } from "./timeline-grid";
 import { supabase } from "@/lib/supabase";
@@ -3113,158 +3079,24 @@ export function AnimationEditor({
   return (
     <div className="h-screen bg-gray-900 text-white flex flex-col overflow-hidden">
       {/* Top Navigation */}
-      <nav className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onViewChange("project-detail")}
-              className="text-gray-300 hover:text-white"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Project
-            </Button>
-            <Separator orientation="vertical" className="h-6" />
-            <div className="flex items-baseline gap-2">
-              <h1 className="text-lg font-semibold">
-                {mode === "storyboard"
-                  ? "Storyboard Editor"
-                  : mode === "composite"
-                  ? "Compositing Editor"
-                  : "Animation Editor"}
-              </h1>
-              <span className="text-sm text-gray-400">
-                {(() => {
-                  if (mode === "storyboard") {
-                    const seq =
-                      nameOverride ||
-                      sceneSettings?.sequenceCode ||
-                      sceneSettings?.sequenceId?.slice(0, 4);
-                    return seq || null;
-                  }
-                  if (mode === "animate") {
-                    const seq =
-                      sceneSettings?.sequenceCode ||
-                      sceneSettings?.sequenceId?.slice(0, 4);
-                    const shot =
-                      nameOverride ||
-                      sceneSettings?.shotCode ||
-                      sceneSettings?.shotId?.slice(0, 4);
-                    return seq && shot ? `${seq} - ${shot}` : shot || null;
-                  }
-                  if (mode === "composite") {
-                    // Prefer a human-readable name passed via sceneName (e.g., "chapter 1")
-                    if (sceneSettings?.sceneName)
-                      return sceneSettings.sceneName;
-                    return sceneSettings?.chapterId
-                      ? `chapter ${sceneSettings.chapterId.slice(0, 4)}`
-                      : null;
-                  }
-                  return null;
-                })()}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* Undo/Redo Controls */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-gray-400 bg-transparent border-gray-600"
-                onClick={undo}
-                disabled={undoStack.length === 0}
-                title="Undo"
-              >
-                <Undo className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-gray-400 bg-transparent border-gray-600"
-                onClick={redo}
-                disabled={redoStack.length === 0}
-                title="Redo"
-              >
-                <Redo className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <Separator orientation="vertical" className="h-6" />
-
-            {/* Zoom Controls */}
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-gray-300">Zoom:</Label>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-gray-400 bg-transparent border-gray-600"
-                onClick={() => setZoom((prev) => Math.max(0.5, prev - 0.1))}
-              >
-                <ZoomOut className="w-4 h-4" />
-              </Button>
-              <span className="text-sm text-gray-300 min-w-[60px] text-center">
-                {Math.round(zoom * 100)}%
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-gray-400 bg-transparent border-gray-600"
-                onClick={() => setZoom((prev) => Math.min(3, prev + 0.1))}
-              >
-                <ZoomIn className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-gray-400 bg-transparent border-gray-600"
-                onClick={() => setZoom(1)}
-              >
-                <RotateCcw className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <Separator orientation="vertical" className="h-6" />
-
-            {/* Scene Settings */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-gray-300 hover:text-white"
-              onClick={() => setIsSettingsOpen(true)}
-              title="Scene settings"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              Settings
-            </Button>
-
-            {/* Export */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-gray-300 hover:text-white"
-              onClick={() => setIsExportOpen(true)}
-              title="Export"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-gray-400 bg-transparent border-gray-600"
-              onClick={saveScene}
-              disabled={isSaving}
-              title="Save settings"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              {isSaving ? "Saving..." : "Save"}
-            </Button>
-          </div>
-        </div>
-      </nav>
+      <TopBar
+        mode={mode}
+        sceneSettings={sceneSettings}
+        nameOverride={nameOverride}
+        onBack={() => onViewChange("project-detail")}
+        undo={undo}
+        redo={redo}
+        undoDisabled={undoStack.length === 0}
+        redoDisabled={redoStack.length === 0}
+        zoom={zoom}
+        onZoomIn={() => setZoom((prev) => Math.min(3, prev + 0.1))}
+        onZoomOut={() => setZoom((prev) => Math.max(0.5, prev - 0.1))}
+        onZoomReset={() => setZoom(1)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenExport={() => setIsExportOpen(true)}
+        onSave={saveScene}
+        isSaving={isSaving}
+      />
 
       <div className="flex flex-1 min-h-0 relative">
         {/* Collapsible Toolbar - hidden in compositing mode */}
