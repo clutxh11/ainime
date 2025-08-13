@@ -14,8 +14,38 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Play, Pause, SkipBack, SkipForward, Plus, Pencil, Eraser, Eye, EyeOff, Undo, Redo, Trash2, Palette, Layers, Move, Grid, Folder, FolderOpen, Lock, Unlock, Copy, ChevronDown, ChevronRight, Edit3, Lasso, X, ChevronUp } from "lucide-react";
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Plus,
+  Pencil,
+  Eraser,
+  Eye,
+  EyeOff,
+  Undo,
+  Redo,
+  Trash2,
+  Palette,
+  Layers,
+  Move,
+  Grid,
+  Folder,
+  FolderOpen,
+  Lock,
+  Unlock,
+  Copy,
+  ChevronDown,
+  ChevronRight,
+  Edit3,
+  Lasso,
+  X,
+  ChevronUp,
+} from "lucide-react";
 import TopBar from "@/components/editor/TopBar";
+import ToolSidebar from "@/components/editor/ToolSidebar";
+import CanvasViewport from "@/components/editor/CanvasViewport";
 import type { CurrentView } from "@/types";
 import TimelineGrid, { DrawingFrame } from "./timeline-grid";
 import { supabase } from "@/lib/supabase";
@@ -3106,65 +3136,31 @@ export function AnimationEditor({
             onMouseEnter={() => setIsHoveringToolbar(true)}
             onMouseLeave={() => setIsHoveringToolbar(false)}
           >
-            {/* Tool Sidebar */}
-            <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-4 gap-2 flex-shrink-0">
-              {tools.map((tool) => (
-                <Button
-                  key={tool.id}
-                  variant={currentTool === tool.id ? "default" : "ghost"}
-                  size="sm"
-                  className="w-12 h-12 p-0"
-                  onClick={() => {
-                    setCurrentTool(tool.id as any);
-                    // Reset move tool state when switching tools
-                    if (tool.id !== "move") {
-                      setLassoSelection(null);
-                      setOriginalLassoPoints([]);
-                      setOriginalStrokePositions({});
-                      setIsSelecting(false);
-                      setIsDragging(false);
-                    }
-                    // Hide eraser circle when switching away from eraser tool
-                    if (tool.id !== "eraser") {
-                      setEraserCircle(null);
-                    }
-                  }}
-                  title={tool.label}
-                >
-                  <tool.icon className="w-5 h-5" />
-                </Button>
-              ))}
-
-              <Separator className="w-8 my-2" />
-
-              <Button
-                variant={onionSkin ? "default" : "ghost"}
-                size="sm"
-                className="w-12 h-12 p-0"
-                onClick={() => {
-                  console.log("Onion skin toggled:", !onionSkin);
-                  setOnionSkin(!onionSkin);
-                  drawFrame(); // Force redraw when toggling onion skin
-                }}
-                title="Onion Skin"
-              >
-                {onionSkin ? (
-                  <Eye className="w-5 h-5" />
-                ) : (
-                  <EyeOff className="w-s h-5" />
-                )}
-              </Button>
-
-              <Button
-                variant={showGrid ? "default" : "ghost"}
-                size="sm"
-                className="w-12 h-12 p-0"
-                onClick={() => setShowGrid(!showGrid)}
-                title="Show Grid"
-              >
-                <Grid className="w-5 h-5" />
-              </Button>
-            </div>
+            <ToolSidebar
+              visible={true}
+              tools={tools as any}
+              currentTool={currentTool}
+              setCurrentTool={(t) => {
+                setCurrentTool(t as any);
+                if (t !== "move") {
+                  setLassoSelection(null);
+                  setOriginalLassoPoints([]);
+                  setOriginalStrokePositions({});
+                  setIsSelecting(false);
+                  setIsDragging(false);
+                }
+                if (t !== "eraser") {
+                  setEraserCircle(null);
+                }
+              }}
+              onionSkin={onionSkin}
+              setOnionSkin={(v) => {
+                setOnionSkin(v);
+                drawFrame();
+              }}
+              showGrid={showGrid}
+              setShowGrid={setShowGrid}
+            />
 
             {/* Export Modal */}
             {isExportOpen && (
@@ -3577,259 +3573,243 @@ export function AnimationEditor({
             className="flex-1 bg-gray-900 flex items-center justify-center p-4 min-h-0 overflow-auto"
             style={{ paddingBottom: "280px" }}
           >
-            {/* Hide canvas in compositing mode initial refactor */}
-            {mode !== "composite" && (
-              <Card
-                className="bg-white"
-                style={{
-                  transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
-                  transition: isPanning ? "none" : "transform 0.1s ease-out",
-                }}
-              >
-                <CardContent className="p-0">
-                  <canvas
-                    ref={canvasRef}
-                    className="border border-gray-300 cursor-crosshair"
-                    style={{ imageRendering: "pixelated" }}
-                    onDragOver={(e) => {
-                      // Allow dropping files onto canvas
+            {/* Canvas viewport (hidden in composite mode per current behavior) */}
+            <CanvasViewport
+              show={mode !== "composite"}
+              panX={panOffset.x}
+              panY={panOffset.y}
+              canvasRef={canvasRef}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={async (e) => {
                       e.preventDefault();
-                    }}
-                    onDrop={async (e) => {
-                    e.preventDefault();
-                    const file = e.dataTransfer?.files?.[0];
-                    if (!file || !file.type.startsWith("image/")) return;
-                    // Determine current folder from selectedLayerId
-                    const folderId = getActiveFrameFolderId(
-                      selectedLayerId || ""
-                    );
-                    if (!folderId) {
-                      // If none selected, create a new folder and use its main layer
-                      const targetRowId = selectedRow || "row-1";
-                      const rowFrames = drawingFrames.filter(
-                        (df) => df.rowId === targetRowId
+                      const file = e.dataTransfer?.files?.[0];
+                      if (!file || !file.type.startsWith("image/")) return;
+                      // Determine current folder from selectedLayerId
+                      const folderId = getActiveFrameFolderId(
+                        selectedLayerId || ""
                       );
-                      const nextIndex =
-                        rowFrames.length > 0
-                          ? Math.max(...rowFrames.map((f) => f.frameIndex)) + 1
-                          : 0;
-                      const newFolderId = `${targetRowId}-${nextIndex}`;
-                      setDrawingFrames((prev) => [
-                        ...prev,
-                        {
-                          rowId: targetRowId,
-                          frameIndex: nextIndex,
-                          length: 1,
-                          imageUrl: "",
-                          fileName: "",
-                        },
-                      ]);
-                      setLayerOrder((prev) => ({
-                        ...prev,
-                        [newFolderId]: [`${newFolderId}-main`],
-                      }));
-                      setFolderLayers((prev) => ({
-                        ...prev,
-                        [newFolderId]: [],
-                      }));
-                      setOpenFolders((prev) => ({
-                        ...prev,
-                        [newFolderId]: true,
-                      }));
-                      setSelectedLayerId(`${newFolderId}-main`);
-                    }
-
-                    const activeFolderId =
-                      getActiveFrameFolderId(selectedLayerId || "") ||
-                      (() => {
+                      if (!folderId) {
+                        // If none selected, create a new folder and use its main layer
                         const targetRowId = selectedRow || "row-1";
                         const rowFrames = drawingFrames.filter(
                           (df) => df.rowId === targetRowId
                         );
-                        const idx =
+                        const nextIndex =
                           rowFrames.length > 0
                             ? Math.max(...rowFrames.map((f) => f.frameIndex)) +
                               1
                             : 0;
-                        return `${targetRowId}-${idx}`;
-                      })();
+                        const newFolderId = `${targetRowId}-${nextIndex}`;
+                        setDrawingFrames((prev) => [
+                          ...prev,
+                          {
+                            rowId: targetRowId,
+                            frameIndex: nextIndex,
+                            length: 1,
+                            imageUrl: "",
+                            fileName: "",
+                          },
+                        ]);
+                        setLayerOrder((prev) => ({
+                          ...prev,
+                          [newFolderId]: [`${newFolderId}-main`],
+                        }));
+                        setFolderLayers((prev) => ({
+                          ...prev,
+                          [newFolderId]: [],
+                        }));
+                        setOpenFolders((prev) => ({
+                          ...prev,
+                          [newFolderId]: true,
+                        }));
+                        setSelectedLayerId(`${newFolderId}-main`);
+                      }
 
-                    // Ensure a new extra layer is created for this image (compute index deterministically)
-                    let newLayerId = "";
-                    setFolderLayers((prev) => {
-                      const current = prev[activeFolderId] || [];
-                      newLayerId = `${activeFolderId}-extra-${current.length}`;
-                      const baseName = file.name.replace(/\.[^/.]+$/, "");
-                      return {
+                      const activeFolderId =
+                        getActiveFrameFolderId(selectedLayerId || "") ||
+                        (() => {
+                          const targetRowId = selectedRow || "row-1";
+                          const rowFrames = drawingFrames.filter(
+                            (df) => df.rowId === targetRowId
+                          );
+                          const idx =
+                            rowFrames.length > 0
+                              ? Math.max(
+                                  ...rowFrames.map((f) => f.frameIndex)
+                                ) + 1
+                              : 0;
+                          return `${targetRowId}-${idx}`;
+                        })();
+
+                      // Ensure a new extra layer is created for this image (compute index deterministically)
+                      let newLayerId = "";
+                      setFolderLayers((prev) => {
+                        const current = prev[activeFolderId] || [];
+                        newLayerId = `${activeFolderId}-extra-${current.length}`;
+                        const baseName = file.name.replace(/\.[^/.]+$/, "");
+                        return {
+                          ...prev,
+                          [activeFolderId]: [
+                            ...current,
+                            baseName || `Untitled.${current.length + 1}`,
+                          ],
+                        } as any;
+                      });
+                      setLayerOrder((prev) => {
+                        const base = prev[activeFolderId] || [
+                          `${activeFolderId}-main`,
+                        ];
+                        return {
+                          ...prev,
+                          [activeFolderId]: [...base, newLayerId],
+                        } as any;
+                      });
+
+                      // Create an image stroke centered; minimal stroke contains metadata
+                      const stroke: DrawingStroke = {
+                        id: generateStrokeId(),
+                        points: [],
+                        color: "none",
+                        brushSize: 0,
+                        tool: "image",
+                        layerId: newLayerId,
+                      };
+                      setLayerStrokes((prev) => ({
                         ...prev,
-                        [activeFolderId]: [
-                          ...current,
-                          baseName || `Untitled.${current.length + 1}`,
-                        ],
-                      } as any;
-                    });
-                    setLayerOrder((prev) => {
-                      const base = prev[activeFolderId] || [
-                        `${activeFolderId}-main`,
-                      ];
-                      return {
-                        ...prev,
-                        [activeFolderId]: [...base, newLayerId],
-                      } as any;
-                    });
+                        [newLayerId]: [...(prev[newLayerId] || []), stroke],
+                      }));
 
-                    // Create an image stroke centered; minimal stroke contains metadata
-                    const stroke: DrawingStroke = {
-                      id: generateStrokeId(),
-                      points: [],
-                      color: "none",
-                      brushSize: 0,
-                      tool: "image",
-                      layerId: newLayerId,
-                    };
-                    setLayerStrokes((prev) => ({
-                      ...prev,
-                      [newLayerId]: [...(prev[newLayerId] || []), stroke],
-                    }));
-
-                    // Upload to Storage if enabled, else use blob URL
-                    let imageUrl = "";
-                    let key: string | undefined = undefined;
-                    const enableStorage =
-                      process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
-                    if (
-                      enableStorage &&
-                      sceneSettings?.projectId &&
-                      sceneSettings?.chapterId &&
-                      sceneSettings?.sequenceId
-                    ) {
-                      try {
-                        const bucket =
-                          process.env.NEXT_PUBLIC_SCENE_BUCKET ||
-                          "animation-assets";
-                        const safeName = file.name.replace(
-                          /[^a-zA-Z0-9_.-]/g,
-                          "_"
-                        );
-                        const ts = new Date()
-                          .toISOString()
-                          .replace(/[:.]/g, "-");
-                        const projectPart = `${slugifyName(
-                          sceneSettings.projectTitle
-                        )}-${sceneSettings.projectId}`;
-                        const chapterPart = `${slugifyName(
-                          sceneSettings.chapterTitle
-                        )}-${sceneSettings.chapterId}`;
-                        if (mode === "storyboard") {
-                          const sbId = sceneSettings?.storyboardId || "unknown";
-                          key = `${projectPart}/${chapterPart}/storyboard-${sbId}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
-                        } else {
-                          const sequencePart = `${slugifyName(
-                            sceneSettings.sequenceCode
-                          )}-${sceneSettings.sequenceId}`;
-                          const shotPart = `shot-${slugifyName(
-                            sceneSettings.shotCode
-                          )}-${sceneSettings.shotId || "unknown"}`;
-                          key = `${projectPart}/${chapterPart}/${sequencePart}/${shotPart}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
-                        }
-                        const { error: upErr } = await supabase.storage
-                          .from(bucket)
-                          .upload(key, file, {
-                            upsert: true,
-                            contentType: file.type,
-                          });
-                        if (!upErr) {
-                          const { data: signed } = await supabase.storage
+                      // Upload to Storage if enabled, else use blob URL
+                      let imageUrl = "";
+                      let key: string | undefined = undefined;
+                      const enableStorage =
+                        process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
+                      if (
+                        enableStorage &&
+                        sceneSettings?.projectId &&
+                        sceneSettings?.chapterId &&
+                        sceneSettings?.sequenceId
+                      ) {
+                        try {
+                          const bucket =
+                            process.env.NEXT_PUBLIC_SCENE_BUCKET ||
+                            "animation-assets";
+                          const safeName = file.name.replace(
+                            /[^a-zA-Z0-9_.-]/g,
+                            "_"
+                          );
+                          const ts = new Date()
+                            .toISOString()
+                            .replace(/[:.]/g, "-");
+                          const projectPart = `${slugifyName(
+                            sceneSettings.projectTitle
+                          )}-${sceneSettings.projectId}`;
+                          const chapterPart = `${slugifyName(
+                            sceneSettings.chapterTitle
+                          )}-${sceneSettings.chapterId}`;
+                          if (mode === "storyboard") {
+                            const sbId =
+                              sceneSettings?.storyboardId || "unknown";
+                            key = `${projectPart}/${chapterPart}/storyboard-${sbId}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
+                          } else {
+                            const sequencePart = `${slugifyName(
+                              sceneSettings.sequenceCode
+                            )}-${sceneSettings.sequenceId}`;
+                            const shotPart = `shot-${slugifyName(
+                              sceneSettings.shotCode
+                            )}-${sceneSettings.shotId || "unknown"}`;
+                            key = `${projectPart}/${chapterPart}/${sequencePart}/${shotPart}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
+                          }
+                          const { error: upErr } = await supabase.storage
                             .from(bucket)
-                            .createSignedUrl(key, 60 * 60 * 24);
-                          imageUrl =
-                            signed?.signedUrl || URL.createObjectURL(file);
-                        } else {
+                            .upload(key, file, {
+                              upsert: true,
+                              contentType: file.type,
+                            });
+                          if (!upErr) {
+                            const { data: signed } = await supabase.storage
+                              .from(bucket)
+                              .createSignedUrl(key, 60 * 60 * 24);
+                            imageUrl =
+                              signed?.signedUrl || URL.createObjectURL(file);
+                          } else {
+                            imageUrl = URL.createObjectURL(file);
+                          }
+                        } catch {
                           imageUrl = URL.createObjectURL(file);
                         }
-                      } catch {
+                      } else {
                         imageUrl = URL.createObjectURL(file);
                       }
-                    } else {
-                      imageUrl = URL.createObjectURL(file);
-                    }
 
-                    // Attach to drawingFrames cell representing this folder's page (for preview)
-                    setDrawingFrames((prev) => {
-                      const parts = activeFolderId.split("-");
-                      const rowId = `${parts[0]}-${parts[1]}`;
-                      const frameIndex = parseInt(parts[2]);
-                      const exists = prev.find(
-                        (df) =>
-                          df.rowId === rowId && df.frameIndex === frameIndex
-                      );
-                      if (exists) {
-                        return prev.map((df) =>
-                          df.rowId === rowId && df.frameIndex === frameIndex
-                            ? { ...df, imageUrl }
-                            : df
+                      // Attach to drawingFrames cell representing this folder's page (for preview)
+                      setDrawingFrames((prev) => {
+                        const parts = activeFolderId.split("-");
+                        const rowId = `${parts[0]}-${parts[1]}`;
+                        const frameIndex = parseInt(parts[2]);
+                        const exists = prev.find(
+                          (df) =>
+                            df.rowId === rowId && df.frameIndex === frameIndex
                         );
+                        if (exists) {
+                          return prev.map((df) =>
+                            df.rowId === rowId && df.frameIndex === frameIndex
+                              ? { ...df, imageUrl }
+                              : df
+                          );
+                        }
+                        return [
+                          ...prev,
+                          {
+                            rowId,
+                            frameIndex,
+                            length: 1,
+                            imageUrl,
+                            fileName: "",
+                          },
+                        ];
+                      });
+
+                      // Record key for re-signing later
+                      if (key) {
+                        const parts = activeFolderId.split("-");
+                        const rowKey = `${parts[0]}-${parts[1]}`;
+                        const frameKey = parseInt(parts[2]);
+                        setFrameAssetKeys((prev) => ({
+                          ...prev,
+                          [`${rowKey}|${frameKey}`]: key,
+                        }));
                       }
-                      return [
-                        ...prev,
-                        {
-                          rowId,
-                          frameIndex,
-                          length: 1,
-                          imageUrl,
-                          fileName: "",
-                        },
-                      ];
-                    });
 
-                    // Record key for re-signing later
-                    if (key) {
-                      const parts = activeFolderId.split("-");
-                      const rowKey = `${parts[0]}-${parts[1]}`;
-                      const frameKey = parseInt(parts[2]);
-                      setFrameAssetKeys((prev) => ({
-                        ...prev,
-                        [`${rowKey}|${frameKey}`]: key,
-                      }));
-                    }
-
-                    setSelectedLayerId(newLayerId);
-                    setSelectedFrameNumber(
-                      parseInt(activeFolderId.split("-")[2]) + 1
-                    );
-                    saveToUndoStack();
-                  }}
-                  onMouseDown={startDrawing}
-                  onMouseMove={draw}
-                  onMouseUp={handleMouseUp}
-                  onMouseLeave={() => {
-                    stopDrawing();
-                    setEraserCircle(null);
-                  }}
-                  onContextMenu={(e) => e.preventDefault()}
-                  onWheel={(e) => {
-                    // Handle trackpad two-finger panning
-                    const now = Date.now();
-                    if (now - lastWheelTime < 16) return; // Throttle to ~60fps
-                    setLastWheelTime(now);
-
-                    // Check if this is a trackpad gesture (deltaMode === 0 and small deltas)
-                    if (
-                      e.deltaMode === 0 &&
-                      Math.abs(e.deltaX) < 50 &&
-                      Math.abs(e.deltaY) < 50
-                    ) {
-                      e.preventDefault();
-                      setPanOffset((prev) => ({
-                        x: prev.x - e.deltaX,
-                        y: prev.y - e.deltaY,
-                      }));
-                    }
+                      setSelectedLayerId(newLayerId);
+                      setSelectedFrameNumber(
+                        parseInt(activeFolderId.split("-")[2]) + 1
+                      );
+                      saveToUndoStack();
                     }}
-                  />
-                </CardContent>
-              </Card>
-            )}
+              onMouseDown={startDrawing}
+              onMouseMove={draw}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={() => {
+                stopDrawing();
+                setEraserCircle(null);
+              }}
+              onContextMenu={(e) => e.preventDefault()}
+              onWheel={(e) => {
+                const now = Date.now();
+                if (now - lastWheelTime < 16) return;
+                setLastWheelTime(now);
+                if (
+                  e.deltaMode === 0 &&
+                  Math.abs(e.deltaX) < 50 &&
+                  Math.abs(e.deltaY) < 50
+                ) {
+                  e.preventDefault();
+                  setPanOffset((prev) => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
+                }
+              }}
+              isPanning={isPanning}
+            />
           </div>
 
           {/* Context Menu */}
