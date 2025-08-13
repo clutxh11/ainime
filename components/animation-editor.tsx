@@ -3745,23 +3745,25 @@ export function AnimationEditor({
             className="flex-1 bg-gray-900 flex items-center justify-center p-4 min-h-0 overflow-auto"
             style={{ paddingBottom: "280px" }}
           >
-            <Card
-              className="bg-white"
-              style={{
-                transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
-                transition: isPanning ? "none" : "transform 0.1s ease-out",
-              }}
-            >
-              <CardContent className="p-0">
-                <canvas
-                  ref={canvasRef}
-                  className="border border-gray-300 cursor-crosshair"
-                  style={{ imageRendering: "pixelated" }}
-                  onDragOver={(e) => {
-                    // Allow dropping files onto canvas
-                    e.preventDefault();
-                  }}
-                  onDrop={async (e) => {
+            {/* Hide canvas in compositing mode initial refactor */}
+            {mode !== "composite" && (
+              <Card
+                className="bg-white"
+                style={{
+                  transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
+                  transition: isPanning ? "none" : "transform 0.1s ease-out",
+                }}
+              >
+                <CardContent className="p-0">
+                  <canvas
+                    ref={canvasRef}
+                    className="border border-gray-300 cursor-crosshair"
+                    style={{ imageRendering: "pixelated" }}
+                    onDragOver={(e) => {
+                      // Allow dropping files onto canvas
+                      e.preventDefault();
+                    }}
+                    onDrop={async (e) => {
                     e.preventDefault();
                     const file = e.dataTransfer?.files?.[0];
                     if (!file || !file.type.startsWith("image/")) return;
@@ -3991,10 +3993,11 @@ export function AnimationEditor({
                         y: prev.y - e.deltaY,
                       }));
                     }
-                  }}
-                />
-              </CardContent>
-            </Card>
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Context Menu */}
