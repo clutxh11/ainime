@@ -46,6 +46,7 @@ import {
 import TopBar from "@/components/editor/TopBar";
 import ToolSidebar from "@/components/editor/ToolSidebar";
 import CanvasViewport from "@/components/editor/CanvasViewport";
+import SettingsPanel from "@/components/editor/SettingsPanel";
 import type { CurrentView } from "@/types";
 import TimelineGrid, { DrawingFrame } from "./timeline-grid";
 import { supabase } from "@/lib/supabase";
@@ -3185,8 +3186,8 @@ export function AnimationEditor({
                           readOnly
                           disabled
                         />
-                        <Button
-                          variant="ghost"
+            <Button
+              variant="ghost"
                           size="icon"
                           className="w-10 text-gray-300 hover:text-white"
                           title="Choose folder"
@@ -3217,8 +3218,8 @@ export function AnimationEditor({
                           }}
                         >
                           <Folder className="w-4 h-4" />
-                        </Button>
-                      </div>
+            </Button>
+          </div>
                     </div>
                     <div>
                       <label className="block text-sm text-gray-300 mb-1">
@@ -3249,7 +3250,7 @@ export function AnimationEditor({
                       </select>
                     </div>
                     {mode === "animate" && (
-                      <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
                         <input
                           id="mergeLayers"
                           type="checkbox"
@@ -3265,7 +3266,7 @@ export function AnimationEditor({
                         >
                           Export layers not in animation folders
                         </label>
-                      </div>
+          </div>
                     )}
                     {mode === "animate" && (
                       <div className="flex items-center gap-2">
@@ -3284,7 +3285,7 @@ export function AnimationEditor({
                         >
                           Export entire selected row
                         </label>
-                      </div>
+        </div>
                     )}
                     <div className="flex gap-2 pt-2 justify-end">
                       <button
@@ -3305,264 +3306,26 @@ export function AnimationEditor({
               </div>
             )}
 
-            {/* Sliding Settings Panel */}
-            <div
-              className={`bg-gray-800 border-r border-gray-700 transition-all duration-300 ease-in-out overflow-hidden ${
-                (isHoveringToolbar || isColorPickerOpen) &&
-                currentTool !== "move"
-                  ? "w-64"
-                  : "w-0"
-              }`}
-            >
-              <div className="p-4 space-y-4 min-w-64">
-                {/* Pencil Settings */}
-                {currentTool === "pencil" && (
-                  <>
-                    <div>
-                      <Label className="text-sm font-medium">
-                        Brush Size: {brushSize}px
-                      </Label>
-                      <Slider
-                        value={[brushSize]}
-                        onValueChange={(value) => setBrushSize(value[0])}
-                        max={50}
-                        min={1}
-                        step={1}
-                        className="mt-2"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* Palette Settings */}
-                {currentTool === "palette" && (
-                  <>
-                    <div>
-                      <Label className="text-sm font-medium">Color</Label>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Input
-                          type="color"
-                          value={color}
-                          onChange={(e) => setColor(e.target.value)}
-                          onFocus={() => setIsColorPickerOpen(true)}
-                          onBlur={() => setIsColorPickerOpen(false)}
-                          className="w-12 h-8 p-1 border-gray-600"
-                        />
-                        <Input
-                          value={color}
-                          onChange={(e) => setColor(e.target.value)}
-                          className="flex-1"
-                          placeholder="#000000"
-                        />
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div>
-                      <Label className="text-sm font-medium">
-                        Quick Colors
-                      </Label>
-                      <div className="grid grid-cols-4 gap-2 mt-2">
-                        {[
-                          "#000000",
-                          "#ff0000",
-                          "#00ff00",
-                          "#0000ff",
-                          "#ffff00",
-                          "#ff00ff",
-                          "#00ffff",
-                          "#ffffff",
-                        ].map((c) => (
-                          <button
-                            key={c}
-                            className="w-8 h-8 rounded border-2 border-gray-600 hover:border-white"
-                            style={{ backgroundColor: c }}
-                            onClick={() => setColor(c)}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Custom Color Sets */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <Label className="text-sm font-medium">
-                          Custom Sets
-                        </Label>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setIsCreatingSet(true)}
-                          className="h-6 px-2 text-xs"
-                        >
-                          <Plus className="w-3 h-3 mr-1" />
-                          New Set
-                        </Button>
-                      </div>
-
-                      {/* Create New Set */}
-                      {isCreatingSet && (
-                        <div className="flex items-center gap-2 mb-3 p-2 border border-gray-600 rounded">
-                          <Input
-                            value={newSetName}
-                            onChange={(e) => setNewSetName(e.target.value)}
-                            placeholder="Set name"
-                            className="flex-1 h-6 text-xs"
-                            onKeyPress={(e) =>
-                              e.key === "Enter" && createColorSet()
-                            }
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={createColorSet}
-                            className="h-6 px-2 text-xs"
-                          >
-                            Create
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setIsCreatingSet(false);
-                              setNewSetName("");
-                            }}
-                            className="h-6 px-2 text-xs"
-                          >
-                            <X className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* Display Custom Sets */}
-                      {Object.entries(customColorSets).map(
-                        ([setName, colors]) => (
-                          <div key={setName} className="mb-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <Label className="text-sm font-medium">
-                                {setName}
-                              </Label>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => deleteColorSet(setName)}
-                                className="h-6 px-2 text-xs text-red-400 hover:text-red-300"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </div>
-                            <div className="grid grid-cols-4 gap-2">
-                              {colors.map((c, index) => (
-                                <button
-                                  key={index}
-                                  className="w-8 h-8 rounded border-2 border-gray-600 hover:border-white relative group"
-                                  style={{ backgroundColor: c }}
-                                  onClick={() => setColor(c)}
-                                >
-                                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 flex items-center justify-center">
-                                    <X
-                                      className="w-3 h-3 text-white opacity-0 group-hover:opacity-100"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        removeColorFromSet(setName, index);
-                                      }}
-                                    />
-                                  </div>
-                                </button>
-                              ))}
-                              <button
-                                className="w-8 h-8 rounded border-2 border-dashed border-gray-600 hover:border-white flex items-center justify-center"
-                                onClick={() => addColorToSet(setName, color)}
-                              >
-                                <Plus className="w-3 h-3 text-gray-400" />
-                              </button>
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </>
-                )}
-
-                {/* Eraser Settings */}
-                {currentTool === "eraser" && (
-                  <>
-                    <div>
-                      <h3 className="text-sm font-medium mb-3">ERASER STYLE</h3>
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3 p-3 border border-gray-600 rounded-lg">
-                          <div className="w-8 h-8 bg-gray-600 rounded flex items-center justify-center">
-                            <Eraser className="w-4 h-4" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="text-sm font-medium">
-                              Precision Eraser
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              Erase exact areas touched by eraser
-                            </div>
-                          </div>
-                          <Button
-                            variant={
-                              eraserStyle === "precision"
-                                ? "default"
-                                : "outline"
-                            }
-                            size="sm"
-                            onClick={() => setEraserStyle("precision")}
-                          >
-                            Select
-                          </Button>
-                        </div>
-
-                        <div className="flex items-center gap-3 p-3 border border-gray-600 rounded-lg">
-                          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
-                            <Eraser className="w-4 h-4 text-white" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="text-sm font-medium">
-                              Stroke Eraser
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              Remove entire strokes when touched
-                            </div>
-                          </div>
-                          <Button
-                            variant={
-                              eraserStyle === "stroke" ? "default" : "outline"
-                            }
-                            size="sm"
-                            onClick={() => setEraserStyle("stroke")}
-                          >
-                            Select
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-sm font-medium mb-3">ERASER SIZE</h3>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm">
-                            Size: {eraserSize}px
-                          </Label>
-                        </div>
-                        <Slider
-                          value={[eraserSize]}
-                          onValueChange={(value) => setEraserSize(value[0])}
-                          max={100}
-                          min={1}
-                          step={1}
-                          className="w-full"
-                        />
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
+            <SettingsPanel
+              visible={(isHoveringToolbar || isColorPickerOpen) && currentTool !== "move"}
+              currentTool={currentTool as string}
+              brushSize={brushSize}
+              setBrushSize={(n) => setBrushSize(n)}
+              color={color}
+              setColor={(c) => setColor(c)}
+              isColorPickerOpen={isColorPickerOpen}
+              setIsColorPickerOpen={setIsColorPickerOpen}
+              customColorSets={customColorSets}
+              setCustomColorSets={setCustomColorSets}
+              newSetName={newSetName}
+              setNewSetName={setNewSetName}
+              isCreatingSet={isCreatingSet}
+              setIsCreatingSet={setIsCreatingSet}
+              eraserStyle={eraserStyle}
+              setEraserStyle={setEraserStyle}
+              eraserSize={eraserSize}
+              setEraserSize={setEraserSize}
+            />
           </div>
         )}
 
@@ -3581,212 +3344,199 @@ export function AnimationEditor({
               canvasRef={canvasRef}
               onDragOver={(e) => e.preventDefault()}
               onDrop={async (e) => {
-                      e.preventDefault();
-                      const file = e.dataTransfer?.files?.[0];
-                      if (!file || !file.type.startsWith("image/")) return;
-                      // Determine current folder from selectedLayerId
-                      const folderId = getActiveFrameFolderId(
-                        selectedLayerId || ""
-                      );
-                      if (!folderId) {
-                        // If none selected, create a new folder and use its main layer
-                        const targetRowId = selectedRow || "row-1";
-                        const rowFrames = drawingFrames.filter(
-                          (df) => df.rowId === targetRowId
-                        );
-                        const nextIndex =
-                          rowFrames.length > 0
-                            ? Math.max(...rowFrames.map((f) => f.frameIndex)) +
-                              1
-                            : 0;
-                        const newFolderId = `${targetRowId}-${nextIndex}`;
-                        setDrawingFrames((prev) => [
-                          ...prev,
-                          {
-                            rowId: targetRowId,
-                            frameIndex: nextIndex,
-                            length: 1,
-                            imageUrl: "",
-                            fileName: "",
-                          },
-                        ]);
-                        setLayerOrder((prev) => ({
-                          ...prev,
-                          [newFolderId]: [`${newFolderId}-main`],
-                        }));
-                        setFolderLayers((prev) => ({
-                          ...prev,
-                          [newFolderId]: [],
-                        }));
-                        setOpenFolders((prev) => ({
-                          ...prev,
-                          [newFolderId]: true,
-                        }));
-                        setSelectedLayerId(`${newFolderId}-main`);
-                      }
+                e.preventDefault();
+                const file = e.dataTransfer?.files?.[0];
+                if (!file || !file.type.startsWith("image/")) return;
+                // Determine current folder from selectedLayerId
+                const folderId = getActiveFrameFolderId(selectedLayerId || "");
+                if (!folderId) {
+                  // If none selected, create a new folder and use its main layer
+                  const targetRowId = selectedRow || "row-1";
+                  const rowFrames = drawingFrames.filter(
+                    (df) => df.rowId === targetRowId
+                  );
+                  const nextIndex =
+                    rowFrames.length > 0
+                      ? Math.max(...rowFrames.map((f) => f.frameIndex)) + 1
+                      : 0;
+                  const newFolderId = `${targetRowId}-${nextIndex}`;
+                  setDrawingFrames((prev) => [
+                    ...prev,
+                    {
+                      rowId: targetRowId,
+                      frameIndex: nextIndex,
+                      length: 1,
+                      imageUrl: "",
+                      fileName: "",
+                    },
+                  ]);
+                  setLayerOrder((prev) => ({
+                    ...prev,
+                    [newFolderId]: [`${newFolderId}-main`],
+                  }));
+                  setFolderLayers((prev) => ({
+                    ...prev,
+                    [newFolderId]: [],
+                  }));
+                  setOpenFolders((prev) => ({
+                    ...prev,
+                    [newFolderId]: true,
+                  }));
+                  setSelectedLayerId(`${newFolderId}-main`);
+                }
 
-                      const activeFolderId =
-                        getActiveFrameFolderId(selectedLayerId || "") ||
-                        (() => {
-                          const targetRowId = selectedRow || "row-1";
-                          const rowFrames = drawingFrames.filter(
-                            (df) => df.rowId === targetRowId
-                          );
-                          const idx =
-                            rowFrames.length > 0
-                              ? Math.max(
-                                  ...rowFrames.map((f) => f.frameIndex)
-                                ) + 1
-                              : 0;
-                          return `${targetRowId}-${idx}`;
-                        })();
+                const activeFolderId =
+                  getActiveFrameFolderId(selectedLayerId || "") ||
+                  (() => {
+                    const targetRowId = selectedRow || "row-1";
+                    const rowFrames = drawingFrames.filter(
+                      (df) => df.rowId === targetRowId
+                    );
+                    const idx =
+                      rowFrames.length > 0
+                        ? Math.max(...rowFrames.map((f) => f.frameIndex)) + 1
+                        : 0;
+                    return `${targetRowId}-${idx}`;
+                  })();
 
-                      // Ensure a new extra layer is created for this image (compute index deterministically)
-                      let newLayerId = "";
-                      setFolderLayers((prev) => {
-                        const current = prev[activeFolderId] || [];
-                        newLayerId = `${activeFolderId}-extra-${current.length}`;
-                        const baseName = file.name.replace(/\.[^/.]+$/, "");
-                        return {
-                          ...prev,
-                          [activeFolderId]: [
-                            ...current,
-                            baseName || `Untitled.${current.length + 1}`,
-                          ],
-                        } as any;
+                // Ensure a new extra layer is created for this image (compute index deterministically)
+                let newLayerId = "";
+                setFolderLayers((prev) => {
+                  const current = prev[activeFolderId] || [];
+                  newLayerId = `${activeFolderId}-extra-${current.length}`;
+                  const baseName = file.name.replace(/\.[^/.]+$/, "");
+                  return {
+                    ...prev,
+                    [activeFolderId]: [
+                      ...current,
+                      baseName || `Untitled.${current.length + 1}`,
+                    ],
+                  } as any;
+                });
+                setLayerOrder((prev) => {
+                  const base = prev[activeFolderId] || [
+                    `${activeFolderId}-main`,
+                  ];
+                  return {
+                    ...prev,
+                    [activeFolderId]: [...base, newLayerId],
+                  } as any;
+                });
+
+                // Create an image stroke centered; minimal stroke contains metadata
+                const stroke: DrawingStroke = {
+                  id: generateStrokeId(),
+                  points: [],
+                  color: "none",
+                  brushSize: 0,
+                  tool: "image",
+                  layerId: newLayerId,
+                };
+                setLayerStrokes((prev) => ({
+                  ...prev,
+                  [newLayerId]: [...(prev[newLayerId] || []), stroke],
+                }));
+
+                // Upload to Storage if enabled, else use blob URL
+                let imageUrl = "";
+                let key: string | undefined = undefined;
+                const enableStorage =
+                  process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
+                if (
+                  enableStorage &&
+                  sceneSettings?.projectId &&
+                  sceneSettings?.chapterId &&
+                  sceneSettings?.sequenceId
+                ) {
+                  try {
+                    const bucket =
+                      process.env.NEXT_PUBLIC_SCENE_BUCKET ||
+                      "animation-assets";
+                    const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+                    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+                    const projectPart = `${slugifyName(
+                      sceneSettings.projectTitle
+                    )}-${sceneSettings.projectId}`;
+                    const chapterPart = `${slugifyName(
+                      sceneSettings.chapterTitle
+                    )}-${sceneSettings.chapterId}`;
+                    if (mode === "storyboard") {
+                      const sbId = sceneSettings?.storyboardId || "unknown";
+                      key = `${projectPart}/${chapterPart}/storyboard-${sbId}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
+                    } else {
+                      const sequencePart = `${slugifyName(
+                        sceneSettings.sequenceCode
+                      )}-${sceneSettings.sequenceId}`;
+                      const shotPart = `shot-${slugifyName(
+                        sceneSettings.shotCode
+                      )}-${sceneSettings.shotId || "unknown"}`;
+                      key = `${projectPart}/${chapterPart}/${sequencePart}/${shotPart}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
+                    }
+                    const { error: upErr } = await supabase.storage
+                      .from(bucket)
+                      .upload(key, file, {
+                        upsert: true,
+                        contentType: file.type,
                       });
-                      setLayerOrder((prev) => {
-                        const base = prev[activeFolderId] || [
-                          `${activeFolderId}-main`,
-                        ];
-                        return {
-                          ...prev,
-                          [activeFolderId]: [...base, newLayerId],
-                        } as any;
-                      });
+                    if (!upErr) {
+                      const { data: signed } = await supabase.storage
+                        .from(bucket)
+                        .createSignedUrl(key, 60 * 60 * 24);
+                      imageUrl = signed?.signedUrl || URL.createObjectURL(file);
+                    } else {
+                      imageUrl = URL.createObjectURL(file);
+                    }
+                  } catch {
+                    imageUrl = URL.createObjectURL(file);
+                  }
+                } else {
+                  imageUrl = URL.createObjectURL(file);
+                }
 
-                      // Create an image stroke centered; minimal stroke contains metadata
-                      const stroke: DrawingStroke = {
-                        id: generateStrokeId(),
-                        points: [],
-                        color: "none",
-                        brushSize: 0,
-                        tool: "image",
-                        layerId: newLayerId,
-                      };
-                      setLayerStrokes((prev) => ({
-                        ...prev,
-                        [newLayerId]: [...(prev[newLayerId] || []), stroke],
-                      }));
+                // Attach to drawingFrames cell representing this folder's page (for preview)
+                setDrawingFrames((prev) => {
+                  const parts = activeFolderId.split("-");
+                  const rowId = `${parts[0]}-${parts[1]}`;
+                  const frameIndex = parseInt(parts[2]);
+                  const exists = prev.find(
+                    (df) => df.rowId === rowId && df.frameIndex === frameIndex
+                  );
+                  if (exists) {
+                    return prev.map((df) =>
+                      df.rowId === rowId && df.frameIndex === frameIndex
+                        ? { ...df, imageUrl }
+                        : df
+                    );
+                  }
+                  return [
+                    ...prev,
+                    {
+                      rowId,
+                      frameIndex,
+                      length: 1,
+                      imageUrl,
+                      fileName: "",
+                    },
+                  ];
+                });
 
-                      // Upload to Storage if enabled, else use blob URL
-                      let imageUrl = "";
-                      let key: string | undefined = undefined;
-                      const enableStorage =
-                        process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
-                      if (
-                        enableStorage &&
-                        sceneSettings?.projectId &&
-                        sceneSettings?.chapterId &&
-                        sceneSettings?.sequenceId
-                      ) {
-                        try {
-                          const bucket =
-                            process.env.NEXT_PUBLIC_SCENE_BUCKET ||
-                            "animation-assets";
-                          const safeName = file.name.replace(
-                            /[^a-zA-Z0-9_.-]/g,
-                            "_"
-                          );
-                          const ts = new Date()
-                            .toISOString()
-                            .replace(/[:.]/g, "-");
-                          const projectPart = `${slugifyName(
-                            sceneSettings.projectTitle
-                          )}-${sceneSettings.projectId}`;
-                          const chapterPart = `${slugifyName(
-                            sceneSettings.chapterTitle
-                          )}-${sceneSettings.chapterId}`;
-                          if (mode === "storyboard") {
-                            const sbId =
-                              sceneSettings?.storyboardId || "unknown";
-                            key = `${projectPart}/${chapterPart}/storyboard-${sbId}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
-                          } else {
-                            const sequencePart = `${slugifyName(
-                              sceneSettings.sequenceCode
-                            )}-${sceneSettings.sequenceId}`;
-                            const shotPart = `shot-${slugifyName(
-                              sceneSettings.shotCode
-                            )}-${sceneSettings.shotId || "unknown"}`;
-                            key = `${projectPart}/${chapterPart}/${sequencePart}/${shotPart}/assets/pages/${activeFolderId}/${ts}-${safeName}`;
-                          }
-                          const { error: upErr } = await supabase.storage
-                            .from(bucket)
-                            .upload(key, file, {
-                              upsert: true,
-                              contentType: file.type,
-                            });
-                          if (!upErr) {
-                            const { data: signed } = await supabase.storage
-                              .from(bucket)
-                              .createSignedUrl(key, 60 * 60 * 24);
-                            imageUrl =
-                              signed?.signedUrl || URL.createObjectURL(file);
-                          } else {
-                            imageUrl = URL.createObjectURL(file);
-                          }
-                        } catch {
-                          imageUrl = URL.createObjectURL(file);
-                        }
-                      } else {
-                        imageUrl = URL.createObjectURL(file);
-                      }
+                // Record key for re-signing later
+                if (key) {
+                  const parts = activeFolderId.split("-");
+                  const rowKey = `${parts[0]}-${parts[1]}`;
+                  const frameKey = parseInt(parts[2]);
+                  setFrameAssetKeys((prev) => ({
+                    ...prev,
+                    [`${rowKey}|${frameKey}`]: key,
+                  }));
+                }
 
-                      // Attach to drawingFrames cell representing this folder's page (for preview)
-                      setDrawingFrames((prev) => {
-                        const parts = activeFolderId.split("-");
-                        const rowId = `${parts[0]}-${parts[1]}`;
-                        const frameIndex = parseInt(parts[2]);
-                        const exists = prev.find(
-                          (df) =>
-                            df.rowId === rowId && df.frameIndex === frameIndex
-                        );
-                        if (exists) {
-                          return prev.map((df) =>
-                            df.rowId === rowId && df.frameIndex === frameIndex
-                              ? { ...df, imageUrl }
-                              : df
-                          );
-                        }
-                        return [
-                          ...prev,
-                          {
-                            rowId,
-                            frameIndex,
-                            length: 1,
-                            imageUrl,
-                            fileName: "",
-                          },
-                        ];
-                      });
-
-                      // Record key for re-signing later
-                      if (key) {
-                        const parts = activeFolderId.split("-");
-                        const rowKey = `${parts[0]}-${parts[1]}`;
-                        const frameKey = parseInt(parts[2]);
-                        setFrameAssetKeys((prev) => ({
-                          ...prev,
-                          [`${rowKey}|${frameKey}`]: key,
-                        }));
-                      }
-
-                      setSelectedLayerId(newLayerId);
-                      setSelectedFrameNumber(
-                        parseInt(activeFolderId.split("-")[2]) + 1
-                      );
-                      saveToUndoStack();
-                    }}
+                setSelectedLayerId(newLayerId);
+                setSelectedFrameNumber(
+                  parseInt(activeFolderId.split("-")[2]) + 1
+                );
+                saveToUndoStack();
+              }}
               onMouseDown={startDrawing}
               onMouseMove={draw}
               onMouseUp={handleMouseUp}
@@ -3805,7 +3555,10 @@ export function AnimationEditor({
                   Math.abs(e.deltaY) < 50
                 ) {
                   e.preventDefault();
-                  setPanOffset((prev) => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
+                  setPanOffset((prev) => ({
+                    x: prev.x - e.deltaX,
+                    y: prev.y - e.deltaY,
+                  }));
                 }
               }}
               isPanning={isPanning}
@@ -3824,14 +3577,14 @@ export function AnimationEditor({
               }}
               className="bg-gray-900 rounded-lg shadow-xl border border-gray-700 flex items-center p-1"
             >
-              <Button
+            <Button
                 variant="ghost"
-                size="sm"
+              size="sm"
                 className="px-3"
                 onClick={handleCutSelectedStrokes}
-              >
+            >
                 Cut
-              </Button>
+            </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3839,7 +3592,7 @@ export function AnimationEditor({
                 onClick={handleCopySelectedStrokes}
               >
                 Copy
-              </Button>
+          </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -3847,10 +3600,10 @@ export function AnimationEditor({
                 onClick={handleDeleteSelectedStrokes}
               >
                 Delete
-              </Button>
-              <Button
+          </Button>
+          <Button
                 variant="ghost"
-                size="sm"
+            size="sm"
                 className="px-3"
                 onClick={handleDuplicateSelectedStrokes}
               >
@@ -3863,8 +3616,8 @@ export function AnimationEditor({
                 onClick={handleResizeClick}
               >
                 Resize
-              </Button>
-            </div>
+          </Button>
+        </div>
           )}
 
           {/* Timeline - hidden in storyboard mode */}
@@ -3898,7 +3651,7 @@ export function AnimationEditor({
               />
             </div>
           )}
-        </div>
+          </div>
 
         {/* Right Sidebar (Layer Panel) */}
         <div className="w-80 bg-gray-800 border-l border-gray-700 p-4 flex flex-col">
@@ -3908,7 +3661,7 @@ export function AnimationEditor({
             {mode === "storyboard" && (
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold">Folders</h3>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3917,7 +3670,7 @@ export function AnimationEditor({
                     title="Add Frame"
                   >
                     <Plus className="w-5 h-5" />
-                  </Button>
+                </Button>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -3926,8 +3679,8 @@ export function AnimationEditor({
                     title="Delete Frame"
                   >
                     <Trash2 className="w-5 h-5" />
-                  </Button>
-                </div>
+                </Button>
+              </div>
               </div>
             )}
 
@@ -4249,8 +4002,8 @@ export function AnimationEditor({
               ))}
             </div>
           </ScrollArea>
+          </div>
         </div>
-      </div>
 
       {/* Settings Modal */}
       {isSettingsOpen && (
@@ -4286,7 +4039,7 @@ export function AnimationEditor({
                   onChange={(e) => setDraftName(e.target.value)}
                   disabled={mode === "composite"}
                 />
-              </div>
+      </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
@@ -4300,7 +4053,7 @@ export function AnimationEditor({
                       setDraftWidth(parseInt(e.target.value || "0", 10))
                     }
                   />
-                </div>
+    </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">
                     Height
