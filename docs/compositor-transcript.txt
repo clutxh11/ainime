@@ -1,0 +1,88 @@
+
+00:00:01 - 00:01:12
+hi my name is Don and I'm an animator based in Japan today let's take a look at how the compositing process is done within the Japanese animation industry using After Effects I've provided a link to the project files below so follow along let's make this scene look really cool first we need to get some third-party plugins links are down below first is FS plugins and you can find this on the Creator rifles GitHub download the latest version here next is a couple of plugins from olm
+
+
+00:00:36 - 00:01:59
+site including or M smoother and color keep after that navigate to your After Effects folder find the plugins folder and drag them in there for the olm plugins make sure you select the right version and drag it in the plugin folder [Music] before we start let's change some settings in After Effects go to file project settings add in the time display style tab check frames we're going to be working in frames when we composited animation now let's take a look at our project files we have the layout here we need
+
+
+00:01:18 - 00:02:31
+this to set up our camera then we have the timesheet and we need this to time our animation later lastly we have a folder which all our animation drawings and don't forget the PG these are all target files with 24 bits per pixel meaning there is no Alpha Channel also notice the resolution of our files 1684 by 1190 this is a pretty standard resolution although there might be differences between Studios you may also choose to animate in a higher resolution in your own projects also be aware that our animation styles
+
+
+00:01:56 - 00:03:02
+are drawn with aliased lines this is important as it allows us to color the key parts of the drawing the Shadows are also this magenta color as they are meant to be a mask that we have to deal with in our composite alright let's drag in our layout image into After Effects then we'll right click it and create a new comp from selection let's go into the com settings and change around some settings double check that the frame rate is 24 frames per second and looking at our timesheet we can see that the length of
+
+
+00:02:29 - 00:03:53
+our scene is 4 seconds long so make sure that the duration is correct at 24 frames per second 96 frames should be our duration we'll also change the composition name to cell plus BG remember to keep organized let's create a new comp and call it camera let's also change the size of our workspace the resolution we use here will be the standard that we use for all the Composites for every scene on this project I like to use the size of 1680 by 1000 pixels it's an industry standard extract the cell plus PG comp into the
+
+
+00:03:11 - 00:04:28
+camera one and figure out the camera here in this scene the camera is rotated note the red frame so let's rotate the cell plus BG comp so that it matches up if you have camera moves like pens you would work them out here let's create one more comp and call it render we'll change the resolution to what we want to render as so usually in 1920 by 1080. let's drag the camera comp into here and we have to upscale the camera comp so that the frame matches with the edges of the render comp
+
+
+00:03:50 - 00:05:03
+to do this let's find the detail preserving upscale effect from the effect and preset menu and drag that into the camera comp then increase the scale and move it around to get it to fit properly this is optional but to make the step easier we can go into the camera comp and drag in this Frame template I made into the scene then we can resize this to fit the layout template and then right click on it and select guide layer so it doesn't show up outside of the comp this lets us clearly see what our camera
+
+
+00:04:27 - 00:05:50
+sees alright there we go we have our composition hierarchy set up to organize things I like to rename the comp by adding the number one in front of the render comp to to camera and three to cell plus PG so they show up in our project Window Theory okay let's get our animation cells imported go to file import file and click on the A1 file and make sure that the target sequence option is checked hit import and hit OK let's make a new comp from our imported sequence and get to work first we need to remove the white
+
+
+00:05:11 - 00:06:17
+background since we don't have an alpha Channel we can use the F's color key effect to do this the color is already set up to key out the white by default note that in anime we never use Pure White colors during cell painting so that we can key out the background in this step the whites of the eyes are always slightly off-white never appear white we can then go into our com settings and change the color of the background to make the lines easier to see let's make a new comp from the a comp
+
+
+00:05:44 - 00:06:57
+and rename it to keep it organized it's a good habit to have now let's get the shadow working make a copy of the a comp and on the top layer let's key out the magenta color using F's color key effect again use the eyedropper to pick out the magenta color on the bottom layer we want to key everything out except the magenta color to do so let's use the olm color keep effect will turn off the effect temporarily use the eyedropper to pick out the magenta color and turn the effect back on
+
+
+00:06:20 - 00:07:27
+we also need to add some effects to our shadow layer the first one we need is FS Max which expands the outline of our layer I'll set this to a value of 3. this is needed so that we don't have any gaps between the Shadow and character we also don't want the shadow shape to be expanded where it doesn't touch the character so let's use this set matte effect set to the layers Alpha Channel then let's add a slight blur we'll use the gaussian blur effect at a value of 2 for this
+
+
+00:06:55 - 00:08:08
+to color the shadow we can use the fill effect and change the color to a dark gray color finally we can lower the opacity of layer open the transform Tab and set the opacity to around 50 percent to finalize we need to anti-alias iron lines let's create a new adjustment layer and apply the olm smoother effect to it if you want more smoothing you can add more copies of the OEM smoother effect okay let's go back to our cell plus PG comp and drag in our a comp into it it's also Dragon RPG while we're at it
+
+
+00:07:35 - 00:08:44
+we can hide our layout layer now we won't be needing it to time our animation I'm going to pull up our timesheet and reference it we're looking at the middle column here for the timing right click the a cell animation comp and enable time remapping for it you can delete the last keyframe for the timer map and then drag out the comp to match the length of the timeline then I'll create some extra keyframes one for each drawing so six keyframes in total we can then select everything right
+
+
+00:08:09 - 00:09:49
+click and hit toggle hold keyframe then we have to change the time remap value for each keyframe the second keyframe will have a value of one the third keyframe a value of 2 and so on [Music] then we drag the keyframes out so they match our timesheet drawing 2 is exposed from frame 37 drawing 3 from frame 40 trying 4 at 43 and so on [Music] foreign we can now go to the render comp and check out our animation this is a pretty simple composite and will work for a lot of shows that have that simpler graphic look
+
+
+00:09:05 - 00:10:21
+[Music] now let's take a look at some common effects in anime and how to do them a lot of shows have this gradient effect over the cell layer and to do that we go into our a cell comp grab the rectangle tool and select the fill to be a gradient we can then adjust the gradient and lower the opacity for the start and end point of that gradient we can then use the selection tool to adjust the gradient so that the dark side is near the bottom and the light one near the top expand the controls pane by clicking the
+
+
+00:09:46 - 00:11:01
+button at the bottom left and then under track matte set it to our a cell layer put our shape layer on top of our cell layer and re-enable that cell layer then under the blending mode set it as soft light and there we go using the same Technique we can light the whole scene in the cell plus BG comp we can make a gradient shape layer adjust the color so that the white is at full opacity and angle it so that the white side is at the top and black at the bottom then by setting the blend mode to multiply we can darken the bottom of the
+
+
+00:10:24 - 00:11:46
+scene we can also add a little flare effect to do this we select the rectangle tool and change it to an ellipse and change the fill to a solid color I used a light blue here then draw a big ellipse near the top of the screen let's go down to the transform option of the shape layer and lower the opacity to around 60 percent or so then let's add a blur effect the fast box blur works well here we'll set the value to around 200. then in the blending mode we can set it as colored Dodge to further justice we can add the Hue
+
+
+00:11:05 - 00:12:20
+saturation effect and adjust the saturation and lightness as well as the color to your choosing next I'll show you guys how to create a cool simple anime style filter that you see in a lot of shows as drag our old adjustment layer back into the camera comp click on this button here to enable the adjustment layer and then we need to add some effects first the color balance effect and lower the saturation to around -5 next is the gaussian blur add to blurriness and then the sharpen effect at a value
+
+
+00:11:42 - 00:13:25
+of 5. get a new adjustment layer and enable it at the gaussian blur effect add a value around 60 and set the blending mode as hard light then lower the opacity to around 10 percent the shortcut for opacity is T by the way duplicate that adjustment layer and lower the blurriness to around 30 and the opacity at five percent then set the mode to color burn duplicate it again set the blur to 15 opacity to 50 and the mode to darken duplicate that later one last time and drag in the exposure effect and set the offset to around -0.25
+
+
+00:12:33 - 00:13:48
+and set the blurriness to 100 and opacity to 15 and the mode to color Dodge now let's take out our adjustment layers right click on them and hit pre-compose we'll call it filter and we move all the layers into that comp make sure to select the pass-through option and then we can adjust the opacity of the filter comp to adjust the strength of our effect lastly we can do some color grading let's take an adjustment layer and enable it then we add some effects once I like to use our lumetri color
+
+
+00:13:11 - 00:14:27
+Hue saturation and brightness and contrast we can adjust these to whatever best fits the scene here I lowered the contrast a bit change the temperature so that the scene is a bit warmer up the saturation and adjust the lightness and Hue of the specific colors you can really play around with these [Music] alright let's export this [Music] looks nice eh compositing is a really big subject and if there's any interest in this we can explore the subject further but that's it for today thanks
+
+
+00:13:54 - 00:14:41
+to everyone who is supporting the channel on patreon if you'd like to help support the channel links are down below patrons get some unique content to them every month other than that check out my social media Twitter for my day today and Instagram if you just want to see my art have a great day [Music]
+

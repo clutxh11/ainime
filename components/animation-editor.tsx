@@ -4643,11 +4643,21 @@ export function AnimationEditor({
                         </button>
                         <button
                           className="px-3 py-1 rounded bg-red-700 hover:bg-red-800 text-white"
-                          onClick={() => {
-                            // For now, just close and go back to the Project Details page
-                            setIsSettingsOpen(false);
-                            setConfirmDeleteOpen(false);
-                            onViewChange("project-detail");
+                          onClick={async () => {
+                            try {
+                              if (mode === "composite" && compositionId) {
+                                await supabase
+                                  .from("compositions")
+                                  .delete()
+                                  .eq("id", compositionId);
+                              }
+                            } catch (e) {
+                              console.error("Failed to delete composition", e);
+                            } finally {
+                              setIsSettingsOpen(false);
+                              setConfirmDeleteOpen(false);
+                              onViewChange("project-detail");
+                            }
                           }}
                         >
                           OK, Delete
