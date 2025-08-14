@@ -30,6 +30,13 @@ import {
   Folder,
   MoreVertical,
 } from "lucide-react";
+import { 
+  detectImageSequence, 
+  processTGAFiles, 
+  cleanupBlobURLs,
+  type ImageSequence 
+} from "@/lib/utils/tga-utils";
+import { SequenceImportModal } from "@/components/ui/SequenceImportModal";
 
 export interface SidebarFolder {
   id: string;
@@ -148,6 +155,14 @@ export default function LayersPanel(props: LayersPanelProps) {
     Record<string, AssetItem[]>
   >({});
 
+  // Sequence detection state
+  const [sequenceModal, setSequenceModal] = React.useState<{
+    open: boolean;
+    sequence: ImageSequence | null;
+    targetFolderId?: string;
+    files: File[];
+  }>({ open: false, sequence: null, targetFolderId: undefined, files: [] });
+
   // Helper: shorten long filenames for display while preserving the extension
   const formatDisplayName = React.useCallback(
     (name: string, max: number = 28) => {
@@ -164,6 +179,82 @@ export default function LayersPanel(props: LayersPanelProps) {
     },
     []
   );
+
+  // Process files (including TGA decoding) and add them to the specified location
+  const processAndAddFiles = async (files: File[], folderId?: string) => {
+    try {
+      // Process TGA files and convert to blob URLs
+      const processedFiles = await processTGAFiles(files);
+      
+      const additions: AssetItem[] = processedFiles.map(({ file, blobUrl }) => ({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name,
+        url: blobUrl,
+        file,
+      }));
+
+      if (folderId) {
+        // Add to specific folder
+        setAssetsByFolder((prev) => {
+          const items = prev[folderId] ? [...prev[folderId]] : [];
+          // De-dupe by id
+          const nextItems = [...items];
+          additions.forEach((a) => {
+            if (!nextItems.find((it) => it.id === a.id)) nextItems.push(a);
+          });
+          return { ...prev, [folderId]: nextItems };
+        });
+        
+        // Notify parent ONLY if this folder has a Composition defined
+        if (compositionByFolder[folderId]) {
+          setTimeout(() => props.onFolderReceiveAssets?.(folderId, additions), 0);
+        }
+      } else {
+        // Add to root assets
+        setRootAssets((prev) => [...prev, ...additions]);
+      }
+    } catch (error) {
+      console.error('Failed to process files:', error);
+      // Fallback: try to add files directly
+      const additions: AssetItem[] = files.map((file) => ({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name,
+        url: URL.createObjectURL(file),
+        file,
+      }));
+      
+      if (folderId) {
+        setAssetsByFolder((prev) => {
+          const items = prev[folderId] ? [...prev[folderId]] : [];
+          const nextItems = [...items];
+          additions.forEach((a) => {
+            if (!nextItems.find((it) => it.id === a.id)) nextItems.push(a);
+          });
+          return { ...prev, [folderId]: nextItems };
+        });
+        
+        if (compositionByFolder[folderId]) {
+          setTimeout(() => props.onFolderReceiveAssets?.(folderId, additions), 0);
+        }
+      } else {
+        setRootAssets((prev) => [...prev, ...additions]);
+      }
+    }
+  };
+
+  // Handle sequence import confirmation
+  const handleSequenceImport = async (importAsSequence: boolean) => {
+    const { sequence, targetFolderId, files } = sequenceModal;
+    if (!sequence) return;
+
+    if (importAsSequence) {
+      // Import as sequence: add all frames to the target location
+      await processAndAddFiles(sequence.frames, targetFolderId);
+    } else {
+      // Import as individual images
+      await processAndAddFiles(files, targetFolderId);
+    }
+  };
 
   // Composition settings per folder (from parent if provided)
   const compositionByFolder = props.compositionByFolder || {};
@@ -211,13 +302,21 @@ export default function LayersPanel(props: LayersPanelProps) {
     // Files dropped onto panel → add to root assets
     const files = Array.from(e.dataTransfer?.files || []);
     if (files.length === 0) return;
-    const additions: AssetItem[] = files.map((file) => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      name: file.name,
-      url: URL.createObjectURL(file),
-      file,
-    }));
-    setRootAssets((prev) => [...prev, ...additions]);
+    
+    // Check for image sequence
+    const sequence = detectImageSequence(files);
+    if (sequence && sequence.frames.length >= 2) {
+      setSequenceModal({
+        open: true,
+        sequence,
+        targetFolderId: undefined,
+        files
+      });
+      return;
+    }
+    
+    // Process files normally (including TGA decoding)
+    await processAndAddFiles(files, undefined);
   };
 
   const onFolderDragOver = (e: React.DragEvent) => {
@@ -275,26 +374,33 @@ export default function LayersPanel(props: LayersPanelProps) {
     }
     const files = Array.from(e.dataTransfer?.files || []);
     if (files.length === 0) return;
-    const additions: AssetItem[] = files.map((file) => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      name: file.name,
-      url: URL.createObjectURL(file),
-      file,
-    }));
-    setAssetsByFolder((prev) => {
-      const items = prev[folderId] ? [...prev[folderId]] : [];
-      // De-dupe by id
-      const nextItems = [...items];
-      additions.forEach((a) => {
-        if (!nextItems.find((it) => it.id === a.id)) nextItems.push(a);
+    
+    // Check for image sequence
+    const sequence = detectImageSequence(files);
+    if (sequence && sequence.frames.length >= 2) {
+      setSequenceModal({
+        open: true,
+        sequence,
+        targetFolderId: folderId,
+        files
       });
-      return { ...prev, [folderId]: nextItems };
-    });
-    // Notify parent ONLY if this folder has a Composition defined
-    if (compositionByFolder[folderId]) {
-      setTimeout(() => props.onFolderReceiveAssets?.(folderId, additions), 0);
+      return;
     }
+    
+    // Process files normally (including TGA decoding)
+    processAndAddFiles(files, folderId);
   };
+
+  // Cleanup blob URLs when component unmounts
+  React.useEffect(() => {
+    return () => {
+      const allUrls = [
+        ...rootAssets.map(a => a.url),
+        ...Object.values(assetsByFolder).flat().map(a => a.url)
+      ];
+      cleanupBlobURLs(allUrls);
+    };
+  }, [rootAssets, assetsByFolder]);
 
   return (
     <div
@@ -881,6 +987,14 @@ export default function LayersPanel(props: LayersPanelProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Sequence Import Modal */}
+      <SequenceImportModal
+        sequence={sequenceModal.sequence}
+        isOpen={sequenceModal.open}
+        onClose={() => setSequenceModal(s => ({ ...s, open: false }))}
+        onConfirm={handleSequenceImport}
+      />
     </div>
   );
 }
