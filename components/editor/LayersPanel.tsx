@@ -30,11 +30,11 @@ import {
   Folder,
   MoreVertical,
 } from "lucide-react";
-import { 
-  detectImageSequence, 
-  processTGAFiles, 
+import {
+  detectImageSequence,
+  processTGAFiles,
   cleanupBlobURLs,
-  type ImageSequence 
+  type ImageSequence,
 } from "@/lib/utils/tga-utils";
 import { SequenceImportModal } from "@/components/ui/SequenceImportModal";
 
@@ -115,7 +115,7 @@ export interface LayersPanelProps {
   ) => void;
 }
 
-export default function LayersPanel(props: LayersPanelProps) {
+const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
   const {
     mode,
     selectedLayerId,
@@ -185,13 +185,15 @@ export default function LayersPanel(props: LayersPanelProps) {
     try {
       // Process TGA files and convert to blob URLs
       const processedFiles = await processTGAFiles(files);
-      
-      const additions: AssetItem[] = processedFiles.map(({ file, blobUrl }) => ({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: file.name,
-        url: blobUrl,
-        file,
-      }));
+
+      const additions: AssetItem[] = processedFiles.map(
+        ({ file, blobUrl }) => ({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: file.name,
+          url: blobUrl,
+          file,
+        })
+      );
 
       if (folderId) {
         // Add to specific folder
@@ -204,17 +206,20 @@ export default function LayersPanel(props: LayersPanelProps) {
           });
           return { ...prev, [folderId]: nextItems };
         });
-        
+
         // Notify parent ONLY if this folder has a Composition defined
         if (compositionByFolder[folderId]) {
-          setTimeout(() => props.onFolderReceiveAssets?.(folderId, additions), 0);
+          setTimeout(
+            () => props.onFolderReceiveAssets?.(folderId, additions),
+            0
+          );
         }
       } else {
         // Add to root assets
         setRootAssets((prev) => [...prev, ...additions]);
       }
     } catch (error) {
-      console.error('Failed to process files:', error);
+      console.error("Failed to process files:", error);
       // Fallback: try to add files directly
       const additions: AssetItem[] = files.map((file) => ({
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -222,7 +227,7 @@ export default function LayersPanel(props: LayersPanelProps) {
         url: URL.createObjectURL(file),
         file,
       }));
-      
+
       if (folderId) {
         setAssetsByFolder((prev) => {
           const items = prev[folderId] ? [...prev[folderId]] : [];
@@ -232,9 +237,12 @@ export default function LayersPanel(props: LayersPanelProps) {
           });
           return { ...prev, [folderId]: nextItems };
         });
-        
+
         if (compositionByFolder[folderId]) {
-          setTimeout(() => props.onFolderReceiveAssets?.(folderId, additions), 0);
+          setTimeout(
+            () => props.onFolderReceiveAssets?.(folderId, additions),
+            0
+          );
         }
       } else {
         setRootAssets((prev) => [...prev, ...additions]);
@@ -302,7 +310,7 @@ export default function LayersPanel(props: LayersPanelProps) {
     // Files dropped onto panel → add to root assets
     const files = Array.from(e.dataTransfer?.files || []);
     if (files.length === 0) return;
-    
+
     // Check for image sequence
     const sequence = detectImageSequence(files);
     if (sequence && sequence.frames.length >= 2) {
@@ -310,11 +318,11 @@ export default function LayersPanel(props: LayersPanelProps) {
         open: true,
         sequence,
         targetFolderId: undefined,
-        files
+        files,
       });
       return;
     }
-    
+
     // Process files normally (including TGA decoding)
     await processAndAddFiles(files, undefined);
   };
@@ -374,7 +382,7 @@ export default function LayersPanel(props: LayersPanelProps) {
     }
     const files = Array.from(e.dataTransfer?.files || []);
     if (files.length === 0) return;
-    
+
     // Check for image sequence
     const sequence = detectImageSequence(files);
     if (sequence && sequence.frames.length >= 2) {
@@ -382,11 +390,11 @@ export default function LayersPanel(props: LayersPanelProps) {
         open: true,
         sequence,
         targetFolderId: folderId,
-        files
+        files,
       });
       return;
     }
-    
+
     // Process files normally (including TGA decoding)
     processAndAddFiles(files, folderId);
   };
@@ -395,12 +403,20 @@ export default function LayersPanel(props: LayersPanelProps) {
   React.useEffect(() => {
     return () => {
       const allUrls = [
-        ...rootAssets.map(a => a.url),
-        ...Object.values(assetsByFolder).flat().map(a => a.url)
+        ...rootAssets.map((a) => a.url),
+        ...Object.values(assetsByFolder)
+          .flat()
+          .map((a) => a.url),
       ];
       cleanupBlobURLs(allUrls);
     };
   }, [rootAssets, assetsByFolder]);
+
+  // Expose methods to parent via ref
+  React.useImperativeHandle(ref, () => ({
+    processAndAddFiles,
+    onPanelDrop,
+  }));
 
   return (
     <div
@@ -903,7 +919,10 @@ export default function LayersPanel(props: LayersPanelProps) {
         open={compositionModal.open}
         onOpenChange={(open) => setCompositionModal((s) => ({ ...s, open }))}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md"
+          aria-describedby="composition-desc"
+        >
           <DialogHeader>
             <DialogTitle>Composition Settings</DialogTitle>
           </DialogHeader>
@@ -992,9 +1011,13 @@ export default function LayersPanel(props: LayersPanelProps) {
       <SequenceImportModal
         sequence={sequenceModal.sequence}
         isOpen={sequenceModal.open}
-        onClose={() => setSequenceModal(s => ({ ...s, open: false }))}
+        onClose={() => setSequenceModal((s) => ({ ...s, open: false }))}
         onConfirm={handleSequenceImport}
       />
     </div>
   );
-}
+});
+
+LayersPanel.displayName = "LayersPanel";
+
+export default LayersPanel;

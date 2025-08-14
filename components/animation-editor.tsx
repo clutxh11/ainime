@@ -2,7 +2,13 @@
 
 //
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 
 import { Pencil, Palette, Eraser, Move, RotateCcw } from "lucide-react";
 import TopBar from "@/components/editor/TopBar";
@@ -53,6 +59,7 @@ import useCanvasSetup from "@/hooks/useCanvasSetup";
 import useColorSets from "@/hooks/useColorSets";
 import useLayerUiHandlers from "@/hooks/useLayerUiHandlers";
 import useDrawHelpers from "@/hooks/useDrawHelpers";
+import { detectImageSequence } from "@/lib/utils/tga-utils";
 
 type EditorMode = "animate" | "storyboard" | "composite";
 
@@ -161,6 +168,10 @@ export function AnimationEditor({
   const [exportFolderName, setExportFolderName] = useState<string>(
     (sceneSettings?.sceneName || "Export").replace(/\s+/g, "_")
   );
+
+  // File import
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const layersPanelRef = React.useRef<any>(null);
   // File naming scheme: for now only frame-folder shorthand (e.g., R1F1)
   const [exportNameScheme, setExportNameScheme] =
     useState<"frame-folder">("frame-folder");
@@ -1864,6 +1875,45 @@ export function AnimationEditor({
     drawingFrames,
   ]);
 
+  const handleImportClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileImport = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    // In compositing mode, use the LayersPanel's processAndAddFiles
+    if (mode === "composite" && layersPanelRef.current) {
+      const activeFolderId = getActiveFrameFolderId(selectedLayerId || "");
+
+      const sequence = detectImageSequence(files);
+      if (sequence && sequence.frames.length >= 2) {
+        // LayersPanel will handle the sequence modal
+        await layersPanelRef.current.onPanelDrop({
+          preventDefault: () => {},
+          stopPropagation: () => {},
+          dataTransfer: {
+            files: files,
+            getData: () => null,
+          },
+        } as any);
+      } else {
+        // Import files directly
+        await layersPanelRef.current.processAndAddFiles(files, activeFolderId);
+      }
+    }
+
+    // Reset the input so the user can select the same file again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="h-screen bg-gray-900 text-white flex flex-col overflow-hidden">
       {/* Top Navigation */}
@@ -1882,6 +1932,7 @@ export function AnimationEditor({
         onZoomReset={() => setZoom(1)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
+        onOpenImport={mode === "composite" ? handleImportClick : undefined}
         onSave={saveScene}
         isSaving={isSaving}
       />
@@ -2754,6 +2805,7 @@ export function AnimationEditor({
         </div>
 
         <LayersPanel
+          ref={layersPanelRef}
           mode={mode}
           selectedLayerId={selectedLayerId}
           setSelectedLayerId={setSelectedLayerId}
@@ -3040,6 +3092,16 @@ export function AnimationEditor({
             onViewChange("project-detail");
           }
         }}
+      />
+
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/*,.tga"
+        onChange={handleFileImport}
+        style={{ display: "none" }}
       />
     </div>
   );

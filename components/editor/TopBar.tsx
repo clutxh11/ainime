@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Settings as SettingsIcon,
   Download,
+  Upload,
   Save,
 } from "lucide-react";
 
@@ -52,6 +53,7 @@ export interface TopBarProps {
 
   onOpenSettings: () => void;
   onOpenExport: () => void;
+  onOpenImport?: () => void;
   onSave: () => void;
   isSaving: boolean;
 }
@@ -71,6 +73,7 @@ export default function TopBar({
   onZoomReset,
   onOpenSettings,
   onOpenExport,
+  onOpenImport,
   onSave,
   isSaving,
 }: TopBarProps) {
@@ -84,17 +87,25 @@ export default function TopBar({
   const suffix = (() => {
     if (mode === "storyboard") {
       const seq =
-        nameOverride || sceneSettings?.sequenceCode || sceneSettings?.sequenceId?.slice(0, 4);
+        nameOverride ||
+        sceneSettings?.sequenceCode ||
+        sceneSettings?.sequenceId?.slice(0, 4);
       return seq || null;
     }
     if (mode === "animate") {
-      const seq = sceneSettings?.sequenceCode || sceneSettings?.sequenceId?.slice(0, 4);
-      const shot = nameOverride || sceneSettings?.shotCode || sceneSettings?.shotId?.slice(0, 4);
+      const seq =
+        sceneSettings?.sequenceCode || sceneSettings?.sequenceId?.slice(0, 4);
+      const shot =
+        nameOverride ||
+        sceneSettings?.shotCode ||
+        sceneSettings?.shotId?.slice(0, 4);
       return seq && shot ? `${seq} - ${shot}` : shot || null;
     }
     if (mode === "composite") {
       if (sceneSettings?.sceneName) return sceneSettings.sceneName;
-      return sceneSettings?.chapterId ? `chapter ${sceneSettings.chapterId.slice(0, 4)}` : null;
+      return sceneSettings?.chapterId
+        ? `chapter ${sceneSettings.chapterId.slice(0, 4)}`
+        : null;
     }
     return null;
   })();
@@ -149,7 +160,9 @@ export default function TopBar({
           >
             <ZoomOut className="w-4 h-4" />
           </Button>
-          <span className="text-sm text-gray-300 min-w-[60px] text-center">{Math.round(zoom * 100)}%</span>
+          <span className="text-sm text-gray-300 min-w-[60px] text-center">
+            {Math.round(zoom * 100)}%
+          </span>
           <Button
             variant="outline"
             size="sm"
@@ -179,6 +192,18 @@ export default function TopBar({
           <SettingsIcon className="w-4 h-4 mr-2" />
           Settings
         </Button>
+        {onOpenImport && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-gray-300 hover:text-white"
+            onClick={onOpenImport}
+            title="Import"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Import
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -204,5 +229,3 @@ export default function TopBar({
     </nav>
   );
 }
-
-
