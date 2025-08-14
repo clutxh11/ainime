@@ -1,6 +1,4 @@
-// Using UTIF instead of tga-js for better TGA support
-// @ts-ignore
-import UTIF from 'utif';
+import TGA from 'tga';
 
 export interface TGAImageData {
   width: number;
@@ -34,30 +32,22 @@ export async function decodeTGA(file: File): Promise<TGAImageData> {
           return;
         }
 
-        // Use UTIF to decode TGA
-        const uint8Array = new Uint8Array(buffer);
-        const ifds = UTIF.decode(uint8Array);
+        // Use TGA library to decode
+        const tgaImage = new TGA(buffer);
         
-        if (!ifds || ifds.length === 0) {
-          reject(new Error("UTIF could not decode TGA file"));
+        if (!tgaImage || !tgaImage.pixels || tgaImage.width <= 0 || tgaImage.height <= 0) {
+          reject(new Error("TGA library could not decode file"));
           return;
         }
         
-        const page = ifds[0];
-        UTIF.decodeImage(uint8Array, page);
-        
-        if (!page.data || page.width <= 0 || page.height <= 0) {
-          reject(new Error("Invalid TGA data after UTIF decode"));
-          return;
-        }
-        
-        // Convert UTIF output to our expected format
+        // Convert TGA pixels to ImageData format
         const imageData: TGAImageData = {
-          width: page.width,
-          height: page.height,
-          data: new Uint8ClampedArray(page.data)
+          width: tgaImage.width,
+          height: tgaImage.height,
+          data: new Uint8ClampedArray(tgaImage.pixels)
         };
 
+        console.log(`[TGA Utils] Successfully decoded: ${imageData.width}x${imageData.height}`);
         resolve(imageData);
       } catch (error: any) {
         console.error("TGA decode error details:", error);
@@ -210,9 +200,10 @@ export async function processTGAFiles(
         results.push({ file, blobUrl });
       } catch (error) {
         console.error(`Failed to process TGA file ${file.name}:`, error);
-        // Skip the file since we can't decode it and browsers can't display TGA directly
-        console.log(`[TGA Utils] Skipping unsupported TGA file: ${file.name}`);
-        // Don't add the file to results - it won't work anyway
+        console.log(`[TGA Utils] Adding TGA file as fallback (may not display): ${file.name}`);
+        // Add as fallback - user can see the file in assets, but it may not display
+        const blobUrl = URL.createObjectURL(file);
+        results.push({ file, blobUrl });
       }
     } else {
       // For non-TGA files, create blob URL directly
