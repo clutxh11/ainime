@@ -25,6 +25,8 @@ export interface DrawingFrame {
   length: number; // for future extension
   imageUrl?: string; // for template image
   fileName?: string;
+  // Optional: source folder identity (used by compositing mode)
+  folderId?: string;
 }
 
 interface TimelineGridProps {
@@ -52,6 +54,10 @@ interface TimelineGridProps {
   onDeleteFrame: () => void;
   onDeleteRow: () => void;
   onAddRow: () => void;
+  // New flags for compositing mode
+  hideEditButtons?: boolean;
+  suppressFrames?: boolean;
+  activeCompositionLabel?: string;
 }
 
 export default function TimelineGrid({
@@ -79,8 +85,14 @@ export default function TimelineGrid({
   onDeleteFrame,
   onDeleteRow,
   onAddRow,
+  hideEditButtons = false,
+  suppressFrames = false,
+  activeCompositionLabel = "",
 }: TimelineGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    //
+  }, []);
   const [dragging, setDragging] = React.useState<null | {
     rowId: string;
     frameIndex: number;
@@ -89,6 +101,7 @@ export default function TimelineGrid({
   }>(null);
 
   const handleAddFrame = () => {
+    if (suppressFrames) return;
     if (!selectedRow) return;
 
     // Create a set of all occupied frame indices in the selected row
@@ -130,13 +143,19 @@ export default function TimelineGrid({
     e.stopPropagation();
   };
 
-  // Handle image drop
-  const handleDrop = (
+  // Unified image drop handler that prefers parent handler when provided
+  const resolveDrop = (
     rowId: string,
     frameIndex: number,
     e: React.DragEvent
   ) => {
     e.preventDefault();
+    if (onDrop) {
+      onDrop(rowId, frameIndex, e);
+      return;
+    }
+    if (suppressFrames) return;
+    // Fallback local behavior
     const file = e.dataTransfer.files[0];
     if (!file || !file.type.startsWith("image/")) return;
     const url = URL.createObjectURL(file);
@@ -187,7 +206,12 @@ export default function TimelineGrid({
     if (setSelectedLayerId && setSelectedFrameNumber) {
       const folderId = `${rowId}-${frameIndex}`;
       setSelectedLayerId(folderId);
-      setSelectedFrameNumber(frameIndex + 1); // +1 because frameIndex is 0-based
+      // In compositing mode, always clamp to F1
+      if ((activeCompositionLabel as any) !== undefined) {
+        setSelectedFrameNumber(1);
+      } else {
+        setSelectedFrameNumber(frameIndex + 1);
+      }
     }
   };
 
@@ -259,39 +283,52 @@ export default function TimelineGrid({
           </Button>
         </div>
 
-        <div className="flex items-center gap-2 ml-4">
-          <Button size="sm" variant="outline" onClick={handleAddFrame}>
-            + Add Frame
-          </Button>
-          <Button size="sm" variant="outline" onClick={onAddRow}>
-            + Add Row
-          </Button>
-        </div>
+        {!hideEditButtons && (
+          <div className="flex items-center gap-2 ml-4">
+            <Button size="sm" variant="outline" onClick={handleAddFrame}>
+              + Add Frame
+            </Button>
+            <Button size="sm" variant="outline" onClick={onAddRow}>
+              + Add Row
+            </Button>
+          </div>
+        )}
+
+        {/* Composition indicator (compositing only) */}
+        {activeCompositionLabel ? (
+          <div className="ml-3">
+            <span className="text-[10px] uppercase tracking-wide text-gray-300 bg-gray-700/70 rounded px-1.5 py-0.5">
+              Comp: {activeCompositionLabel}
+            </span>
+          </div>
+        ) : null}
 
         <div className="flex-grow" />
 
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onDeleteFrame}
-            disabled={!selectedLayerId}
-            className="flex items-center gap-2 text-red-400 hover:text-red-300"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete Frame
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onDeleteRow}
-            disabled={!selectedRow}
-            className="flex items-center gap-2 text-red-400 hover:text-red-300"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete Row
-          </Button>
-        </div>
+        {!hideEditButtons && (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onDeleteFrame}
+              disabled={!selectedLayerId}
+              className="flex items-center gap-2 text-red-400 hover:text-red-300"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Frame
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onDeleteRow}
+              disabled={!selectedRow}
+              className="flex items-center gap-2 text-red-400 hover:text-red-300"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Row
+            </Button>
+          </div>
+        )}
       </div>
       <div className="overflow-y-auto max-h-48">
         <Table>
@@ -325,11 +362,14 @@ export default function TimelineGrid({
                 </TableCell>
                 {Array.from({ length: frames }).map((_, i) => {
                   // Find if this cell is the start of a drawing frame
-                  const drawing = drawingFrames.find(
+                  const framesForRender = suppressFrames
+                    ? ([] as DrawingFrame[])
+                    : drawingFrames;
+                  const drawing = framesForRender.find(
                     (df) => df.rowId === row.id && df.frameIndex === i
                   );
                   // Check if this cell is covered by an extended drawing frame
-                  const covered = drawingFrames.find(
+                  const covered = framesForRender.find(
                     (df) =>
                       df.rowId === row.id &&
                       i > df.frameIndex &&
@@ -364,7 +404,7 @@ export default function TimelineGrid({
                           padding: 0,
                         }}
                         onClick={() => handleCellClick(row.id, i)}
-                        onDrop={(e) => handleDrop(row.id, i, e)}
+                        onDrop={(e) => resolveDrop(row.id, i, e)}
                         onDragOver={handleDragOver}
                       >
                         <div
@@ -500,11 +540,7 @@ export default function TimelineGrid({
                       <TableCell
                         key={row.id + "-" + i}
                         className="h-8 bg-gray-800 border border-gray-700 text-center align-middle"
-                        onDrop={(e) => {
-                          if (onDrop) {
-                            onDrop(row.id, i, e);
-                          }
-                        }}
+                        onDrop={(e) => resolveDrop(row.id, i, e)}
                         onDragOver={(e) => e.preventDefault()}
                       ></TableCell>
                     );

@@ -2131,3 +2131,5 @@ export function CreatorHub({ onViewChange }: CreatorHubProps) {
     </div>
   );
 }
+
+export default CreatorHub;

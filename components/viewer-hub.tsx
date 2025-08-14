@@ -157,12 +157,16 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
         // Fallback: try with image columns, then without if needed
         let { data: directProjects, error: directErr }: any = await supabase
           .from("projects")
-          .select(`id, title, description, genre, status, square_thumbnail_url, horizontal_thumbnail_url, creator_id, created_at, updated_at`)
+          .select(
+            `id, title, description, genre, status, square_thumbnail_url, horizontal_thumbnail_url, creator_id, created_at, updated_at`
+          )
           .order("created_at", { ascending: false });
         if (directErr && directErr.code === "42703") {
           const fallback = await supabase
             .from("projects")
-            .select(`id, title, description, genre, status, creator_id, created_at, updated_at`)
+            .select(
+              `id, title, description, genre, status, creator_id, created_at, updated_at`
+            )
             .order("created_at", { ascending: false });
           directProjects = fallback.data;
           directErr = fallback.error;
@@ -275,7 +279,9 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
       image:
         project.square_thumbnail_url || project.image_url || "/placeholder.jpg",
       heroImage:
-        project.horizontal_thumbnail_url || project.image_url || "/placeholder.jpg",
+        project.horizontal_thumbnail_url ||
+        project.image_url ||
+        "/placeholder.jpg",
       creator: project.creator_display_name,
       tags: project.tags || [project.genre, project.status], // Use database tags if available, fallback to genre/status
       authors: [], // Empty since we don't have authors table anymore
@@ -577,28 +583,28 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
           onMouseLeave={() => setIsHovered(false)}
         >
           <Card className="bg-gray-800 border-gray-700 hover:bg-gray-700 transition-colors cursor-pointer">
-            <CardContent className="p-0">
+                <CardContent className="p-0">
               <div className="relative overflow-hidden">
-                <img
-                  src={item.image || "/placeholder.svg"}
-                  alt={item.title}
-                  className="w-full h-[300px] object-cover rounded-t-lg"
-                />
-                <Badge
-                  className={`absolute top-2 right-2 ${
-                    item.type === "animated"
-                      ? "bg-red-600"
-                      : item.type === "ongoing"
-                      ? "bg-yellow-600"
-                      : "bg-blue-600"
-                  }`}
-                >
+                    <img
+                      src={item.image || "/placeholder.svg"}
+                      alt={item.title}
+                      className="w-full h-[300px] object-cover rounded-t-lg"
+                    />
+                    <Badge
+                      className={`absolute top-2 right-2 ${
+                        item.type === "animated"
+                          ? "bg-red-600"
+                          : item.type === "ongoing"
+                            ? "bg-yellow-600"
+                            : "bg-blue-600"
+                      }`}
+                    >
                   {item.type === "animated"
                     ? "Animated"
                     : item.type === "ongoing"
                     ? "Ongoing"
                     : "Manga"}
-                </Badge>
+                    </Badge>
 
                 {/* Individual hover overlay */}
                 <div
@@ -643,32 +649,32 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                     </Button>
                   </div>
                 </div>
-              </div>
-              <div className="p-4">
+                  </div>
+                  <div className="p-4">
                 <h3 className="font-semibold text-white mb-2 line-clamp-2 group-hover:text-red-400 transition-colors">
                   {item.title}
                 </h3>
-                <div className="flex items-center gap-1 mb-2">
-                  <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                    <div className="flex items-center gap-1 mb-2">
+                      <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                   <span className="text-sm text-gray-300">
                     {(item.rating || 0).toFixed(2)} ({item.totalRatings || 0})
                   </span>
-                </div>
+                    </div>
                 {item.authors && item.authors.length > 0 && (
                   <div className="text-xs text-gray-400 mb-2">
                     by {item.authors.map((author) => author.name).join(", ")}
                   </div>
                 )}
-                <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1">
                   {(item.tags || []).slice(0, 2).map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-xs">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+                        <Badge key={tag} variant="secondary" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
         </div>
       );
     }
@@ -759,8 +765,8 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
               >
                 View More
               </Button>
-            )}
-          </div>
+          )}
+        </div>
           <div className="relative">
             {/* Dynamic Navigation arrows - only show when scrolling is possible */}
             {canScrollLeft && (
@@ -800,8 +806,8 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                       onContentSelect={onContentSelect}
                       onPlayContent={onPlayContent}
                     />
-                  </div>
-                )
+    </div>
+  )
               )}
             </div>
           </div>
@@ -1042,10 +1048,10 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                             variant="outline"
                             className="text-xs border-gray-500 text-gray-300"
                           >
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
                     </div>
                   )}
                   <div className="text-sm text-gray-300 mb-2">
@@ -1072,7 +1078,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                 {/* Manga Chapters - Always available since platform is for manga first */}
                 {selectedContent?.volumes &&
                   selectedContent.volumes.length > 0 && (
-                    <div className="mb-6">
+                  <div className="mb-6">
                       <HierarchicalDropdown
                         title="Manga Chapters"
                         volumes={selectedContent.volumes}
@@ -1090,7 +1096,7 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                   selectedContent?.chapters && (
                     <div className="mb-6">
                       <h4 className="text-white font-semibold mb-2">
-                        Manga Chapters
+                          Manga Chapters
                       </h4>
                       <div className="bg-gray-800 border border-gray-700 rounded-lg divide-y divide-gray-700">
                         {selectedContent.chapters.map((chapter) => (
@@ -1105,8 +1111,8 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
                           </button>
                         ))}
                       </div>
-                    </div>
-                  )}
+                  </div>
+                )}
 
                 {/* Animation Episodes - Only show if available (community-created) */}
                 {selectedContent?.episodes && (
@@ -1179,3 +1185,5 @@ export function ViewerHub({ onViewChange }: ViewerHubProps) {
     </div>
   );
 }
+
+export default ViewerHub;

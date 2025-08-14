@@ -1,8 +1,10 @@
 "use client";
 
+//
+
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 
-import { Pencil, Palette, Eraser, Move } from "lucide-react";
+import { Pencil, Palette, Eraser, Move, RotateCcw } from "lucide-react";
 import TopBar from "@/components/editor/TopBar";
 import ToolSidebar from "@/components/editor/ToolSidebar";
 import CanvasViewport from "@/components/editor/CanvasViewport";
@@ -18,7 +20,10 @@ import TimelineDock from "@/components/editor/TimelineDock";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateComposition } from "@/lib/sequences";
 import { slugifyName } from "@/lib/editor/paths";
-import { renderFrameToContextImpl } from "@/lib/editor/canvas-render";
+import {
+  makeRenderFrameToContext,
+  exportAnimation as exportAnimationHelper,
+} from "@/lib/editor/export-bindings";
 import { drawFrameImpl } from "@/lib/editor/canvas-draw";
 import { runExport } from "@/lib/editor/export-runner";
 import {
@@ -27,7 +32,6 @@ import {
   getResizeHandles,
   getLassoBoundingBox,
 } from "@/lib/editor/geometry";
-
 
 import {
   serializeDocument as buildDocument,
@@ -38,6 +42,17 @@ import useKeyboardShortcuts from "@/hooks/useKeyboardShortcuts";
 import useSelectionTools from "@/hooks/useSelectionTools";
 import useResizeHandlers from "@/hooks/useResizeHandlers";
 import useCanvasInteractions from "@/hooks/useCanvasInteractions";
+import useAssetDrop from "@/hooks/useAssetDrop";
+import useFolders, { getActiveFrameFolderId } from "@/hooks/useFolders";
+import useUndoRedo from "@/hooks/useUndoRedo";
+import usePlayback from "@/hooks/usePlayback";
+import useLayersSidebar from "@/hooks/useLayersSidebar";
+import useSelectionActions from "@/hooks/useSelectionActions";
+import useSceneLoader from "@/hooks/useSceneLoader";
+import useCanvasSetup from "@/hooks/useCanvasSetup";
+import useColorSets from "@/hooks/useColorSets";
+import useLayerUiHandlers from "@/hooks/useLayerUiHandlers";
+import useDrawHelpers from "@/hooks/useDrawHelpers";
 
 type EditorMode = "animate" | "storyboard" | "composite";
 
@@ -97,13 +112,7 @@ interface Frame {
 
 // moved to lib/editor/geometry
 
-// Helper to get the active frame folder id from selectedLayerId
-function getActiveFrameFolderId(selectedLayerId: string | null) {
-  if (!selectedLayerId) return null;
-  // e.g. "row1-0-main" or "row1-0-extra-0" => "row1-0"
-  const match = selectedLayerId.match(/^(row-\d+-\d+)/);
-  return match ? match[1] : null; // Return null if no match
-}
+// getActiveFrameFolderId imported from hooks/useFolders
 
 // moved helpers to lib/editor/paths
 
@@ -255,6 +264,63 @@ export function AnimationEditor({
     {}
   );
   const [layerOrder, setLayerOrder] = useState<Record<string, string[]>>({});
+  const [compositionByFolder, setCompositionByFolder] = useState<
+    Record<string, { width: number; height: number; fps: number }>
+  >({});
+  const compCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [compSelectedAssetIndex, setCompSelectedAssetIndex] = useState<
+    number | null
+  >(null);
+  const [compSelectedAssetFolderId, setCompSelectedAssetFolderId] = useState<
+    string | null
+  >(null);
+  // Per-asset rotation: key `${folderId}|${index}` (index is 0-based row position)
+  const [rotationByAsset, setRotationByAsset] = useState<
+    Record<string, number>
+  >({});
+  const [compImageBounds, setCompImageBounds] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [boundsByAsset, setBoundsByAsset] = useState<
+    Record<string, { x: number; y: number; width: number; height: number }>
+  >({});
+  const [fittedCompByFolder, setFittedCompByFolder] = useState<
+    Record<string, boolean>
+  >({});
+  const outlineRef = useRef<HTMLDivElement | null>(null);
+  const [isRotating, setIsRotating] = useState<boolean>(false); // rotate mode (show handle)
+  const [isRotatingDrag, setIsRotatingDrag] = useState<boolean>(false); // currently dragging
+  const rotationDragOffsetRef = useRef<number>(0);
+  const [rotationPreviewDeg, setRotationPreviewDeg] = useState<number | null>(
+    null
+  );
+  const rotationPreviewRef = useRef<number | null>(null);
+  const resizeLiveBoundsRef = useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const moveLiveBoundsRef = useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [isMovingAsset, setIsMovingAsset] = useState(false);
+
+  // moved below after drawingFrames declaration
+
+  const normalizeAngle = (deg: number) => {
+    let d = deg % 360;
+    if (d < 0) d += 360;
+    return d;
+  };
+
+  // (moved below drawingFrames declaration)
   const imageCache = useRef<Record<string, HTMLImageElement>>({});
   const [isLooping, setIsLooping] = useState(false);
   const [contextMenu, setContextMenu] = useState({
@@ -262,6 +328,14 @@ export function AnimationEditor({
     x: 0,
     y: 0,
   });
+
+  useEffect(() => {
+    const onError = (ev: any) => {};
+    const onRejection = (ev: any) => {};
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {};
+  }, [mode, sceneSettings]);
   const [clipboard, setClipboard] = useState<DrawingStroke[] | null>(null);
   const [pastePreview, setPastePreview] = useState<DrawingStroke[] | null>(
     null
@@ -301,7 +375,11 @@ export function AnimationEditor({
   ]);
   const [frameCount, setFrameCount] = useState(20);
   const [drawingFrames, setDrawingFrames] = useState<DrawingFrame[]>(() => {
-    // Create a blank background page; layer name comes from layers list (Untitled.1)
+    if (mode === "composite") {
+      // Compositing starts with no folders; user adds Assets folders explicitly
+      return [];
+    }
+    // Default for animate/storyboard
     return [
       {
         rowId: "row-1",
@@ -312,6 +390,118 @@ export function AnimationEditor({
       },
     ];
   });
+
+  // Stable key for per-asset rotation that survives reordering: folderId + fileName
+  const selectedAssetKey = useMemo(() => {
+    if (compSelectedAssetFolderId == null || compSelectedAssetIndex == null)
+      return null;
+    const df = drawingFrames.find(
+      (d) =>
+        (d as any).folderId === compSelectedAssetFolderId &&
+        d.frameIndex === 0 &&
+        parseInt(d.rowId.split("-")[1], 10) === compSelectedAssetIndex + 1
+    );
+    const identity = df?.fileName || df?.imageUrl || null;
+    return identity ? `${compSelectedAssetFolderId}|${identity}` : null;
+  }, [compSelectedAssetFolderId, compSelectedAssetIndex, drawingFrames]);
+
+  // Draw compositing canvas: render all assets for the active composition in row order (stacked)
+  useEffect(() => {
+    if (mode !== "composite") return;
+    const activeFolderId = getActiveFrameFolderId(selectedLayerId || "");
+    if (!activeFolderId) return;
+    const comp = compositionByFolder[activeFolderId];
+    if (!comp || !compCanvasRef.current) return;
+    const ctx = compCanvasRef.current.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, comp.width, comp.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, comp.width, comp.height);
+
+    const assetsToDraw = drawingFrames
+      .filter((df) => df.folderId === activeFolderId)
+      .sort((a, b) => {
+        const ra = parseInt(a.rowId.split("-")[1], 10);
+        const rb = parseInt(b.rowId.split("-")[1], 10);
+        return ra - rb;
+      });
+
+    // Ensure the currently selected asset draws on top during interactions to avoid visual 'glitching'
+    const arrangedToDraw = (() => {
+      if (!selectedAssetKey || !isMovingAsset) return assetsToDraw;
+      const [selFolderId, ...rest] = selectedAssetKey.split("|");
+      const selIdentity = rest.join("|");
+      if (!selFolderId || !selIdentity) return assetsToDraw;
+      const isSelected = (cell: any) => {
+        const identity = `${activeFolderId}|${
+          cell.fileName || cell.imageUrl || ""
+        }`;
+        return identity === selectedAssetKey;
+      };
+      const nonSelected = assetsToDraw.filter((c) => !isSelected(c));
+      const selectedOnly = assetsToDraw.filter((c) => isSelected(c));
+      return [...nonSelected, ...selectedOnly];
+    })();
+
+    const drawSequentially = async () => {
+      for (const cell of arrangedToDraw) {
+        if (!cell.imageUrl) continue;
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise<void>((resolve) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => {
+            const identity = `${activeFolderId}|${
+              cell.fileName || cell.imageUrl || ""
+            }`;
+            const persisted = boundsByAsset[identity];
+            const defaultX = Math.round((comp.width - img.naturalWidth) / 2);
+            const defaultY = Math.round((comp.height - img.naturalHeight) / 2);
+            const x = persisted ? persisted.x : defaultX;
+            const y = persisted ? persisted.y : defaultY;
+            const drawW = persisted ? persisted.width : img.naturalWidth;
+            const drawH = persisted ? persisted.height : img.naturalHeight;
+            const key = identity;
+            const deg = rotationByAsset[key] ?? 0;
+            if (deg !== 0) {
+              ctx.save();
+              // rotate around the image center
+              const cx = x + drawW / 2;
+              const cy = y + drawH / 2;
+              ctx.translate(cx, cy);
+              ctx.rotate((deg * Math.PI) / 180);
+              ctx.translate(-cx, -cy);
+              ctx.drawImage(img, x, y, drawW, drawH);
+              ctx.restore();
+            } else {
+              ctx.drawImage(img, x, y, drawW, drawH);
+            }
+            resolve();
+          };
+          img.src = cell.imageUrl as string;
+        });
+      }
+    };
+
+    drawSequentially();
+  }, [
+    mode,
+    selectedLayerId,
+    compositionByFolder,
+    drawingFrames,
+    rotationByAsset,
+    boundsByAsset,
+  ]);
+
+  // In compositing mode we allow creating folders without timeline cells.
+  // We keep a list of placeholder folder ids (e.g., `row-1-0`) that are
+  // visible in the Assets panel but don't render in the timeline until an
+  // asset is added to the folder.
+  const [compositeFolderIds, setCompositeFolderIds] = useState<string[]>([]);
+  const [compRowCountByFolder, setCompRowCountByFolder] = useState<
+    Record<string, number>
+  >({});
 
   const maxFrame = useMemo(() => {
     if (drawingFrames.length === 0) {
@@ -464,156 +654,43 @@ export function AnimationEditor({
 
   const compositionBootstrapRef = useRef(false);
 
-  useEffect(() => {
-    const load = async () => {
-      const isStoryboard = mode === "storyboard";
-      // Ensure composition exists
-      if (
-        mode === "composite" &&
-        sceneSettings?.projectId &&
-        sceneSettings?.chapterId &&
-        !compositionBootstrapRef.current
-      ) {
-        try {
-          compositionBootstrapRef.current = true;
-          const comp = await getOrCreateComposition({
-            projectId: sceneSettings.projectId,
-            chapterId: sceneSettings.chapterId,
-            title: sceneSettings.sceneName,
-          });
-          if (comp) setCompositionId(comp.id);
-        } catch (e) {
-          console.warn("Failed to initialize composition", e);
-        }
-      }
-      const isCompositeLoad = mode === "composite";
-      const targetId = isStoryboard
-        ? sceneSettings?.storyboardId
-        : isCompositeLoad
-        ? compositionId
-        : sceneSettings?.shotId;
-      if (!targetId) return;
-      const { data, doc } = await loadSceneDoc({ mode, targetId });
-      if (!data) return;
-      if (typeof data.width === "number") setAppliedWidth(data.width);
-      if (typeof data.height === "number") setAppliedHeight(data.height);
-      if (typeof data.fps === "number") setAppliedFps(data.fps);
-
-      if (!doc) return;
-
-      try {
-        if (Array.isArray(doc.rows)) setRows(doc.rows);
-        if (typeof doc.frameCount === "number") setFrameCount(doc.frameCount);
-        if (doc.timeline?.drawingFrames)
-          setDrawingFrames(doc.timeline.drawingFrames);
-        if (doc.timeline?.layerOrder) setLayerOrder(doc.timeline.layerOrder);
-        if (doc.layers?.folderLayers) setFolderLayers(doc.layers.folderLayers);
-        if (doc.layers?.layerStrokes) setLayerStrokes(doc.layers.layerStrokes);
-        
-        if (doc.uiState?.selectedRow) setSelectedRow(doc.uiState.selectedRow);
-        if (typeof doc.uiState?.zoom === "number") setZoom(doc.uiState.zoom);
-        if (typeof doc.uiState?.onionSkin === "boolean")
-          setOnionSkin(doc.uiState.onionSkin);
-        if (typeof doc.uiState?.showGrid === "boolean")
-          setShowGrid(doc.uiState.showGrid);
-        if (doc.folderNames && typeof doc.folderNames === "object") {
-          setFolderNames(doc.folderNames);
-        }
-        if (doc.frameAssetKeys && typeof doc.frameAssetKeys === "object") {
-          setFrameAssetKeys(doc.frameAssetKeys);
-          // If storage enabled, re-sign URLs for any drawingFrames that have a stored key
-          const enableStorage =
-            process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
-          if (enableStorage) {
-            const bucket =
-              process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
-            const entries: Array<[string, string]> = Object.entries(
-              doc.frameAssetKeys
-            );
-            if (entries.length > 0) {
-              try {
-                const urlMap: Record<string, string> = {};
-                // Sign each key
-                for (const [cell, k] of entries) {
-                  const { data: signed } = await supabase.storage
-                    .from(bucket)
-                    .createSignedUrl(k, 60 * 60 * 24);
-                  if (signed?.signedUrl) urlMap[cell] = signed.signedUrl;
-                }
-                // Apply signed URLs into drawingFrames
-                setDrawingFrames((prev) =>
-                  prev.map((df) => {
-                    const cellKey = `${df.rowId}|${df.frameIndex}`;
-                    if (urlMap[cellKey]) {
-                      return { ...df, imageUrl: urlMap[cellKey] };
-                    }
-                    return df;
-                  })
-                );
-              } catch (e) {
-                console.warn("Failed to re-sign frame asset URLs", e);
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("Failed to hydrate document", e);
-      }
-    };
-    load();
-  }, [mode, sceneSettings?.shotId, sceneSettings?.storyboardId]);
+  useSceneLoader({
+    mode,
+    sceneSettings,
+    compositionId,
+    setCompositionId,
+    setAppliedWidth,
+    setAppliedHeight,
+    setAppliedFps,
+    setRows,
+    setFrameCount,
+    setDrawingFrames,
+    setLayerOrder,
+    setFolderLayers,
+    setLayerStrokes,
+    setCurrentFrame: (v: any) => {},
+    setSelectedRow,
+    setZoom,
+    setOnionSkin,
+    setShowGrid,
+    setFolderNames,
+    setFrameAssetKeys,
+  });
 
   // Set initial current layer
 
-  // Initialize canvas
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // Actual canvas resolution (for quality)
-    const canvasWidth = appliedWidth ?? 800;
-    const canvasHeight = appliedHeight ?? 600;
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-
-    // Calculate display size to fit viewport (max 70vh for timeline space)
-    const maxDisplayHeight = window.innerHeight * 0.6; // Leave space for timeline
-    const maxDisplayWidth = window.innerWidth * 0.7; // Leave space for sidebars
-
-    const scaleX = maxDisplayWidth / canvasWidth;
-    const scaleY = maxDisplayHeight / canvasHeight;
-    const autoScale = Math.min(scaleX, scaleY, 1); // Don't scale up beyond 100%
-
-    // Apply auto-scaling with zoom
-    const finalScale = autoScale * zoom;
-    canvas.style.width = `${canvasWidth * finalScale}px`;
-    canvas.style.height = `${canvasHeight * finalScale}px`;
-
-    const context = canvas.getContext("2d");
-    if (!context) return;
-
-    context.lineCap = "round";
-    context.lineJoin = "round";
-    context.strokeStyle = color;
-    context.lineWidth = brushSize;
-    contextRef.current = context;
-
-    drawFrame();
-  }, [zoom, appliedWidth, appliedHeight]);
-
-  // Helper to get mouse position in canvas coordinates (accounting for zoom)
-  const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    // Map mouse to canvas internal coordinates (pan is handled by CSS transform)
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
-    };
-  };
+  // drawFrame is defined below; pass a stable placeholder and update via ref if needed
+  const drawFrameRef = useRef<() => void>(() => {});
+  const { getCanvasCoords } = useCanvasSetup({
+    canvasRef,
+    contextRef,
+    appliedWidth,
+    appliedHeight,
+    color,
+    brushSize,
+    zoom,
+    drawFrame: () => drawFrameRef.current(),
+  });
 
   // Add this helper function to create an image stroke
   const createImageStroke = async (
@@ -645,105 +722,62 @@ export function AnimationEditor({
     });
   };
 
-  // Restore the original drawStrokes function
-  const drawStrokes = useCallback((strokes: DrawingStroke[]) => {
-    const context = contextRef.current;
-    if (!context) return;
-
-    strokes.forEach((stroke) => {
-      if (stroke.points.length < 2) return;
-
-      context.strokeStyle = stroke.color;
-      context.lineWidth = stroke.brushSize;
-      context.globalCompositeOperation = "source-over";
-
-      context.beginPath();
-      context.moveTo(stroke.points[0].x, stroke.points[0].y);
-
-      for (let i = 1; i < stroke.points.length; i++) {
-        context.lineTo(stroke.points[i].x, stroke.points[i].y);
-      }
-
-      context.stroke();
-    });
-  }, []);
-
-  // Draw frame layers
+  // Use shared draw helpers implementation
+  const { drawStrokes } = useDrawHelpers({ contextRef });
   const drawFrameLayers = useCallback(
     (layers: Layer[], isOnionSkin = false) => {
       layers.forEach((layer) => {
-        // Check visibility using the new layerVisibility system
         const layerId = layer.id;
         const isVisible = layerVisibility[layerId] !== false;
         if (!isVisible) return;
-
         const context = contextRef.current;
         if (!context) return;
-
-        // Get opacity from the new layerOpacities system
         const opacity = isOnionSkin
           ? (layerOpacities[layerId] ?? 1) * 0.3
           : layerOpacities[layerId] ?? 1;
         context.globalAlpha = opacity;
-
-        drawStrokes(layer.strokes);
+        drawStrokes(layer.strokes as any);
       });
-
-      // Draw strokes from the new layer system
       Object.entries(layerStrokes).forEach(([layerId, strokes]) => {
-        // Check visibility using the new layerVisibility system
         const isVisible = layerVisibility[layerId] !== false;
         if (!isVisible) return;
-
         const context = contextRef.current;
         if (!context) return;
-
-        // Get opacity from the new layerOpacities system
         const opacity = isOnionSkin
           ? (layerOpacities[layerId] ?? 1) * 0.3
           : layerOpacities[layerId] ?? 1;
         context.globalAlpha = opacity;
-
-        drawStrokes(strokes);
+        drawStrokes(strokes as any);
       });
-
-      // Only reset globalAlpha if not drawing onion skin
-      if (contextRef.current && !isOnionSkin) {
+      if (contextRef.current && !isOnionSkin)
         contextRef.current.globalAlpha = 1;
-      }
     },
     [layerVisibility, layerOpacities, layerStrokes, drawStrokes]
   );
 
   // Helper to load an image for export rendering
-  const loadImage = useCallback((src: string) => {
-    return new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.src = src;
-    });
-  }, []);
+  const loadImage = useCallback(
+    (src: string) =>
+      new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      }),
+    []
+  );
 
   // Render a specific frame index directly into the provided 2D context (used by export)
-  const renderFrameToContext = useCallback(
-    async (
-      frameIndex: number,
-      targetCtx: CanvasRenderingContext2D,
-      includeGrid: boolean
-    ) => {
-      await renderFrameToContextImpl(
-        frameIndex,
-        targetCtx,
-        includeGrid,
+  const renderFrameToContext = useMemo(
+    () =>
+      makeRenderFrameToContext({
         drawingFrames,
         layerOrder,
         layerVisibility,
         layerOpacities,
-        layerStrokes
-      );
-    },
+        layerStrokes,
+      }),
     [drawingFrames, layerOrder, layerVisibility, layerOpacities, layerStrokes]
   );
 
@@ -754,7 +788,12 @@ export function AnimationEditor({
   const drawFrame = useCallback(() => {
     const context = contextRef.current;
     if (!context) return;
-    const frameNumber = selectedFrameNumber ? selectedFrameNumber - 1 : null;
+    const frameNumber = selectedFrameNumber
+      ? selectedFrameNumber - 1
+      : mode === "storyboard"
+      ? 0
+      : null;
+    //
     drawFrameImpl(context, {
       frameNumber,
       showGrid,
@@ -797,29 +836,114 @@ export function AnimationEditor({
     pastePreview,
     isResizing,
     resizeBox,
-    ]);
- 
+  ]);
+  drawFrameRef.current = drawFrame;
+
   useEffect(() => {
     drawFrame();
   }, [selectedFrameNumber, layerVisibility, drawFrame]);
 
-  const handleSidebarSelection = (layerId: string) => {
-    setSelectedLayerId(layerId);
-    const parts = layerId.split("-");
-    if (parts.length >= 3) {
-      const frameIndex = parseInt(parts[2], 10);
-      if (!isNaN(frameIndex)) {
-        setSelectedFrameNumber(frameIndex + 1);
+  // Preload frame images into cache whenever drawingFrames change
+  useEffect(() => {
+    const urls = new Set<string>();
+    drawingFrames.forEach((df) => {
+      if (df.imageUrl) urls.add(df.imageUrl);
+    });
+    const signedMarker = "/storage/v1/object/sign/";
+    urls.forEach((url) => {
+      if (imageCache.current[url]) return;
+      // If it's a signed URL, try to fetch via Storage API first to avoid 400 noise
+      if (url.includes(signedMarker)) {
+        const df = drawingFrames.find((f) => f.imageUrl === url);
+        if (!df) return;
+        (async () => {
+          try {
+            const cellKey = `${df.rowId}|${df.frameIndex}`;
+            const assetKey = frameAssetKeys[cellKey];
+            const bucket =
+              process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
+            let downloadKey: string | null = null;
+            if (assetKey) {
+              downloadKey = assetKey;
+            } else {
+              const afterSign = url.split(signedMarker)[1] || "";
+              const pathWithToken = afterSign.split("?")[0] || "";
+              downloadKey = pathWithToken.startsWith(`${bucket}/`)
+                ? pathWithToken.slice(bucket.length + 1)
+                : pathWithToken;
+            }
+            if (downloadKey) {
+              const { data, error } = await supabase.storage
+                .from(bucket)
+                .download(downloadKey);
+              if (!error && data) {
+                const blobUrl = URL.createObjectURL(data);
+                setDrawingFrames((prev) =>
+                  prev.map((f) =>
+                    f.rowId === df.rowId && f.frameIndex === df.frameIndex
+                      ? { ...f, imageUrl: blobUrl }
+                      : f
+                  )
+                );
+                const blobImg = new Image();
+                blobImg.onload = () => {
+                  imageCache.current[blobUrl] = blobImg;
+                  drawFrame();
+                };
+                blobImg.crossOrigin = "anonymous";
+                blobImg.src = blobUrl;
+                return;
+              }
+            }
+            // If we couldn't download, silently skip; the frame will render without BG
+          } catch {}
+        })();
+      } else {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          imageCache.current[url] = img;
+          drawFrame();
+        };
+        img.onerror = () => {};
+        img.src = url;
       }
-    }
-  };
+    });
+  }, [drawingFrames, drawFrame]);
 
-  const handleToggleVisibility = (layerId: string) => {
-    setLayerVisibility((prev) => ({
-      ...prev,
-      [layerId]: prev[layerId] === false ? true : false,
-    }));
-  };
+  const { handleSidebarSelection, handleToggleVisibility } = useLayerUiHandlers(
+    {
+      mode,
+      setSelectedLayerId: (id: string) => {
+        setSelectedLayerId(id);
+        // In compositing, clicking a folder should also switch the timeline
+        // to that folder's frame context. If no frame exists yet (placeholder),
+        // clear selection so grid shows empty.
+        if (mode === "composite") {
+          const parts = id.split("-");
+          if (parts.length >= 3) {
+            // For compositing, the first cell is always F1 (index 0) regardless of folder index
+            const rowId = `${parts[0]}-${parts[1]}`;
+            const existsAtF1 = drawingFrames.some(
+              (df) => (df as any).folderId === id && df.frameIndex === 0
+            );
+            console.log(
+              "[Composite] Sidebar selection -> setSelectedFrameNumber",
+              {
+                id,
+                existsAtF1,
+              }
+            );
+            setSelectedFrameNumber(existsAtF1 ? 1 : null);
+          } else {
+            setSelectedFrameNumber(null);
+          }
+        }
+      },
+      setSelectedFrameNumber,
+      setLayerVisibility,
+    }
+  );
 
   const draw = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1159,8 +1283,8 @@ export function AnimationEditor({
     ]
   );
 
-  // Undo/Redo functions
-  const saveToUndoStack = useCallback(() => {
+  // Undo/Redo functions (base save)
+  const saveToUndoStackBase = useCallback(() => {
     setUndoStack((prev) => {
       const currentState = {
         layerStrokes: JSON.parse(JSON.stringify(layerStrokes)),
@@ -1193,7 +1317,9 @@ export function AnimationEditor({
     setCurrentStroke: (s: any) => setCurrentStroke(s as any),
     generateStrokeId,
     layerStrokes,
-    setLayerStrokes: setLayerStrokes as React.Dispatch<React.SetStateAction<Record<string, any[]>>> as any,
+    setLayerStrokes: setLayerStrokes as React.Dispatch<
+      React.SetStateAction<Record<string, any[]>>
+    > as any,
     lassoSelection,
     setLassoSelection,
     isResizing,
@@ -1210,123 +1336,20 @@ export function AnimationEditor({
     originalStrokePositions,
     setOriginalStrokePositions,
     isPanning,
-    saveToUndoStack,
+    saveToUndoStack: saveToUndoStackBase,
     getResizeHandles,
     isPointInPolygon,
     lastErasePointRef,
   });
 
-  const handleDrop = useCallback(
-    (rowId: string, frameIndex: number, e: React.DragEvent) => {
-      e.preventDefault();
-      const file = e.dataTransfer.files[0];
-      if (!file || !file.type.startsWith("image/")) return;
-
-      // If storage is enabled, upload image and store its key; otherwise fallback to blob URL
-      const enableStorage =
-        process.env.NEXT_PUBLIC_ENABLE_SCENE_STORAGE === "true";
-      const doUpload = async () => {
-        let imageUrl = "";
-        let key: string | undefined = undefined;
-        if (
-          enableStorage &&
-          sceneSettings?.projectId &&
-          sceneSettings?.chapterId &&
-          sceneSettings?.sequenceId &&
-          sceneSettings?.shotId
-        ) {
-          try {
-            const bucket =
-              process.env.NEXT_PUBLIC_SCENE_BUCKET || "animation-assets";
-            const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
-            const ts = new Date().toISOString().replace(/[:.]/g, "-");
-            // Per-shot frame assets
-            const projectPart = `${slugifyName(sceneSettings.projectTitle)}-${
-              sceneSettings.projectId
-            }`;
-            const chapterPart = `${slugifyName(sceneSettings.chapterTitle)}-${
-              sceneSettings.chapterId
-            }`;
-            const sequencePart = `${slugifyName(sceneSettings.sequenceCode)}-${
-              sceneSettings.sequenceId
-            }`;
-            const shotPart = `shot-${slugifyName(sceneSettings.shotCode)}-${
-              sceneSettings.shotId
-            }`;
-            key = `${projectPart}/${chapterPart}/${sequencePart}/${shotPart}/assets/frames/${rowId}/${frameIndex}/${ts}-${safeName}`;
-            const { error: upErr } = await supabase.storage
-              .from(bucket)
-              .upload(key, file, { upsert: true, contentType: file.type });
-            if (upErr) {
-              console.error(
-                "Image upload failed; falling back to blob URL",
-                upErr
-              );
-              imageUrl = URL.createObjectURL(file);
-            } else {
-              const { data: signed } = await supabase.storage
-                .from(bucket)
-                .createSignedUrl(key, 60 * 60 * 24); // 24h
-              imageUrl = signed?.signedUrl || URL.createObjectURL(file);
-            }
-          } catch (err) {
-            console.error(
-              "Unexpected image upload error; falling back to blob URL",
-              err
-            );
-            imageUrl = URL.createObjectURL(file);
-          }
-        } else {
-          imageUrl = URL.createObjectURL(file);
-        }
-
-        // Save asset key reference for later re-signing
-        if (key) {
-          setFrameAssetKeys((prev) => ({
-            ...prev,
-            [`${rowId}|${frameIndex}`]: key!,
-          }));
-        }
-
-        const url = imageUrl;
-
-        setDrawingFrames((prev) => {
-          const existingFrame = prev.find(
-            (df) => df.rowId === rowId && df.frameIndex === frameIndex
-          );
-
-          if (existingFrame) {
-            return prev.map((df) =>
-              df.rowId === rowId && df.frameIndex === frameIndex
-                ? { ...df, imageUrl: url, fileName: file.name }
-                : df
-            );
-          } else {
-            return [
-              ...prev,
-              {
-                rowId,
-                frameIndex,
-                length: 1,
-                imageUrl: url,
-                fileName: file.name,
-              },
-            ];
-          }
-        });
-
-        // Select the new frame
-        setSelectedLayerId(`${rowId}-${frameIndex}-main`);
-        setSelectedFrameNumber(frameIndex + 1);
-
-        setTimeout(() => saveToUndoStack(), 0);
-      };
-
-      // Run async upload + state update
-      void doUpload();
-    },
-    [saveToUndoStack]
-  );
+  const { handleDrop } = useAssetDrop({
+    sceneSettings,
+    setFrameAssetKeys,
+    setDrawingFrames,
+    setSelectedLayerId,
+    setSelectedFrameNumber,
+    saveToUndoStack: saveToUndoStackBase,
+  });
 
   const stopDrawing = useCallback(() => {
     if (isPanning) {
@@ -1341,7 +1364,7 @@ export function AnimationEditor({
       if (lassoSelection) {
         showContextMenuForSelection(lassoSelection);
       }
-      saveToUndoStack();
+      saveToUndoStackBase();
       return;
     }
 
@@ -1384,7 +1407,7 @@ export function AnimationEditor({
 
     setCurrentStroke(null);
 
-    setTimeout(() => saveToUndoStack(), 0);
+    setTimeout(() => saveToUndoStackBase(), 0);
   }, [
     isDrawing,
     isPanning,
@@ -1395,63 +1418,24 @@ export function AnimationEditor({
     lassoSelection,
     layerStrokes,
     isDragging, // Added dependency
-    saveToUndoStack,
+    saveToUndoStackBase,
   ]);
 
-  // Animation playback
-  const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
-  };
-
-  const handlePrevFrame = () => {
-    setSelectedFrameNumber((prev) => {
-      const current = prev || 1;
-      if (current <= 1) return isLooping ? maxFrame : 1;
-      return current - 1;
-    });
-  };
-
-  const handleNextFrame = () => {
-    setSelectedFrameNumber((prev) => {
-      const current = prev || 1;
-      if (current >= maxFrame) return isLooping ? 1 : maxFrame;
-      return current + 1;
-    });
-  };
-
-  const handleFirstFrame = () => {
-    setSelectedFrameNumber(1);
-  };
-
-  const handleLastFrame = () => {
-    setSelectedFrameNumber(maxFrame);
-  };
-
-  const handleToggleLoop = () => {
-    setIsLooping(!isLooping);
-  };
-
-  // Animation playback
-  useEffect(() => {
-    if (!isPlaying) return;
-
-    const interval = setInterval(() => {
-      setSelectedFrameNumber((prev) => {
-        const currentFrameNumber = prev || 1;
-
-        if (currentFrameNumber >= maxFrame) {
-          if (isLooping) {
-            return 1; // Loop back to the start
-          }
-          setIsPlaying(false); // Stop playback
-          return maxFrame; // Stay on the last frame
-        }
-        return currentFrameNumber + 1;
-      });
-    }, 1000 / (sceneSettings?.frameRate ?? 12));
-
-    return () => clearInterval(interval);
-  }, [isPlaying, maxFrame, isLooping, appliedFps]);
+  const {
+    handlePlayPause,
+    handlePrevFrame,
+    handleNextFrame,
+    handleFirstFrame,
+    handleLastFrame,
+    handleToggleLoop,
+  } = usePlayback({
+    isPlaying,
+    setIsPlaying,
+    isLooping,
+    maxFrame,
+    appliedFps,
+    setSelectedFrameNumber,
+  });
 
   // Tools
   const tools = [
@@ -1462,26 +1446,8 @@ export function AnimationEditor({
   ];
 
   // Frame management
-  
-
-  
-
-  
-
-  
-
-  
 
   // Layer management
-  
-
-  
-
-  
-
-  
-
-  
 
   // Layer renaming
   const startEditingLayer = (layerId: string, currentName: string) => {
@@ -1509,126 +1475,63 @@ export function AnimationEditor({
   };
 
   // Export
-  const exportAnimation = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || typeof window === "undefined") return;
+  const exportAnimation = () => exportAnimationHelper(canvasRef.current);
 
-    const link = document.createElement("a");
-    link.download = "animation.png";
-    link.href = canvas.toDataURL();
-    link.click();
-  };
+  const {
+    saveToUndoStack: saveToUndoStackFromHook,
+    undo,
+    redo,
+  } = useUndoRedo({
+    undoStack,
+    setUndoStack,
+    redoStack,
+    setRedoStack,
+    layerStrokes,
+    setLayerStrokes,
+    folderLayers,
+    setFolderLayers,
+    drawingFrames,
+    setDrawingFrames,
+    layerOrder,
+    setLayerOrder,
+  });
 
-  // Undo/Redo functions
-  const undo = useCallback(() => {
-    if (undoStack.length === 0) return;
+  const {
+    addFolder,
+    deleteSelectedFolder,
+    moveFrameFolderUp: moveFrameFolderUpFromHook,
+    moveFrameFolderDown: moveFrameFolderDownFromHook,
+    deleteFrameByFolderId,
+    deleteRowById,
+  } = useFolders({
+    drawingFrames,
+    setDrawingFrames,
+    setLayerStrokes,
+    setFolderLayers,
+    setLayerOrder,
+    setOpenFolders,
+    setSelectedLayerId,
+    setSelectedFrameNumber,
+    setRows,
+    setSelectedRow,
+    saveToUndoStack: saveToUndoStackFromHook,
+    selectedRow,
+    selectedLayerId,
+    mode,
+    compositeFolderIds,
+    setCompositeFolderIds,
+  });
 
-    const previousState = undoStack[undoStack.length - 1];
-    // Save current state to redo stack
-    const currentState = {
-      layerStrokes: JSON.parse(JSON.stringify(layerStrokes)),
-      folderLayers: JSON.parse(JSON.stringify(folderLayers)),
-      drawingFrames: JSON.parse(JSON.stringify(drawingFrames)),
-      layerOrder: JSON.parse(JSON.stringify(layerOrder)),
-    };
-
-    // Restore previous state
-    setLayerStrokes(previousState.layerStrokes);
-    setFolderLayers(previousState.folderLayers);
-    setDrawingFrames(previousState.drawingFrames);
-    setLayerOrder(previousState.layerOrder);
-
-    // Update stacks
-    setUndoStack((prev) => prev.slice(0, -1));
-    setRedoStack((prev) => [...prev, currentState]);
-  }, [undoStack, layerStrokes, folderLayers, drawingFrames, layerOrder]);
-
-  const redo = useCallback(() => {
-    if (redoStack.length === 0) return;
-
-    const nextState = redoStack[redoStack.length - 1];
-    // Save current state to undo stack
-    const currentState = {
-      layerStrokes: JSON.parse(JSON.stringify(layerStrokes)),
-      folderLayers: JSON.parse(JSON.stringify(folderLayers)),
-      drawingFrames: JSON.parse(JSON.stringify(drawingFrames)),
-      layerOrder: JSON.parse(JSON.stringify(layerOrder)),
-    };
-
-    // Restore next state
-    setLayerStrokes(nextState.layerStrokes);
-    setFolderLayers(nextState.folderLayers);
-    setDrawingFrames(nextState.drawingFrames);
-    setLayerOrder(nextState.layerOrder);
-
-    // Update stacks
-    setRedoStack((prev) => prev.slice(0, -1));
-    setUndoStack((prev) => [...prev, currentState]);
-  }, [redoStack, layerStrokes, folderLayers, drawingFrames, layerOrder]);
-
-  // Folder CRUD now that saveToUndoStack exists
-  const addFolder = useCallback(() => {
-    const targetRowId = selectedRow || "row-1";
-    const rowFrames = drawingFrames.filter((df) => df.rowId === targetRowId);
-    const nextIndex =
-      rowFrames.length > 0
-        ? Math.max(...rowFrames.map((f) => f.frameIndex)) + 1
-        : 0;
-    const folderId = `${targetRowId}-${nextIndex}`;
-
-    setDrawingFrames((prev) => [
-      ...prev,
-      {
-        rowId: targetRowId,
-        frameIndex: nextIndex,
-        length: 1,
-        imageUrl: "",
-        fileName: "",
-      },
-    ]);
-    setLayerOrder((prev) => ({ ...prev, [folderId]: [`${folderId}-main`] }));
-    setFolderLayers((prev) => ({ ...prev, [folderId]: [] }));
-    setOpenFolders((prev) => ({ ...prev, [folderId]: true }));
-    setSelectedLayerId(`${folderId}-main`);
-    setSelectedFrameNumber(nextIndex + 1);
-    saveToUndoStack();
-  }, [drawingFrames, selectedRow, saveToUndoStack]);
-
-  const deleteSelectedFolder = useCallback(() => {
-    const folderId = getActiveFrameFolderId(selectedLayerId || "");
-    if (!folderId) return;
-    setDrawingFrames((prev) =>
-      prev.filter((df) => `${df.rowId}-${df.frameIndex}` !== folderId)
-    );
-    setLayerStrokes((prev) => {
-      const next: Record<string, DrawingStroke[]> = {} as any;
-      for (const [key, value] of Object.entries(prev)) {
-        if (!key.startsWith(folderId)) next[key] = value as any;
-      }
-      return next as any;
-    });
-    setFolderLayers((prev) => {
-      const copy = { ...prev } as any;
-      delete copy[folderId];
-      return copy;
-    });
-    setLayerOrder((prev) => {
-      const copy = { ...prev } as any;
-      delete copy[folderId];
-      return copy;
-    });
-    setSelectedLayerId(null);
-    saveToUndoStack();
-  }, [selectedLayerId, saveToUndoStack]);
+  // deleteSelectedFolder provided by hook
 
   // Install shortcuts after handlers are defined below (using layout effect pattern)
-
-
 
   // Update current layer when selectedLayerId changes (from sidebar)
 
   // Auto-select the first layer on new scene creation
   useEffect(() => {
+    // Skip auto-select in compositing mode
+    if (mode === "composite") return;
     // If there's exactly one frame (the default background) and nothing is selected
     if (drawingFrames.length === 1 && !selectedLayerId) {
       const firstFrame = drawingFrames[0];
@@ -1642,8 +1545,9 @@ export function AnimationEditor({
     }
   }, [drawingFrames]); // Run only when drawingFrames array changes
 
-  // When drawingFrames are updated (e.g., loaded, created), initialize layerOrder
+  // Initialize layerOrder only for non-composite modes
   useEffect(() => {
+    if (mode === "composite") return;
     setLayerOrder((prevOrder) => {
       const newOrder = { ...prevOrder };
       drawingFrames.forEach((df) => {
@@ -1654,21 +1558,74 @@ export function AnimationEditor({
       });
       return newOrder;
     });
-  }, [drawingFrames]);
+  }, [drawingFrames, mode]);
 
   // Derived sidebar folders from drawingFrames
-  const sidebarFolders = drawingFrames.map((df, index) => {
+  // In compositing mode, sidebar folders are the union of realized timeline
+  // cells and placeholder folders (no cells yet). We sort by natural order.
+  const effectiveCompositeIds = useMemo(() => {
+    if (mode !== "composite") return [] as string[];
+    // Realized composition ids are stored directly in drawingFrame.folderId
+    const realized = new Set(
+      drawingFrames
+        .map((df: any) => df.folderId)
+        .filter((id: any) => typeof id === "string") as string[]
+    );
+    const all = new Set<string>([
+      ...compositeFolderIds,
+      ...Array.from(realized),
+    ]);
+    const result = Array.from(all).sort((a, b) => {
+      const ai = parseInt(a.split("-")[2] || "0", 10);
+      const bi = parseInt(b.split("-")[2] || "0", 10);
+      return ai - bi;
+    });
+    return result;
+  }, [mode, compositeFolderIds, drawingFrames]);
+
+  useEffect(() => {
+    if (mode !== "composite") return;
+    const realized = drawingFrames
+      .map((df: any) => df.folderId)
+      .filter((id: any) => typeof id === "string");
+    console.log("[Composite] Folders state", {
+      placeholders: compositeFolderIds,
+      realized,
+      effectiveCompositeIds,
+      drawingFrames,
+    });
+  }, [mode, compositeFolderIds, drawingFrames, effectiveCompositeIds]);
+
+  const sidebarFolders = (
+    mode === "composite"
+      ? effectiveCompositeIds.map((id, idx) => ({
+          id,
+          rowId: "row-1",
+          frameIndex: parseInt(id.split("-")[2] || "0", 10),
+          length: 1,
+          imageUrl: undefined as any,
+          fileName: undefined as any,
+        }))
+      : drawingFrames
+  ).map((df, index) => {
     const id = `${df.rowId}-${df.frameIndex}`;
-    const isExtended = df.length > 1;
-    const defaultLabel = isExtended
-      ? `Row ${parseInt(df.rowId.split("-")[1])} Frame ${df.frameIndex + 1}:${
-          df.frameIndex + df.length
-        }`
-      : `Row ${parseInt(df.rowId.split("-")[1])} Frame ${df.frameIndex + 1}`;
-    const storyboardLabel = folderNames[id] || `Page ${index + 1}`;
+    let label: string;
+    if (mode === "composite") {
+      // Assets folder naming: Untitled.$ by default
+      label = folderNames[id] || `Untitled.${index + 1}`;
+    } else if (mode === "storyboard") {
+      label = folderNames[id] || `Page ${index + 1}`;
+    } else {
+      const isExtended = df.length > 1;
+      label = isExtended
+        ? `Row ${parseInt(df.rowId.split("-")[1])} Frame ${df.frameIndex + 1}:${
+            df.frameIndex + df.length
+          }`
+        : `Row ${parseInt(df.rowId.split("-")[1])} Frame ${df.frameIndex + 1}`;
+    }
     return {
       id,
-      label: mode === "storyboard" ? storyboardLabel : defaultLabel,
+      label,
       imageUrl: df.imageUrl,
       fileName: df.fileName,
       opacity: layerOpacities[id] ?? 1,
@@ -1677,44 +1634,23 @@ export function AnimationEditor({
     };
   });
 
-  const toggleFolder = (id: string) => {
-    setOpenFolders((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  // Handler for opacity change
-  const handleOpacityChange = (id: string, value: number) => {
-    setLayerOpacities((prev) => ({ ...prev, [id]: value }));
-  };
-
-  // Handler for layer rename
-  const handleStartRename = (layerId: string, currentName: string) => {
-    setEditingLayerName(layerId);
-    setEditingLayerValue(currentName);
-  };
-
-  const handleSaveRename = (layerId: string) => {
-    if (layerId.includes("-extra-")) {
-      // Handle extra layer rename
-      const [folderId, extraPart] = layerId.split("-extra-");
-      const extraIndex = parseInt(extraPart);
-
-      setFolderLayers((prev) => {
-        const layers = prev[folderId] || [];
-        const newLayers = [...layers];
-        newLayers[extraIndex] =
-          editingLayerValue || `Untitled.${extraIndex + 2}`;
-        return { ...prev, [folderId]: newLayers };
-      });
-    }
-    // Note: Main layer rename would need to update sidebarFolders
-    setEditingLayerName(null);
-    setEditingLayerValue("");
-  };
-
-  const handleCancelRename = () => {
-    setEditingLayerName(null);
-    setEditingLayerValue("");
-  };
+  const {
+    toggleFolder,
+    handleOpacityChange,
+    handleStartRename,
+    handleSaveRename,
+    handleCancelRename,
+    moveLayer,
+  } = useLayersSidebar({
+    setOpenFolders,
+    setLayerOpacities,
+    setEditingLayerName,
+    setEditingLayerValue,
+    setFolderLayers,
+    setLayerOrder,
+    folderLayers,
+    saveToUndoStack: saveToUndoStackFromHook,
+  });
 
   const handleAddLayer = (activeLayerId: string) => {
     const folderId = getActiveFrameFolderId(activeLayerId);
@@ -1734,7 +1670,7 @@ export function AnimationEditor({
       [folderId]: [...(prev[folderId] || []), newLayerId],
     }));
 
-    saveToUndoStack();
+    saveToUndoStackFromHook();
   };
 
   const handleAddRow = () => {
@@ -1752,103 +1688,15 @@ export function AnimationEditor({
 
   const handleDeleteFrame = () => {
     if (!selectedLayerId) return;
-
     const frameFolderId = getActiveFrameFolderId(selectedLayerId);
     if (!frameFolderId) return;
-
-    const parts = frameFolderId.split("-");
-    // folderId format is `row-<n>-<frameIndex>`
-    const rowId = `${parts[0]}-${parts[1]}`;
-    const frameIndex = parseInt(parts[2], 10);
-
-    // Remove the frame and its associated layers
-    setDrawingFrames((prev) =>
-      prev.filter((df) => !(df.rowId === rowId && df.frameIndex === frameIndex))
-    );
-    setLayerStrokes((prev) => {
-      const newStrokes = { ...prev };
-      Object.keys(newStrokes).forEach((key) => {
-        if (key.startsWith(frameFolderId)) {
-          delete newStrokes[key];
-        }
-      });
-      return newStrokes;
-    });
-    setFolderLayers((prev) => {
-      const newFolderLayers = { ...prev };
-      delete newFolderLayers[frameFolderId];
-      return newFolderLayers;
-    });
-
-    setLayerOrder((prev) => {
-      const newOrder = { ...prev };
-      delete newOrder[frameFolderId];
-      return newOrder;
-    });
-
-    setSelectedLayerId(null);
-    setSelectedFrameNumber(null);
-    saveToUndoStack();
+    // useFolders hook provides delete by folder id
+    (deleteFrameByFolderId as any)(frameFolderId);
   };
 
   const handleDeleteRow = () => {
     if (!selectedRow) return;
-
-    // Remove all frames and layers associated with the row
-    setDrawingFrames((prev) => prev.filter((df) => df.rowId !== selectedRow));
-    setRows((prev) => prev.filter((row) => row.id !== selectedRow));
-    setLayerStrokes((prev) => {
-      const newStrokes = { ...prev };
-      Object.keys(newStrokes).forEach((key) => {
-        if (key.startsWith(selectedRow)) {
-          delete newStrokes[key];
-        }
-      });
-      return newStrokes;
-    });
-    setFolderLayers((prev) => {
-      const newFolderLayers = { ...prev };
-      Object.keys(newFolderLayers).forEach((key) => {
-        if (key.startsWith(selectedRow)) {
-          delete newFolderLayers[key];
-        }
-      });
-      return newFolderLayers;
-    });
-
-    setSelectedRow("");
-    setSelectedLayerId(null);
-    setSelectedFrameNumber(null);
-    saveToUndoStack();
-  };
-
-  const moveLayer = (
-    folderId: string,
-    layerId: string,
-    direction: "up" | "down"
-  ) => {
-    setLayerOrder((prev) => {
-      const order = prev[folderId];
-      if (!order) return prev;
-
-      const index = order.indexOf(layerId);
-      if (index === -1) return prev;
-
-      const newOrder = [...order];
-      if (direction === "up" && index > 0) {
-        [newOrder[index - 1], newOrder[index]] = [
-          newOrder[index],
-          newOrder[index - 1],
-        ];
-      } else if (direction === "down" && index < order.length - 1) {
-        [newOrder[index + 1], newOrder[index]] = [
-          newOrder[index],
-          newOrder[index + 1],
-        ];
-      }
-
-      return { ...prev, [folderId]: newOrder };
-    });
+    (deleteRowById as any)(selectedRow);
   };
 
   const reorderFrameFolder = (folderId: string, direction: "up" | "down") => {
@@ -1884,7 +1732,7 @@ export function AnimationEditor({
       [next[swapA], next[swapB]] = [next[swapB], next[swapA]];
       return next;
     });
-    saveToUndoStack();
+    saveToUndoStackFromHook();
   };
 
   const moveFrameFolderUp = (folderId: string) =>
@@ -1896,82 +1744,23 @@ export function AnimationEditor({
     setContextMenu({ visible: false, x: 0, y: 0 });
   };
 
-  const handleDeleteSelectedStrokes = () => {
-    if (!lassoSelection || !selectedLayerId) return;
-
-    setLayerStrokes((prev) => ({
-      ...prev,
-      [selectedLayerId]: (prev[selectedLayerId] || []).filter(
-        (stroke) => !lassoSelection.selectedStrokeIds.includes(stroke.id)
-      ),
-    }));
-
-    setLassoSelection(null);
-    handleCloseContextMenu();
-    saveToUndoStack();
-  };
-
-  const handleDuplicateSelectedStrokes = () => {
-    if (!lassoSelection || !selectedLayerId) return;
-    const strokesToDuplicate = (layerStrokes[selectedLayerId] || []).filter(
-      (stroke) => lassoSelection.selectedStrokeIds.includes(stroke.id)
-    );
-    const newStrokes = strokesToDuplicate.map((stroke) => ({
-      ...stroke,
-      id: generateStrokeId(),
-      points: stroke.points.map((p) => ({ x: p.x + 10, y: p.y + 10 })),
-    }));
-
-    setLayerStrokes((prev) => ({
-      ...prev,
-      [selectedLayerId]: [...prev[selectedLayerId], ...newStrokes],
-    }));
-
-    // Update selection to the new strokes
-    const newSelectionPoints = lassoSelection.points.map((p) => ({
-      x: p.x + 10,
-      y: p.y + 10,
-    }));
-    setLassoSelection({
-      points: newSelectionPoints,
-      isActive: true,
-      selectedStrokeIds: newStrokes.map((s) => s.id),
-    });
-
-    handleCloseContextMenu();
-    saveToUndoStack();
-  };
-
-  const handleCopySelectedStrokes = useCallback(() => {
-    if (!lassoSelection || !selectedLayerId) return;
-    const strokesToCopy = (layerStrokes[selectedLayerId] || [])
-      .filter((stroke) => lassoSelection.selectedStrokeIds.includes(stroke.id))
-      .map((s) => JSON.parse(JSON.stringify(s))); // Deep copy
-
-    setClipboard(strokesToCopy);
-    handleCloseContextMenu();
-  }, [lassoSelection, layerStrokes, selectedLayerId]);
-
-  const handleCutSelectedStrokes = useCallback(() => {
-    handleCopySelectedStrokes();
-    handleDeleteSelectedStrokes();
-    handleCloseContextMenu();
-  }, [
-    lassoSelection,
-    layerStrokes,
-    selectedLayerId,
+  const {
     handleDeleteSelectedStrokes,
-  ]);
-
-  // Keyboard shortcuts will be installed after pasteFromClipboard is defined
-
-  const pasteFromClipboard = useCallback(() => {
-    if (clipboard && selectedLayerId) {
-      setPastePreview(clipboard);
-      setLassoSelection(null); // Clear any existing selection
-      handleCloseContextMenu();
-    }
-  }, [clipboard, selectedLayerId]);
+    handleDuplicateSelectedStrokes,
+    handleCopySelectedStrokes,
+    handleCutSelectedStrokes,
+    pasteFromClipboard,
+  } = useSelectionActions({
+    lassoSelection,
+    selectedLayerId,
+    layerStrokes,
+    setLayerStrokes,
+    setLassoSelection,
+    setClipboard,
+    setPastePreview,
+    handleCloseContextMenu,
+    saveToUndoStack: saveToUndoStackFromHook,
+  });
 
   // Now that handlers exist, install keyboard shortcuts
   useKeyboardShortcuts({
@@ -1996,12 +1785,14 @@ export function AnimationEditor({
     lassoSelection,
     selectedLayerId,
     layerStrokes,
-    setLayerStrokes: setLayerStrokes as React.Dispatch<React.SetStateAction<Record<string, any[]>>> as any,
+    setLayerStrokes: setLayerStrokes as React.Dispatch<
+      React.SetStateAction<Record<string, any[]>>
+    > as any,
     setLassoSelection,
     handleCloseContextMenu,
     setIsResizing,
     setResizeBox,
-    saveToUndoStack,
+    saveToUndoStack: saveToUndoStackFromHook,
     setActiveHandle,
     setIsDraggingResizeBox,
   });
@@ -2027,32 +1818,12 @@ export function AnimationEditor({
     return { minX, maxX, minY, maxY };
   };
 
-  // Custom color set functions
-  const createColorSet = () => {
-    if (newSetName.trim()) {
-      setCustomColorSets((prev) => ({
-        ...prev,
-        [newSetName.trim()]: [],
-      }));
-      setNewSetName("");
-      setIsCreatingSet(false);
-    }
-  };
-
-  const addColorToSet = (setName: string, color: string) => {
-    setCustomColorSets((prev) => ({
-      ...prev,
-      [setName]: [...(prev[setName] || []), color],
-    }));
-  };
-
-  const removeColorFromSet = (setName: string, colorIndex: number) => {
-    setCustomColorSets((prev) => ({
-      ...prev,
-      [setName]: prev[setName].filter((_, index) => index !== colorIndex),
-    }));
-  };
-
+  const { createColorSet, addColorToSet, removeColorFromSet } = useColorSets({
+    customColorSets,
+    setCustomColorSets,
+    newSetName,
+    setNewSetName,
+  });
   const deleteColorSet = (setName: string) => {
     setCustomColorSets((prev) => {
       const newSets = { ...prev };
@@ -2060,7 +1831,6 @@ export function AnimationEditor({
       return newSets;
     });
   };
-
 
   // Now that drawFrame exists, define export using it
   handleExport = useCallback(async () => {
@@ -2108,7 +1878,7 @@ export function AnimationEditor({
         redoDisabled={redoStack.length === 0}
         zoom={zoom}
         onZoomIn={() => setZoom((prev) => Math.min(3, prev + 0.1))}
-        onZoomOut={() => setZoom((prev) => Math.max(0.5, prev - 0.1))}
+        onZoomOut={() => setZoom((prev) => Math.max(0.05, prev - 0.1))}
         onZoomReset={() => setZoom(1)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
@@ -2117,6 +1887,20 @@ export function AnimationEditor({
       />
 
       <div className="flex flex-1 min-h-0 relative">
+        {/* Global rotation HUD aligned from left edge up to assets panel (assumes ~280px panel) */}
+        {mode === "composite" &&
+          isRotatingDrag &&
+          rotationPreviewDeg != null && (
+            <div
+              className="absolute top-2 left-0 z-30 pointer-events-none"
+              style={{ width: "calc(100% - 280px)" }}
+              aria-live="polite"
+            >
+              <div className="ml-4 inline-block bg-gray-900/90 text-white text-base md:text-lg px-3 py-1.5 rounded shadow-lg border border-white/10">
+                {`${Math.round(normalizeAngle(rotationPreviewDeg))}°`}
+              </div>
+            </div>
+          )}
         {/* Collapsible Toolbar - hidden in compositing mode */}
         {mode !== "composite" && (
           <div
@@ -2201,7 +1985,7 @@ export function AnimationEditor({
             className="flex-1 bg-gray-900 flex items-center justify-center p-4 min-h-0 overflow-auto"
             style={{ paddingBottom: "280px" }}
           >
-            {/* Canvas viewport (hidden in composite mode per current behavior) */}
+            {/* Canvas viewport (hidden in compositing mode) */}
             <CanvasViewport
               show={mode !== "composite"}
               panX={panOffset.x}
@@ -2210,6 +1994,10 @@ export function AnimationEditor({
               onDragOver={(e) => e.preventDefault()}
               onDrop={async (e) => {
                 e.preventDefault();
+                console.log("[CanvasDrop] received", {
+                  mode,
+                  filesLen: e.dataTransfer?.files?.length,
+                });
                 const file = e.dataTransfer?.files?.[0];
                 if (!file || !file.type.startsWith("image/")) return;
                 // Determine current folder from selectedLayerId
@@ -2263,6 +2051,10 @@ export function AnimationEditor({
                         : 0;
                     return `${targetRowId}-${idx}`;
                   })();
+
+                const activeParts = activeFolderId.split("-");
+                const selRowId = `${activeParts[0]}-${activeParts[1]}`;
+                const selFrameIndex = parseInt(activeParts[2]);
 
                 // Ensure a new extra layer is created for this image (compute index deterministically)
                 let newLayerId = "";
@@ -2348,36 +2140,53 @@ export function AnimationEditor({
                         .from(bucket)
                         .createSignedUrl(key, 60 * 60 * 24);
                       imageUrl = signed?.signedUrl || URL.createObjectURL(file);
+                      console.log("[Drop] Signed URL created", {
+                        key,
+                        imageUrl,
+                      });
                     } else {
                       imageUrl = URL.createObjectURL(file);
+                      console.log("[Drop] Upload error, using blob URL", upErr);
                     }
                   } catch {
                     imageUrl = URL.createObjectURL(file);
+                    console.log(
+                      "[Drop] Exception during upload, using blob URL"
+                    );
                   }
                 } else {
                   imageUrl = URL.createObjectURL(file);
+                  console.log("[Drop] Storage disabled, using blob URL");
                 }
 
                 // Attach to drawingFrames cell representing this folder's page (for preview)
                 setDrawingFrames((prev) => {
-                  const parts = activeFolderId.split("-");
-                  const rowId = `${parts[0]}-${parts[1]}`;
-                  const frameIndex = parseInt(parts[2]);
                   const exists = prev.find(
-                    (df) => df.rowId === rowId && df.frameIndex === frameIndex
+                    (df) =>
+                      df.rowId === selRowId && df.frameIndex === selFrameIndex
                   );
                   if (exists) {
                     return prev.map((df) =>
-                      df.rowId === rowId && df.frameIndex === frameIndex
+                      df.rowId === selRowId && df.frameIndex === selFrameIndex
                         ? { ...df, imageUrl }
                         : df
                     );
                   }
+                  // Ensure layer order and folderLayers initialized for new folder
+                  const folderId = `${selRowId}-${selFrameIndex}`;
+                  setLayerOrder((po) =>
+                    po[folderId]
+                      ? po
+                      : { ...po, [folderId]: [`${folderId}-main`] }
+                  );
+                  setFolderLayers((pl) =>
+                    pl[folderId] ? pl : { ...pl, [folderId]: [] }
+                  );
                   return [
                     ...prev,
                     {
-                      rowId,
-                      frameIndex,
+                      rowId: selRowId,
+                      frameIndex: selFrameIndex,
                       length: 1,
                       imageUrl,
                       fileName: "",
@@ -2394,13 +2203,30 @@ export function AnimationEditor({
                     ...prev,
                     [`${rowKey}|${frameKey}`]: key,
                   }));
+                  console.log("[Drop] Saved frameAssetKey", {
+                    cell: `${rowKey}|${frameKey}`,
+                    key,
+                  });
                 }
 
-                setSelectedLayerId(newLayerId);
-                setSelectedFrameNumber(
-                  parseInt(activeFolderId.split("-")[2]) + 1
-                );
-                saveToUndoStack();
+                setSelectedLayerId(`${selRowId}-${selFrameIndex}-main`);
+                setSelectedFrameNumber(selFrameIndex + 1);
+                // Preload image into cache for immediate draw
+                if (imageUrl) {
+                  if (!imageCache.current[imageUrl]) {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.onload = () => {
+                      imageCache.current[imageUrl] = img;
+                      drawFrame();
+                    };
+                    img.src = imageUrl;
+                  } else {
+                    drawFrame();
+                  }
+                  console.log("[Drop] Using image URL", imageUrl);
+                }
+                saveToUndoStackFromHook();
               }}
               onMouseDown={startDrawing}
               onMouseMove={draw}
@@ -2428,6 +2254,372 @@ export function AnimationEditor({
               }}
               isPanning={isPanning}
             />
+
+            {/* Compositing: show blank composition canvas only after a folder is marked as a composition */}
+            {mode === "composite" &&
+              (() => {
+                const activeFolderId = getActiveFrameFolderId(
+                  selectedLayerId || ""
+                );
+                const comp = activeFolderId
+                  ? compositionByFolder[activeFolderId]
+                  : undefined;
+                if (!comp) return null;
+                // Auto-fit to view on first select per folder
+                if (
+                  activeFolderId &&
+                  !fittedCompByFolder[activeFolderId] &&
+                  typeof window !== "undefined"
+                ) {
+                  const container = document.querySelector(
+                    ".flex-1.bg-gray-900.flex.items-center.justify-center.p-4.min-h-0.overflow-auto"
+                  ) as HTMLElement | null;
+                  if (container) {
+                    const bb = container.getBoundingClientRect();
+                    const margin = 64;
+                    const availW = Math.max(100, bb.width - margin);
+                    const availH = Math.max(100, bb.height - 180);
+                    const fit = Math.min(
+                      availW / comp.width,
+                      availH / comp.height
+                    );
+                    if (Number.isFinite(fit) && fit > 0) {
+                      setZoom(fit);
+                      setPanOffset({ x: 0, y: 0 });
+                      setFittedCompByFolder((prev) => ({
+                        ...prev,
+                        [activeFolderId]: true,
+                      }));
+                    }
+                  }
+                }
+                // Always draw the image from F1 for the active composition
+                const f1 = drawingFrames.find(
+                  (df) => df.folderId === activeFolderId && df.frameIndex === 0
+                );
+                const imgSrc = f1?.imageUrl;
+                console.log("[Composite] render", {
+                  imgSrc,
+                  bounds: compImageBounds,
+                  compSize: { w: comp.width, h: comp.height },
+                  zoom,
+                  panOffset,
+                });
+                return (
+                  <div
+                    className="flex items-center justify-center"
+                    style={{
+                      width: comp.width,
+                      height: comp.height,
+                      transform: `translate(calc(50% - ${
+                        (comp.width * zoom) / 2 - panOffset.x
+                      }px), calc(50% - ${
+                        (comp.height * zoom) / 2 - panOffset.y
+                      }px)) scale(${zoom})`,
+                      transformOrigin: "top left",
+                    }}
+                  >
+                    <div
+                      className="relative"
+                      style={{ width: comp.width, height: comp.height }}
+                    >
+                      <canvas
+                        ref={compCanvasRef as any}
+                        width={comp.width}
+                        height={comp.height}
+                        className="bg-white shadow-md"
+                      />
+                      {/* (HUD moved to workspace-level container above) */}
+                      {/* We only draw the selection outline above the canvas; the images themselves are rendered on the canvas to avoid duplication/upscaling. */}
+                      {imgSrc && compImageBounds && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            left: compImageBounds.x,
+                            top: compImageBounds.y,
+                            width: compImageBounds.width,
+                            height: compImageBounds.height,
+                            transform: `rotate(${normalizeAngle(
+                              rotationPreviewDeg ??
+                                rotationByAsset[selectedAssetKey || ""] ??
+                                0
+                            )}deg)`,
+                            transformOrigin: "center",
+                            border: "2px solid rgba(255,82,82,0.9)",
+                            pointerEvents: "none",
+                            zIndex: 2,
+                          }}
+                        />
+                      )}
+                      {imgSrc && compImageBounds && (
+                        <div
+                          ref={outlineRef}
+                          className="absolute"
+                          style={{
+                            left: compImageBounds.x,
+                            top: compImageBounds.y,
+                            width: compImageBounds.width,
+                            height: compImageBounds.height,
+                            transform: `rotate(${normalizeAngle(
+                              rotationPreviewDeg ??
+                                rotationByAsset[selectedAssetKey || ""] ??
+                                0
+                            )}deg)`,
+                            transformOrigin: "center",
+                            zIndex: 3,
+                            pointerEvents: "auto",
+                          }}
+                        >
+                          {/* Rotation handle: small square at top-right corner */}
+                          <div
+                            onMouseDown={(e) => {
+                              if (!selectedAssetKey) return;
+                              e.preventDefault();
+                              const rect = (
+                                e.currentTarget.parentElement as HTMLElement
+                              ).getBoundingClientRect();
+                              const centerX = rect.left + rect.width / 2;
+                              const centerY = rect.top + rect.height / 2;
+                              const startAngle = Math.atan2(
+                                e.clientY - centerY,
+                                e.clientX - centerX
+                              );
+                              const currentDeg =
+                                rotationByAsset[selectedAssetKey] ?? 0;
+                              rotationDragOffsetRef.current =
+                                currentDeg - (startAngle * 180) / Math.PI;
+                              setIsRotatingDrag(true);
+                              const onMove = (ev: MouseEvent) => {
+                                const ang = Math.atan2(
+                                  ev.clientY - centerY,
+                                  ev.clientX - centerX
+                                );
+                                const deg =
+                                  (ang * 180) / Math.PI +
+                                  rotationDragOffsetRef.current;
+                                const nd = normalizeAngle(deg);
+                                rotationPreviewRef.current = nd;
+                                setRotationPreviewDeg(nd);
+                              };
+                              const onUp = () => {
+                                setIsRotatingDrag(false);
+                                const finalDeg = rotationPreviewRef.current;
+                                if (finalDeg != null && selectedAssetKey) {
+                                  setRotationByAsset((prev) => ({
+                                    ...prev,
+                                    [selectedAssetKey]: finalDeg,
+                                  }));
+                                }
+                                setRotationPreviewDeg(null);
+                                rotationPreviewRef.current = null;
+                                window.removeEventListener("mousemove", onMove);
+                                window.removeEventListener("mouseup", onUp);
+                              };
+                              window.addEventListener("mousemove", onMove);
+                              window.addEventListener("mouseup", onUp);
+                            }}
+                            style={{
+                              position: "absolute",
+                              right: -16,
+                              top: -16,
+                              width: 10,
+                              height: 10,
+                              background: "#60a5fa",
+                              border: "2px solid #1e3a8a",
+                              borderRadius: 50,
+                              cursor: "grab",
+                            }}
+                            title="Rotate"
+                          />
+                          {/* Move handle (triangle at center) */}
+                          <div
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              if (!compImageBounds || !selectedAssetKey) return;
+                              const startX = e.clientX;
+                              const startY = e.clientY;
+                              const start = { ...compImageBounds };
+                              setIsMovingAsset(true);
+                              moveLiveBoundsRef.current = start;
+                              const onMove = (ev: MouseEvent) => {
+                                const dx = ev.clientX - startX;
+                                const dy = ev.clientY - startY;
+                                const next = {
+                                  x: start.x + dx,
+                                  y: start.y + dy,
+                                  width: start.width,
+                                  height: start.height,
+                                };
+                                moveLiveBoundsRef.current = next;
+                                setCompImageBounds(next);
+                              };
+                              const onUp = () => {
+                                window.removeEventListener("mousemove", onMove);
+                                window.removeEventListener("mouseup", onUp);
+                                const latest = moveLiveBoundsRef.current;
+                                if (latest) {
+                                  setBoundsByAsset((prev) => ({
+                                    ...prev,
+                                    [selectedAssetKey]: latest,
+                                  }));
+                                }
+                                moveLiveBoundsRef.current = null;
+                                setIsMovingAsset(false);
+                              };
+                              window.addEventListener("mousemove", onMove);
+                              window.addEventListener("mouseup", onUp);
+                            }}
+                            style={{
+                              position: "absolute",
+                              left: "50%",
+                              top: "50%",
+                              transform: "translate(-50%, -50%)",
+                              width: 0,
+                              height: 0,
+                              borderLeft: "8px solid transparent",
+                              borderRight: "8px solid transparent",
+                              borderBottom: "12px solid #60a5fa",
+                              cursor: "move",
+                              pointerEvents: "auto",
+                            }}
+                            title="Move"
+                          />
+                          {/* Corner handles: enable resize on TL, BL, BR (TR reserved for rotate) */}
+                          {(
+                            [
+                              { key: "tl", x: 0, y: 0 },
+                              { key: "bl", x: 0, y: 1 },
+                              { key: "br", x: 1, y: 1 },
+                            ] as const
+                          ).map((p, i) => (
+                            <div
+                              key={p.key}
+                              onMouseDown={(e) => {
+                                e.stopPropagation();
+                                if (!compImageBounds || !selectedAssetKey)
+                                  return;
+                                const startX = e.clientX;
+                                const startY = e.clientY;
+                                const start = { ...compImageBounds };
+                                const aspect = start.width / start.height;
+                                // Opposite corner (anchor stays fixed during resize)
+                                const anchor =
+                                  p.key === "tl"
+                                    ? {
+                                        x: start.x + start.width,
+                                        y: start.y + start.height,
+                                      }
+                                    : p.key === "bl"
+                                    ? { x: start.x + start.width, y: start.y }
+                                    : { x: start.x, y: start.y }; // br -> anchor is top-left
+                                const onMove = (ev: MouseEvent) => {
+                                  const dx = ev.clientX - startX;
+                                  const dy = ev.clientY - startY;
+
+                                  // Compute proposed width/height deltas per handle
+                                  let propW: number;
+                                  let propH: number;
+                                  if (p.key === "tl") {
+                                    propW = start.width - dx;
+                                    propH = start.height - dy;
+                                  } else if (p.key === "bl") {
+                                    propW = start.width - dx;
+                                    propH = start.height + dy;
+                                  } else {
+                                    // br
+                                    propW = start.width + dx;
+                                    propH = start.height + dy;
+                                  }
+
+                                  // Determine uniform scale factor based on dominant axis change
+                                  const sW = propW / start.width;
+                                  const sH = propH / start.height;
+                                  const s =
+                                    Math.abs(sW - 1) > Math.abs(sH - 1)
+                                      ? sW
+                                      : sH;
+
+                                  // Enforce minimum size
+                                  const minSize = 10;
+                                  let newW = Math.max(minSize, start.width * s);
+                                  let newH = Math.max(minSize, newW / aspect);
+
+                                  // If height min clipped more than width due to rounding, recompute width from height
+                                  if (newH < minSize) {
+                                    newH = minSize;
+                                    newW = newH * aspect;
+                                  }
+
+                                  // Position so that the anchor (opposite corner) stays fixed
+                                  let nx: number;
+                                  let ny: number;
+                                  if (p.key === "tl") {
+                                    nx = anchor.x - newW;
+                                    ny = anchor.y - newH;
+                                  } else if (p.key === "bl") {
+                                    nx = anchor.x - newW;
+                                    ny = anchor.y;
+                                  } else {
+                                    // br
+                                    nx = anchor.x;
+                                    ny = anchor.y;
+                                  }
+
+                                  const nextBounds = {
+                                    x: nx,
+                                    y: ny,
+                                    width: newW,
+                                    height: newH,
+                                  };
+                                  resizeLiveBoundsRef.current = nextBounds;
+                                  setCompImageBounds(nextBounds);
+                                };
+                                const onUp = () => {
+                                  window.removeEventListener(
+                                    "mousemove",
+                                    onMove
+                                  );
+                                  window.removeEventListener("mouseup", onUp);
+                                  const latest = resizeLiveBoundsRef.current;
+                                  if (latest) {
+                                    setBoundsByAsset((prev) => ({
+                                      ...prev,
+                                      [selectedAssetKey]: {
+                                        ...latest,
+                                      },
+                                    }));
+                                  }
+                                  resizeLiveBoundsRef.current = null;
+                                };
+                                window.addEventListener("mousemove", onMove);
+                                window.addEventListener("mouseup", onUp);
+                              }}
+                              style={{
+                                position: "absolute",
+                                left:
+                                  p.x === 0 ? -4 : compImageBounds.width - 6,
+                                top:
+                                  p.y === 0 ? -4 : compImageBounds.height - 6,
+                                width: 12,
+                                height: 12,
+                                background: "#93c5fd",
+                                border: "2px solid #1e3a8a",
+                                borderRadius: 2,
+                                cursor:
+                                  p.key === "tl"
+                                    ? "nwse-resize"
+                                    : p.key === "bl"
+                                    ? "nesw-resize"
+                                    : "nwse-resize",
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
           </div>
 
           {/* Context Menu */}
@@ -2442,21 +2634,107 @@ export function AnimationEditor({
             onResize={handleResizeClick}
           />
 
-          {/* Timeline - hidden in storyboard mode */}
+          {/* Timeline - visible in animate and composite; in composite filter to active folder */}
           {mode !== "storyboard" && (
             <TimelineDock
               rows={rows}
               setRows={setRows}
               frameCount={frameCount}
               setFrameCount={setFrameCount as any}
-              drawingFrames={drawingFrames}
+              drawingFrames={
+                (mode === "composite"
+                  ? (() => {
+                      const activeFolderId = getActiveFrameFolderId(
+                        selectedLayerId || ""
+                      );
+                      if (!activeFolderId) return [] as any[];
+                      // Always render F1 (index 0) for the active composition, scoped by folderId
+                      return drawingFrames.filter(
+                        (df) =>
+                          df.folderId === activeFolderId && df.frameIndex === 0
+                      );
+                    })()
+                  : drawingFrames) as any
+              }
+              activeCompositionLabel={(() => {
+                if (mode !== "composite") return "";
+                const activeFolderId = getActiveFrameFolderId(
+                  selectedLayerId || ""
+                );
+                if (!activeFolderId) return "";
+                // Only show indicator if this folder has composition settings
+                if (!compositionByFolder[activeFolderId]) return "";
+                return (
+                  folderNames[activeFolderId] ||
+                  ((): string => {
+                    const idx = effectiveCompositeIds.indexOf(activeFolderId);
+                    return idx >= 0 ? `Untitled.${idx + 1}` : activeFolderId;
+                  })()
+                );
+              })()}
               setDrawingFrames={setDrawingFrames as any}
               selectedRow={selectedRow}
               setSelectedRow={setSelectedRow as any}
               selectedLayerId={selectedLayerId}
-              setSelectedLayerId={setSelectedLayerId as any}
+              setSelectedLayerId={(val: any) => {
+                if (mode === "composite") {
+                  const activeFolderId = getActiveFrameFolderId(
+                    selectedLayerId || ""
+                  );
+                  if (activeFolderId) {
+                    setSelectedLayerId(activeFolderId);
+                    console.log(
+                      "[Composite] Timeline setSelectedLayerId -> force F1",
+                      {
+                        activeFolderId,
+                      }
+                    );
+                    setSelectedFrameNumber(1);
+                    // Ensure F1 exists visually: if a frame exists for this comp but not at index 0,
+                    // mirror it into index 0 so the grid and canvas show content consistently.
+                    const parts = activeFolderId.split("-");
+                    const rowId = `${parts[0]}-${parts[1]}`;
+                    setDrawingFrames((prev) => {
+                      const hasF1 = prev.some(
+                        (df) =>
+                          df.folderId === activeFolderId && df.frameIndex === 0
+                      );
+                      if (hasF1) return prev;
+                      const anyCell = prev.find(
+                        (df) => df.folderId === activeFolderId
+                      );
+                      if (!anyCell) return prev;
+                      return [
+                        ...prev,
+                        {
+                          rowId,
+                          frameIndex: 0,
+                          length: 1,
+                          imageUrl: anyCell.imageUrl,
+                          fileName: anyCell.fileName,
+                          folderId: activeFolderId,
+                        },
+                      ];
+                    });
+                    return;
+                  }
+                }
+                setSelectedLayerId(val);
+              }}
               selectedFrameNumber={selectedFrameNumber}
-              setSelectedFrameNumber={setSelectedFrameNumber as any}
+              setSelectedFrameNumber={(n: any) => {
+                if (mode === "composite") {
+                  console.log(
+                    "[Composite] Timeline setSelectedFrameNumber -> clamp to 1",
+                    {
+                      requested: n,
+                    }
+                  );
+                  setSelectedFrameNumber(1);
+                } else {
+                  setSelectedFrameNumber(n);
+                }
+              }}
               onDrop={handleDrop}
               isPlaying={isPlaying}
               onPlayPause={handlePlayPause}
@@ -2469,6 +2747,8 @@ export function AnimationEditor({
               onDeleteFrame={handleDeleteFrame}
               onDeleteRow={handleDeleteRow}
               onAddRow={handleAddRow}
+              hideEditButtons={mode === "composite"}
+              suppressFrames={false}
             />
           )}
         </div>
@@ -2503,10 +2783,195 @@ export function AnimationEditor({
           setFolderNames={setFolderNames}
           editingLayerName={editingLayerName}
           editingLayerValue={editingLayerValue}
-          handleSaveRename={handleSaveRename}
+          handleSaveRename={(layerId: string) =>
+            handleSaveRename(layerId, editingLayerValue)
+          }
           handleCancelRename={handleCancelRename}
+          compositionByFolder={compositionByFolder}
+          // selection for asset highlight
+          selectedAssetFolderId={compSelectedAssetFolderId || undefined}
+          selectedAssetIndex={compSelectedAssetIndex ?? undefined}
+          onReorderCompAssets={(folderId, from, to) => {
+            // Reorder z-index for compositing by reordering the drawingFrames entries for this folder
+            setDrawingFrames((prev) => {
+              const f1Frames = prev.filter(
+                (df) => df.folderId === folderId && df.frameIndex === 0
+              );
+              if (f1Frames.length <= 1) return prev;
+              const others = prev.filter(
+                (df) => !(df.folderId === folderId && df.frameIndex === 0)
+              );
+              const items = [...f1Frames];
+              const [m] = items.splice(from, 1);
+              items.splice(to, 0, m);
+              // Reassign rowIds to keep R1, R2, R3 order after reorder
+              const reassigned = items.map((df, idx) => ({
+                ...df,
+                rowId: `row-${idx + 1}`,
+              }));
+              return [...others, ...reassigned];
+            });
+            // Update selected index if it was moved
+            setCompSelectedAssetIndex((cur) => {
+              if (cur == null) return cur;
+              if (cur === from) return to;
+              if (from < cur && to >= cur) return cur - 1;
+              if (from > cur && to <= cur) return cur + 1;
+              return cur;
+            });
+          }}
+          onSetComposition={(folderId, s) => {
+            setCompositionByFolder((prev) => ({ ...prev, [folderId]: s }));
+            // do not materialize a timeline cell yet in composite; wait for first asset
+            // ensure layer order entry exists but without main image
+            const folderKey = folderId;
+            setLayerOrder((po) =>
+              po[folderKey] ? po : { ...po, [folderKey]: [] }
+            );
+            setFolderLayers((pl) =>
+              pl[folderKey] ? pl : { ...pl, [folderKey]: [] }
+            );
+            // focus the folder
+            setSelectedLayerId(`${folderId}`);
+            // When turning a folder that already has assets into a composition
+            // materialize its first asset into R1 F1 immediately
+            setTimeout(() => {
+              setDrawingFrames((prev) => {
+                const parts = folderId.split("-");
+                const rowId = `${parts[0]}-${parts[1]}`;
+                const hasF1 = prev.some(
+                  (df) => df.rowId === rowId && df.frameIndex === 0
+                );
+                if (hasF1) return prev;
+                // Find a cached asset for this folder from the assets panel via folderLayers name if any
+                // We cannot read assetsByFolder here, so this path is best-effort; actual push happens from LayersPanel.
+                return prev;
+              });
+              // Ensure timeline highlights F1 for this comp
+              setSelectedFrameNumber(1);
+            }, 0);
+          }}
+          onFolderReceiveAssets={(folderId, assets) => {
+            if (!assets || assets.length === 0) return;
+            const first = assets[0];
+            // For compositing, each new asset should occupy the next row at F1 (R1 F1, R2 F1, ...)
+            const parts = folderId.split("-");
+            const frameIndex = parseInt(parts[2], 10);
+            setTimeout(
+              () =>
+                setDrawingFrames((prev) => {
+                  console.log("[Composite] onFolderReceiveAssets", {
+                    folderId,
+                    first,
+                    before: prev,
+                  });
+                  const adjustedFrameIndex = 0; // always F1
+                  const countForFolder = prev.filter(
+                    (df) =>
+                      df.folderId === folderId &&
+                      df.frameIndex === adjustedFrameIndex
+                  ).length;
+                  const nextRowNumber = countForFolder + 1; // 1-based
+                  const rowId = `row-${nextRowNumber}`;
+                  // Ensure timeline has enough rows to show this new entry
+                  setRows((prevRows) => {
+                    const numbers = prevRows
+                      .map((r) => r.id.match(/row-(\d+)/)?.[1])
+                      .map((n) => (n ? parseInt(n, 10) : 0));
+                    const maxExisting = Math.max(0, ...numbers);
+                    if (maxExisting >= nextRowNumber) return prevRows;
+                    const additions = [] as any[];
+                    for (let i = maxExisting + 1; i <= nextRowNumber; i++) {
+                      additions.push({ id: `row-${i}`, name: `Row${i}` });
+                    }
+                    return [...prevRows, ...additions];
+                  });
+                  const after = prev.concat([
+                    {
+                      rowId,
+                      frameIndex: adjustedFrameIndex,
+                      length: 1,
+                      imageUrl:
+                        first.url.endsWith(".tga") && first.file
+                          ? URL.createObjectURL(first.file)
+                          : first.url,
+                      fileName: first.name,
+                      folderId,
+                    },
+                  ]);
+                  console.log("[Composite] materialized", { after });
+                  return after;
+                }),
+              0
+            );
+            // After frame is realized, remove placeholder id (defer to next tick)
+            setTimeout(() => {
+              setCompositeFolderIds((prev) =>
+                prev.filter((id) => id !== folderId)
+              );
+            }, 1);
+            // Initialize selection and bounds for this comp so clicking doesn't shift
+            const comp = compositionByFolder[folderId];
+            if (comp) {
+              setCompSelectedAssetFolderId(folderId);
+              setCompSelectedAssetIndex((prev) =>
+                prev == null ? 0 : prev + 1
+              );
+              // Initialize selection bounds from the image's natural size centered on canvas
+              const src =
+                (first.url.endsWith(".tga") && first.file
+                  ? URL.createObjectURL(first.file)
+                  : first.url) || "";
+              const img = new Image();
+              img.onload = () => {
+                const w = img.naturalWidth || comp.width;
+                const h = img.naturalHeight || comp.height;
+                const x = Math.round((comp.width - w) / 2);
+                const y = Math.round((comp.height - h) / 2);
+                setCompImageBounds({ x, y, width: w, height: h });
+              };
+              img.src = src;
+            }
+            // In compositing mode, do not create extra editor layers here
+          }}
+          onSelectCompAsset={(folderId, index) => {
+            // Select asset within comp and compute its natural bounds
+            const comp = compositionByFolder[folderId];
+            if (!comp) return;
+            const df = drawingFrames.find(
+              (d) =>
+                d.folderId === folderId &&
+                d.frameIndex === 0 &&
+                parseInt(d.rowId.split("-")[1], 10) === index + 1
+            );
+            if (!df?.imageUrl) return;
+            const img = new Image();
+            img.onload = () => {
+              // Set bounds from the selected image's natural size centered
+              setCompSelectedAssetFolderId(folderId);
+              setCompSelectedAssetIndex(index);
+              // do not reset rotation here; keep rotation keyed to asset identity
+              const w = img.naturalWidth || comp.width;
+              const h = img.naturalHeight || comp.height;
+              const x = Math.round((comp.width - w) / 2);
+              const y = Math.round((comp.height - h) / 2);
+              // Prefer persisted bounds if available
+              const identity = `${folderId}|${
+                df.fileName || df.imageUrl || ""
+              }`;
+              const persisted = boundsByAsset[identity];
+              if (persisted) {
+                setCompImageBounds({ ...persisted });
+              } else {
+                setCompImageBounds({ x, y, width: w, height: h });
+              }
+            };
+            img.src = df.imageUrl;
+          }}
         />
       </div>
+
+      {/* Left toolbar removed: rotation is controlled via the corner handle only */}
 
       <EditorSettingsModal
         open={isSettingsOpen}
@@ -2579,3 +3044,5 @@ export function AnimationEditor({
     </div>
   );
 }
+
+export default AnimationEditor;

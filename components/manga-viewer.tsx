@@ -177,15 +177,12 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
         (ch: any) => ch.title === chapterTitle
       );
       if (chapter) {
-        onViewChange(
-          "manga",
-          {
-            ...(content as any),
-            selectedChapter: chapterTitle,
-            selectedChapterId: chapter.id,
-            selectedVolume: volume,
-          } as any
-        );
+        onViewChange("manga", {
+          ...(content as any),
+          selectedChapter: chapterTitle,
+          selectedChapterId: chapter.id,
+          selectedVolume: volume,
+        } as any);
         break;
       }
     }
@@ -696,3 +693,5 @@ export function MangaViewer({ content, onViewChange }: MangaViewerProps) {
     </div>
   );
 }
+
+export default MangaViewer;

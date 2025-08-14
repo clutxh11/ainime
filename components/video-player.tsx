@@ -233,3 +233,5 @@ export function VideoPlayer({ content, onViewChange }: VideoPlayerProps) {
     </div>
   );
 }
+
+export default VideoPlayer;

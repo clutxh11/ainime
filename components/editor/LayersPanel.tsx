@@ -1,10 +1,35 @@
 "use client";
 
+import React from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Edit3, Eye, Folder } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Plus,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Edit3,
+  Eye,
+  Folder,
+  MoreVertical,
+} from "lucide-react";
 
 export interface SidebarFolder {
   id: string;
@@ -23,9 +48,13 @@ export interface LayersPanelProps {
   selectedRow: string | null;
   sidebarFolders: SidebarFolder[];
   openFolders: Record<string, boolean>;
-  setOpenFolders: (fn: (prev: Record<string, boolean>) => Record<string, boolean>) => void;
+  setOpenFolders: (
+    fn: (prev: Record<string, boolean>) => Record<string, boolean>
+  ) => void;
   layerOpacities: Record<string, number>;
-  setLayerOpacities: (fn: (prev: Record<string, number>) => Record<string, number>) => void;
+  setLayerOpacities: (
+    fn: (prev: Record<string, number>) => Record<string, number>
+  ) => void;
   folderLayers: Record<string, string[]>;
   layerOrder: Record<string, string[]>;
   layerVisibility: Record<string, boolean>;
@@ -33,7 +62,11 @@ export interface LayersPanelProps {
   handleToggleVisibility: (layerId: string) => void;
   toggleFolder: (id: string) => void;
   handleAddLayer: (activeLayerId: string) => void;
-  moveLayer: (folderId: string, layerId: string, direction: "up" | "down") => void;
+  moveLayer: (
+    folderId: string,
+    layerId: string,
+    direction: "up" | "down"
+  ) => void;
   moveFrameFolderUp: (folderId: string) => void;
   moveFrameFolderDown: (folderId: string) => void;
   addFolder: () => void;
@@ -43,11 +76,36 @@ export interface LayersPanelProps {
   editingFolderValue: string;
   setEditingFolderValue: (v: string) => void;
   folderNames: Record<string, string>;
-  setFolderNames: (fn: (prev: Record<string, string>) => Record<string, string>) => void;
+  setFolderNames: (
+    fn: (prev: Record<string, string>) => Record<string, string>
+  ) => void;
   editingLayerName: string | null;
   editingLayerValue: string;
   handleSaveRename: (layerId: string) => void;
   handleCancelRename: () => void;
+  compositionByFolder?: Record<
+    string,
+    { width: number; height: number; fps: number }
+  >;
+  onSetComposition?: (
+    folderId: string,
+    s: { width: number; height: number; fps: number }
+  ) => void;
+  onFolderReceiveAssets?: (
+    folderId: string,
+    assets: { id: string; name: string; url: string; file?: File }[]
+  ) => void;
+  // Compositing only: notify when a specific asset in a folder is clicked
+  onSelectCompAsset?: (folderId: string, index: number) => void;
+  // Compositing only: highlight selected asset
+  selectedAssetFolderId?: string;
+  selectedAssetIndex?: number;
+  // Compositing only: reorder assets within a folder (affects z-order)
+  onReorderCompAssets?: (
+    folderId: string,
+    fromIndex: number,
+    toIndex: number
+  ) => void;
 }
 
 export default function LayersPanel(props: LayersPanelProps) {
@@ -83,14 +141,179 @@ export default function LayersPanel(props: LayersPanelProps) {
     handleAddLayer,
   } = props;
 
+  // Root assets (not in a folder) and per-folder assets for compositing mode
+  type AssetItem = { id: string; name: string; url: string; file?: File };
+  const [rootAssets, setRootAssets] = React.useState<AssetItem[]>([]);
+  const [assetsByFolder, setAssetsByFolder] = React.useState<
+    Record<string, AssetItem[]>
+  >({});
+
+  // Helper: shorten long filenames for display while preserving the extension
+  const formatDisplayName = React.useCallback(
+    (name: string, max: number = 28) => {
+      if (!name || name.length <= max) return name;
+      const dotIndex = name.lastIndexOf(".");
+      const hasExt = dotIndex > 0 && dotIndex < name.length - 1;
+      const ext = hasExt ? name.slice(dotIndex) : "";
+      const base = hasExt ? name.slice(0, dotIndex) : name;
+      if (base.length + ext.length <= max) return name;
+      const available = max - ext.length - 3; // reserve for ...
+      const keepStart = Math.max(6, Math.floor(available * 0.6));
+      const keepEnd = Math.max(4, available - keepStart);
+      return `${base.slice(0, keepStart)}...${base.slice(-keepEnd)}${ext}`;
+    },
+    []
+  );
+
+  // Composition settings per folder (from parent if provided)
+  const compositionByFolder = props.compositionByFolder || {};
+  const [compositionModal, setCompositionModal] = React.useState<{
+    open: boolean;
+    folderId: string | null;
+    width: number;
+    height: number;
+    fps: number;
+  }>({ open: false, folderId: null, width: 1920, height: 1080, fps: 24 });
+
+  const onPanelDragOver = (e: React.DragEvent) => {
+    if (mode !== "composite") return;
+    e.preventDefault();
+  };
+
+  const onPanelDrop = async (e: React.DragEvent) => {
+    if (mode !== "composite") return;
+    e.preventDefault();
+    e.stopPropagation();
+    // If dragging an existing asset out of a folder, move to root
+    const payload = e.dataTransfer.getData("application/x-asset-id");
+    if (payload) {
+      try {
+        const data = JSON.parse(payload) as {
+          source: "root" | "folder";
+          folderId?: string;
+          index: number;
+        };
+        if (data.source === "folder" && data.folderId) {
+          setAssetsByFolder((prev) => {
+            const list = [...(prev[data.folderId!] || [])];
+            const [moved] = list.splice(data.index, 1);
+            const next = { ...prev, [data.folderId!]: list } as Record<
+              string,
+              AssetItem[]
+            >;
+            if (moved) setRootAssets((ra) => [...ra, moved]);
+            return next;
+          });
+          return;
+        }
+      } catch {}
+    }
+    // Files dropped onto panel → add to root assets
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length === 0) return;
+    const additions: AssetItem[] = files.map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: file.name,
+      url: URL.createObjectURL(file),
+      file,
+    }));
+    setRootAssets((prev) => [...prev, ...additions]);
+  };
+
+  const onFolderDragOver = (e: React.DragEvent) => {
+    if (mode !== "composite") return;
+    e.preventDefault();
+  };
+
+  const onFolderDrop = (folderId: string, e: React.DragEvent) => {
+    if (mode !== "composite") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const payload = e.dataTransfer.getData("application/x-asset-id");
+    if (payload) {
+      try {
+        const data = JSON.parse(payload) as {
+          source: "root" | "folder";
+          folderId?: string;
+          index: number;
+        };
+        if (data.source === "root") {
+          setRootAssets((prev) => {
+            const list = [...prev];
+            const [moved] = list.splice(data.index, 1);
+            if (moved) {
+              setAssetsByFolder((pf) => {
+                const items = pf[folderId] ? [...pf[folderId]] : [];
+                if (!items.find((it) => it.id === moved.id)) {
+                  items.push(moved);
+                }
+                return { ...pf, [folderId]: items };
+              });
+              // Only notify parent if this folder is a Composition
+              if (compositionByFolder[folderId]) {
+                setTimeout(
+                  () => props.onFolderReceiveAssets?.(folderId, [moved]),
+                  0
+                );
+              }
+            }
+            return list;
+          });
+          return;
+        }
+        if (data.source === "folder" && data.folderId) {
+          setAssetsByFolder((prev) => {
+            const from = [...(prev[data.folderId!] || [])];
+            const [moved] = from.splice(data.index, 1);
+            const to = prev[folderId] ? [...prev[folderId]] : [];
+            if (moved && !to.find((it) => it.id === moved.id)) to.push(moved);
+            return { ...prev, [data.folderId!]: from, [folderId]: to };
+          });
+          return;
+        }
+      } catch {}
+    }
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length === 0) return;
+    const additions: AssetItem[] = files.map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: file.name,
+      url: URL.createObjectURL(file),
+      file,
+    }));
+    setAssetsByFolder((prev) => {
+      const items = prev[folderId] ? [...prev[folderId]] : [];
+      // De-dupe by id
+      const nextItems = [...items];
+      additions.forEach((a) => {
+        if (!nextItems.find((it) => it.id === a.id)) nextItems.push(a);
+      });
+      return { ...prev, [folderId]: nextItems };
+    });
+    // Notify parent ONLY if this folder has a Composition defined
+    if (compositionByFolder[folderId]) {
+      setTimeout(() => props.onFolderReceiveAssets?.(folderId, additions), 0);
+    }
+  };
+
   return (
-    <div className="w-80 bg-gray-800 border-l border-gray-700 p-4 flex flex-col">
+    <div
+      className="w-80 bg-gray-800 border-l border-gray-700 p-4 flex flex-col"
+      onDragOver={onPanelDragOver}
+      onDrop={onPanelDrop}
+    >
       <div className="flex-shrink-0">
         {mode === "storyboard" && (
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-lg font-semibold">Folders</h3>
             <div className="flex items-center gap-2">
-              <Button size="icon" variant="ghost" onClick={addFolder} className="w-8 h-8" title="Add Frame">
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={addFolder}
+                className="w-8 h-8"
+                title="Add Frame"
+              >
                 <Plus className="w-5 h-5" />
               </Button>
               <Button
@@ -106,55 +329,111 @@ export default function LayersPanel(props: LayersPanelProps) {
           </div>
         )}
 
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-base font-semibold text-gray-200">Layers</h2>
-          <div className="flex items-center gap-2">
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => selectedLayerId && handleAddLayer(selectedLayerId)}
-              className="w-8 h-8"
-              title="Add Layer"
-            >
-              <Plus className="w-5 h-5" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => {
-                if (!selectedLayerId) return;
-                // Deletion of extra layers is handled by the parent via state updates
-                // Parent already listens to selectedLayerId for deletions
-              }}
-              className="w-8 h-8 text-red-500 hover:text-red-400"
-              disabled={!selectedLayerId}
-              title="Delete Layer"
-            >
-              <Trash2 className="w-5 h-5" />
-            </Button>
+        <div className="mb-2">
+          <h2 className="text-base font-semibold text-gray-200">
+            {mode === "composite" ? "Assets" : "Layers"}
+          </h2>
+          {mode === "composite" && (
+            <div className="mt-2">
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={addFolder}
+                className="w-8 h-8"
+                title="New Folder"
+              >
+                <Folder className="w-5 h-5" />
+              </Button>
+            </div>
+          )}
+          <div className="flex items-center gap-2 mt-2">
+            {mode !== "composite" && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() =>
+                  selectedLayerId && handleAddLayer(selectedLayerId)
+                }
+                className="w-8 h-8"
+                title="Add Layer"
+              >
+                <Plus className="w-5 h-5" />
+              </Button>
+            )}
+            {mode !== "composite" && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => {
+                  if (!selectedLayerId) return;
+                }}
+                className="w-8 h-8 text-red-500 hover:text-red-400"
+                disabled={!selectedLayerId}
+                title="Delete Layer"
+              >
+                <Trash2 className="w-5 h-5" />
+              </Button>
+            )}
           </div>
         </div>
 
         <div className="mb-2" />
 
-        {/* Opacity slider for selected layer */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm font-medium">
-            <Label htmlFor="opacity-slider">Opacity</Label>
-            <span className="text-gray-300">
-              {Math.round((selectedLayerId ? layerOpacities[selectedLayerId] ?? 1 : 1) * 100)}%
-            </span>
+        {mode === "composite" && rootAssets.length > 0 && (
+          <div className="mb-3 space-y-1">
+            {rootAssets.map((a, idx) => (
+              <div
+                key={a.id}
+                className="flex items-center gap-2 bg-gray-700/80 hover:bg-gray-600 rounded px-2 py-1 text-xs text-gray-100"
+                draggable
+                onDragStart={(e) =>
+                  e.dataTransfer.setData(
+                    "application/x-asset-id",
+                    JSON.stringify({ source: "root", index: idx })
+                  )
+                }
+              >
+                <span className="truncate flex-1">
+                  {formatDisplayName(a.name)}
+                </span>
+              </div>
+            ))}
           </div>
-          <Slider
-            id="opacity-slider"
-            value={[(selectedLayerId ? layerOpacities[selectedLayerId] ?? 1 : 1) * 100]}
-            onValueChange={([v]) => selectedLayerId && setLayerOpacities((prev) => ({ ...prev, [selectedLayerId]: v / 100 }))}
-            min={0}
-            max={100}
-            step={1}
-            className="w-full"
-          />
-        </div>
+        )}
+
+        {/* Opacity controls are not applicable to the Assets panel (composite mode) */}
+        {mode !== "composite" && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm font-medium">
+              <Label htmlFor="opacity-slider">Opacity</Label>
+              <span className="text-gray-300">
+                {Math.round(
+                  (selectedLayerId ? layerOpacities[selectedLayerId] ?? 1 : 1) *
+                    100
+                )}
+                %
+              </span>
+            </div>
+            <Slider
+              id="opacity-slider"
+              value={[
+                (selectedLayerId ? layerOpacities[selectedLayerId] ?? 1 : 1) *
+                  100,
+              ]}
+              onValueChange={([v]) =>
+                selectedLayerId &&
+                setLayerOpacities((prev) => ({
+                  ...prev,
+                  [selectedLayerId]: v / 100,
+                }))
+              }
+              min={0}
+              max={100}
+              step={1}
+              className="w-full"
+            />
+          </div>
+        )}
       </div>
 
       <div className="border-b border-gray-600 my-4 flex-shrink-0" />
@@ -167,11 +446,23 @@ export default function LayersPanel(props: LayersPanelProps) {
                 className={`flex items-center p-2 border-b border-gray-600 rounded-t ${
                   selectedLayerId === folder.id ? "bg-blue-600 text-white" : ""
                 }`}
+                onDragOver={onFolderDragOver}
+                onDrop={(e) => onFolderDrop(folder.id, e)}
               >
-                <div className="flex items-center gap-2 cursor-pointer" onClick={() => toggleFolder(folder.id)}>
-                  {openFolders[folder.id] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                <div
+                  className="flex items-center gap-2 cursor-pointer"
+                  onClick={() => toggleFolder(folder.id)}
+                >
+                  {openFolders[folder.id] ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
                 </div>
-                <div className="flex items-center gap-2 cursor-pointer ml-2" onClick={() => handleSidebarSelection(folder.id)}>
+                <div
+                  className="flex items-center gap-2 cursor-pointer ml-2"
+                  onClick={() => handleSidebarSelection(folder.id)}
+                >
                   <Folder className="w-4 h-4 text-gray-400" />
                   {editingFolderId === folder.id ? (
                     <input
@@ -179,13 +470,19 @@ export default function LayersPanel(props: LayersPanelProps) {
                       value={editingFolderValue}
                       onChange={(e) => setEditingFolderValue(e.target.value)}
                       onBlur={() => {
-                        setFolderNames((prev) => ({ ...prev, [folder.id]: editingFolderValue || folder.label }));
+                        setFolderNames((prev) => ({
+                          ...prev,
+                          [folder.id]: editingFolderValue || folder.label,
+                        }));
                         setEditingFolderId(null);
-                        setEditingFolderValue("")
+                        setEditingFolderValue("");
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
-                          setFolderNames((prev) => ({ ...prev, [folder.id]: editingFolderValue || folder.label }));
+                          setFolderNames((prev) => ({
+                            ...prev,
+                            [folder.id]: editingFolderValue || folder.label,
+                          }));
                           setEditingFolderId(null);
                           setEditingFolderValue("");
                         }
@@ -197,23 +494,79 @@ export default function LayersPanel(props: LayersPanelProps) {
                       autoFocus
                     />
                   ) : (
-                    <span className="font-medium text-xs">{folderNames[folder.id] || folder.label}</span>
+                    <span className="font-medium text-xs">
+                      {folderNames[folder.id] || folder.label}
+                    </span>
+                  )}
+                  {compositionByFolder[folder.id] && (
+                    <span className="ml-2 text-[9px] px-1 py-0.5 rounded bg-gray-700/70 text-gray-300 uppercase tracking-wide">
+                      Composition
+                    </span>
                   )}
                 </div>
                 <div className="flex items-center gap-1 ml-auto">
                   {sidebarFolders.length > 1 && (
                     <>
-                      {sidebarFolders.findIndex((f) => f.id === folder.id) > 0 && (
-                        <button className="text-gray-400 hover:text-white px-1" title="Move Up" onClick={() => moveFrameFolderUp(folder.id)}>
+                      {sidebarFolders.findIndex((f) => f.id === folder.id) >
+                        0 && (
+                        <button
+                          className="text-gray-400 hover:text-white px-1"
+                          title="Move Up"
+                          onClick={() => moveFrameFolderUp(folder.id)}
+                        >
                           <ChevronUp className="w-4 h-4" />
                         </button>
                       )}
-                      {sidebarFolders.findIndex((f) => f.id === folder.id) < sidebarFolders.length - 1 && (
-                        <button className="text-gray-400 hover:text-white px-1" title="Move Down" onClick={() => moveFrameFolderDown(folder.id)}>
+                      {sidebarFolders.findIndex((f) => f.id === folder.id) <
+                        sidebarFolders.length - 1 && (
+                        <button
+                          className="text-gray-400 hover:text-white px-1"
+                          title="Move Down"
+                          onClick={() => moveFrameFolderDown(folder.id)}
+                        >
                           <ChevronDown className="w-4 h-4" />
                         </button>
                       )}
                     </>
+                  )}
+                  {mode === "composite" && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          className="text-gray-300 hover:text-white px-1"
+                          title="Folder Settings"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setEditingFolderId(folder.id);
+                            setEditingFolderValue(
+                              folderNames[folder.id] || folder.label
+                            );
+                          }}
+                        >
+                          Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            setCompositionModal({
+                              open: true,
+                              folderId: folder.id,
+                              width:
+                                compositionByFolder[folder.id]?.width || 1920,
+                              height:
+                                compositionByFolder[folder.id]?.height || 1080,
+                              fps: compositionByFolder[folder.id]?.fps || 24,
+                            })
+                          }
+                        >
+                          Create Composition
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
                 {mode === "storyboard" && (
@@ -223,7 +576,9 @@ export default function LayersPanel(props: LayersPanelProps) {
                     onClick={(e) => {
                       e.stopPropagation();
                       setEditingFolderId(folder.id);
-                      setEditingFolderValue(folderNames[folder.id] || folder.label);
+                      setEditingFolderValue(
+                        folderNames[folder.id] || folder.label
+                      );
                     }}
                   >
                     <Edit3 className="w-3 h-3" />
@@ -232,92 +587,300 @@ export default function LayersPanel(props: LayersPanelProps) {
               </div>
               {openFolders[folder.id] && (
                 <div className="pl-2 py-2 flex flex-col gap-1 rounded-b">
-                  {(layerOrder[folder.id] || []).map((layerId, layerIndex) => {
-                    const isMain = layerId.endsWith("-main");
-                    const extraIndex = isMain ? -1 : parseInt(layerId.split("-extra-")[1], 10);
-                    const layerName = isMain
-                      ? folder.fileName
-                        ? (folder.fileName.split(".")[0])
-                        : "Untitled.1"
-                      : folderLayers[folder.id]?.[extraIndex] || `Untitled.${extraIndex + 2}`;
-                    return (
-                      <div
-                        key={layerId}
-                        className={`flex items-center justify-between px-3 py-2 rounded cursor-pointer ${
-                          selectedLayerId === layerId ? "bg-blue-600" : "bg-gray-600 hover:bg-gray-500"
-                        }`}
-                        onClick={() => handleSidebarSelection(layerId)}
-                      >
-                        <div className="flex items-center gap-2 flex-1">
-                          <Eye
-                            className={`w-4 h-4 ${layerVisibility[layerId] !== false ? "text-white" : "text-gray-500"}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleVisibility(layerId);
-                            }}
-                          />
-                          {editingLayerName === layerId ? (
-                            <input
-                              value={editingLayerValue}
-                              onChange={(e) => setEditingFolderValue(e.target.value)}
-                              onBlur={() => handleSaveRename(layerId)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleSaveRename(layerId);
-                                if (e.key === "Escape") handleCancelRename();
+                  {mode === "composite" &&
+                    (assetsByFolder[folder.id] || []).length > 0 && (
+                      <div className="px-2 pb-2">
+                        {(assetsByFolder[folder.id] || []).map((a, idx) => (
+                          <div
+                            key={a.id}
+                            className={`flex items-center gap-2 text-xs rounded px-2 py-1 cursor-pointer ${
+                              props.selectedAssetFolderId === folder.id &&
+                              props.selectedAssetIndex === idx
+                                ? "bg-blue-600 text-white"
+                                : "bg-gray-700/60 hover:bg-gray-600 text-gray-200"
+                            }`}
+                            draggable
+                            onDragStart={(e) =>
+                              e.dataTransfer.setData(
+                                "application/x-asset-id",
+                                JSON.stringify({
+                                  source: "folder",
+                                  folderId: folder.id,
+                                  index: idx,
+                                })
+                              )
+                            }
+                            onClick={() =>
+                              props.onSelectCompAsset?.(folder.id, idx)
+                            }
+                          >
+                            {compositionByFolder[folder.id] && (
+                              <span className="inline-flex items-center justify-center rounded bg-gray-800/80 px-1.5 py-0.5 text-[10px] text-gray-300">{`R${
+                                idx + 1
+                              } F1`}</span>
+                            )}
+                            <span className="truncate flex-1">
+                              {formatDisplayName(a.name)}
+                            </span>
+                            {/* Reorder controls (compositing only) */}
+                            <div className="flex items-center gap-1">
+                              <button
+                                className="text-gray-300 hover:text-white disabled:opacity-40"
+                                title="Move Up"
+                                disabled={idx === 0}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAssetsByFolder((prev) => {
+                                    const items = [...(prev[folder.id] || [])];
+                                    const target = Math.max(0, idx - 1);
+                                    const [m] = items.splice(idx, 1);
+                                    items.splice(target, 0, m);
+                                    const next = {
+                                      ...prev,
+                                      [folder.id]: items,
+                                    };
+                                    return next;
+                                  });
+                                  props.onReorderCompAssets?.(
+                                    folder.id,
+                                    idx,
+                                    idx - 1
+                                  );
+                                }}
+                              >
+                                <ChevronUp className="w-3 h-3" />
+                              </button>
+                              <button
+                                className="text-gray-300 hover:text-white disabled:opacity-40"
+                                title="Move Down"
+                                disabled={
+                                  idx ===
+                                  (assetsByFolder[folder.id] || []).length - 1
+                                }
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAssetsByFolder((prev) => {
+                                    const items = [...(prev[folder.id] || [])];
+                                    const target = Math.min(
+                                      items.length - 1,
+                                      idx + 1
+                                    );
+                                    const [m] = items.splice(idx, 1);
+                                    items.splice(target, 0, m);
+                                    const next = {
+                                      ...prev,
+                                      [folder.id]: items,
+                                    };
+                                    return next;
+                                  });
+                                  props.onReorderCompAssets?.(
+                                    folder.id,
+                                    idx,
+                                    idx + 1
+                                  );
+                                }}
+                              >
+                                <ChevronDown className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  {mode !== "composite" &&
+                    (layerOrder[folder.id] || []).map((layerId, layerIndex) => {
+                      const isMain = layerId.endsWith("-main");
+                      const extraIndex = isMain
+                        ? -1
+                        : parseInt(layerId.split("-extra-")[1], 10);
+                      const layerName = isMain
+                        ? folder.fileName
+                          ? folder.fileName.split(".")[0]
+                          : "Untitled.1"
+                        : folderLayers[folder.id]?.[extraIndex] ||
+                          `Untitled.${extraIndex + 2}`;
+                      return (
+                        <div
+                          key={layerId}
+                          className={`flex items-center justify-between px-3 py-2 rounded cursor-pointer ${
+                            selectedLayerId === layerId
+                              ? "bg-blue-600"
+                              : "bg-gray-600 hover:bg-gray-500"
+                          }`}
+                          onClick={() => handleSidebarSelection(layerId)}
+                        >
+                          <div className="flex items-center gap-2 flex-1">
+                            <Eye
+                              className={`w-4 h-4 ${
+                                layerVisibility[layerId] !== false
+                                  ? "text-white"
+                                  : "text-gray-500"
+                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleVisibility(layerId);
                               }}
-                              className="text-sm bg-gray-800 text-white px-2 py-1 rounded border border-gray-600 flex-1"
-                              autoFocus
                             />
-                          ) : (
-                            <span className="text-sm text-white flex-1">{layerName}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Edit3
-                            className="w-3 h-3 text-gray-400 hover:text-white cursor-pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Parent handles renaming; we trigger with current label
-                              
-                            }}
-                          />
-                          <div className="text-xs text-gray-300">{Math.round((layerOpacities[layerId] ?? 1) * 100)}%</div>
-                          <div className="flex flex-col">
-                            <button
-                              className="text-gray-400 hover:text-white disabled:opacity-25"
-                              title="Move Up"
-                              disabled={layerIndex === 0}
+                            {editingLayerName === layerId ? (
+                              <input
+                                value={editingLayerValue}
+                                onChange={(e) =>
+                                  setEditingFolderValue(e.target.value)
+                                }
+                                onBlur={() => handleSaveRename(layerId)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter")
+                                    handleSaveRename(layerId);
+                                  if (e.key === "Escape") handleCancelRename();
+                                }}
+                                className="text-sm bg-gray-800 text-white px-2 py-1 rounded border border-gray-600 flex-1"
+                                autoFocus
+                              />
+                            ) : (
+                              <span className="text-sm text-white flex-1">
+                                {layerName}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Edit3
+                              className="w-3 h-3 text-gray-400 hover:text-white cursor-pointer"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                moveLayer(folder.id, layerId, "up");
+                                // Parent handles renaming; we trigger with current label
                               }}
-                            >
-                              <ChevronUp className="w-3 h-3" />
-                            </button>
-                            <button
-                              className="text-gray-400 hover:text-white disabled:opacity-25"
-                              title="Move Down"
-                              disabled={layerIndex === (layerOrder[folder.id]?.length || 0) - 1}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                moveLayer(folder.id, layerId, "down");
-                              }}
-                            >
-                              <ChevronDown className="w-3 h-3" />
-                            </button>
+                            />
+                            <div className="text-xs text-gray-300">
+                              {Math.round((layerOpacities[layerId] ?? 1) * 100)}
+                              %
+                            </div>
+                            <div className="flex flex-col">
+                              <button
+                                className="text-gray-400 hover:text-white disabled:opacity-25"
+                                title="Move Up"
+                                disabled={layerIndex === 0}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  moveLayer(folder.id, layerId, "up");
+                                }}
+                              >
+                                <ChevronUp className="w-3 h-3" />
+                              </button>
+                              <button
+                                className="text-gray-400 hover:text-white disabled:opacity-25"
+                                title="Move Down"
+                                disabled={
+                                  layerIndex ===
+                                  (layerOrder[folder.id]?.length || 0) - 1
+                                }
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  moveLayer(folder.id, layerId, "down");
+                                }}
+                              >
+                                <ChevronDown className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
                 </div>
               )}
             </div>
           ))}
         </div>
       </ScrollArea>
+
+      {/* Composition Settings Modal */}
+      <Dialog
+        open={compositionModal.open}
+        onOpenChange={(open) => setCompositionModal((s) => ({ ...s, open }))}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Composition Settings</DialogTitle>
+          </DialogHeader>
+          <p className="sr-only" id="composition-desc">
+            Define the width, height and frame rate for this composition folder.
+          </p>
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <div className="col-span-1">
+              <Label htmlFor="comp-width">Width</Label>
+              <Input
+                id="comp-width"
+                type="number"
+                value={compositionModal.width}
+                onChange={(e) =>
+                  setCompositionModal((s) => ({
+                    ...s,
+                    width: parseInt(e.target.value || "0", 10) || 0,
+                  }))
+                }
+              />
+            </div>
+            <div className="col-span-1">
+              <Label htmlFor="comp-height">Height</Label>
+              <Input
+                id="comp-height"
+                type="number"
+                value={compositionModal.height}
+                onChange={(e) =>
+                  setCompositionModal((s) => ({
+                    ...s,
+                    height: parseInt(e.target.value || "0", 10) || 0,
+                  }))
+                }
+              />
+            </div>
+            <div className="col-span-2">
+              <Label htmlFor="comp-fps">Frame Rate</Label>
+              <Input
+                id="comp-fps"
+                type="number"
+                value={compositionModal.fps}
+                onChange={(e) =>
+                  setCompositionModal((s) => ({
+                    ...s,
+                    fps: parseInt(e.target.value || "0", 10) || 0,
+                  }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter aria-describedby="composition-desc">
+            <Button
+              onClick={() => {
+                if (!compositionModal.folderId) return;
+                const folderId = compositionModal.folderId!;
+                props.onSetComposition?.(folderId, {
+                  width: compositionModal.width,
+                  height: compositionModal.height,
+                  fps: compositionModal.fps,
+                });
+                // If this folder already has assets, materialize ALL of them to R1 F1, R2 F1, ... (in order)
+                if (mode === "composite") {
+                  const items = assetsByFolder[folderId] || [];
+                  if (items.length > 0) {
+                    console.log(
+                      "[Composite] Create Composition OK, materialize all assets",
+                      { folderId, count: items.length }
+                    );
+                    items.forEach((asset, index) => {
+                      setTimeout(() => {
+                        props.onFolderReceiveAssets?.(folderId, [asset]);
+                      }, index * 5);
+                    });
+                  }
+                }
+                setCompositionModal((s) => ({ ...s, open: false }));
+              }}
+            >
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
-

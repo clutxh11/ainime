@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "puppeteer:version": "node -e \"console.log(require('puppeteer/package.json').version)\"",
+    "demo:screenshot": "curl -s -X POST http://localhost:3000/api/puppeteer/screenshot -H 'Content-Type: application/json' -d '{\"url\":\"https://example.com\",\"type\":\"png\"}' --output screenshot.png && open screenshot.png",
+    "demo:html": "curl -s -X POST http://localhost:3000/api/puppeteer/html -H 'Content-Type: application/json' -d '{\"html\":\"<html><body><h1>Hello</h1></body></html>\"}' --output snippet.png && open snippet.png"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.1.2",
@@ -61,12 +64,14 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/puppeteer": "^7.0.4",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "13.5.11",
     "postcss": "^8",
+    "puppeteer": "^24.16.1",
     "tailwindcss": "^3.3.0",
     "typescript": "^5"
   }

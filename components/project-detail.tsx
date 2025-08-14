@@ -272,7 +272,9 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
   const [newSequenceCode, setNewSequenceCode] = useState("");
   const [isCreatingShot, setIsCreatingShot] = useState<string | null>(null); // sequenceId
   const [newShotCode, setNewShotCode] = useState("");
-  const [compositionExistsByChapter, setCompositionExistsByChapter] = useState<Record<string, boolean>>({});
+  const [compositionExistsByChapter, setCompositionExistsByChapter] = useState<
+    Record<string, boolean>
+  >({});
 
   useEffect(() => {
     const loadCompositions = async () => {
@@ -2742,3 +2744,5 @@ export function ProjectDetail({ onViewChange, projectId }: ProjectDetailProps) {
     </div>
   );
 }
+
+export default ProjectDetail;

@@ -1,38 +1,19 @@
 "use client";
 
-import { useState, lazy, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import AnimationEditor from "@/components/animation-editor";
+import CreatorHub from "@/components/creator-hub";
+import Calendar from "@/components/calendar";
+import VideoPlayer from "@/components/video-player";
+import MangaViewer from "@/components/manga-viewer";
+import ContentExplorer from "@/components/content-explorer";
+import ProjectDashboard from "@/components/project-dashboard";
+import ProjectDetail from "@/components/project-detail";
 import type { CurrentView, ContentItem, Project } from "@/types";
 import { ViewerHub } from "@/components/viewer-hub";
 
-// Lazy load components to improve initial bundle size
-const CreatorHub = lazy(() =>
-  import("@/components/creator-hub").then((m) => ({ default: m.CreatorHub }))
-);
-const Calendar = lazy(() =>
-  import("@/components/calendar").then((m) => ({ default: m.Calendar }))
-);
-const VideoPlayer = lazy(() =>
-  import("@/components/video-player").then((m) => ({ default: m.VideoPlayer }))
-);
-const MangaViewer = lazy(() =>
-  import("@/components/manga-viewer").then((m) => ({ default: m.MangaViewer }))
-);
-const ContentExplorer = lazy(() => import("@/components/content-explorer"));
-const ProjectDashboard = lazy(() =>
-  import("@/components/project-dashboard").then((m) => ({
-    default: m.ProjectDashboard,
-  }))
-);
-const AnimationEditor = lazy(() =>
-  import("@/components/animation-editor").then((m) => ({
-    default: m.AnimationEditor,
-  }))
-);
-const ProjectDetail = lazy(() =>
-  import("@/components/project-detail").then((m) => ({
-    default: m.ProjectDetail,
-  }))
-);
+// Note: using direct imports during debugging to avoid lazy resolution issues
 
 // Loading component for better UX
 function LoadingSpinner() {
@@ -66,11 +47,48 @@ export default function Home() {
     | undefined
   >(undefined);
 
+  // Allow booting specific views via query string (e.g. ?view=animation-editor&mode=storyboard&sceneName=Test&canvasWidth=1280&canvasHeight=720&frameRate=24)
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const viewParam = (searchParams.get("view") || "").toLowerCase();
+    const allowedViews: CurrentView[] = [
+      "viewer",
+      "creator",
+      "calendar",
+      "video",
+      "manga",
+      "content-explorer",
+      "project-dashboard",
+      "project-detail",
+      "animation-editor",
+      "compositing-editor",
+    ];
+    if (allowedViews.includes(viewParam as CurrentView)) {
+      setCurrentView(viewParam as CurrentView);
+    }
+
+    const sceneName = searchParams.get("sceneName");
+    const w = Number(searchParams.get("canvasWidth") || "");
+    const h = Number(searchParams.get("canvasHeight") || "");
+    const fps = Number(searchParams.get("frameRate") || "");
+    const mode = (searchParams.get("mode") as any) || undefined;
+    if (sceneName && w && h && fps) {
+      setSceneSettings({
+        sceneName,
+        canvasWidth: w,
+        canvasHeight: h,
+        frameRate: fps,
+        ...(mode ? { mode } : {}),
+      } as any);
+    }
+  }, []);
+
   const handleViewChange = (
     view: CurrentView,
     content?: ContentItem | Project | any,
     category?: string
   ) => {
+    //
     setCurrentView(view);
     if (content) {
       // Check if content contains scene settings
@@ -80,6 +98,7 @@ export default function Home() {
         content.canvasHeight &&
         content.frameRate
       ) {
+        //
         setSceneSettings(content);
       } else {
         setSelectedContent(content);
@@ -151,11 +170,12 @@ export default function Home() {
       case "animation-editor":
         return (
           <Suspense fallback={<LoadingSpinner />}>
+            {/* */}
             <AnimationEditor
               onViewChange={handleViewChange}
               sceneSettings={sceneSettings}
               // Pass through mode if provided in sceneSettings
-              mode={(sceneSettings as any)?.mode || 'animate'}
+              mode={(sceneSettings as any)?.mode || "animate"}
             />
           </Suspense>
         );
@@ -167,22 +187,24 @@ export default function Home() {
               onViewChange={handleViewChange}
               // Boot the editor in composite mode with sensible defaults.
               // The chapter-level button passes { projectId, chapterId } as content.
-              sceneSettings={{
-                sceneName:
-                  (selectedContent as any)?.chapterTitle ||
-                  (sceneSettings as any)?.sceneName ||
-                  "Composition",
-                canvasWidth: 1920,
-                canvasHeight: 1080,
-                frameRate: 24,
-                // Prefer IDs passed via onViewChange from Project Details; fall back to any existing sceneSettings
-                projectId:
-                  (selectedContent as any)?.projectId ||
-                  (sceneSettings as any)?.projectId,
-                chapterId:
-                  (selectedContent as any)?.chapterId ||
-                  (sceneSettings as any)?.chapterId,
-              } as any}
+              sceneSettings={
+                {
+                  sceneName:
+                    (selectedContent as any)?.chapterTitle ||
+                    (sceneSettings as any)?.sceneName ||
+                    "Composition",
+                  canvasWidth: 1920,
+                  canvasHeight: 1080,
+                  frameRate: 24,
+                  // Prefer IDs passed via onViewChange from Project Details; fall back to any existing sceneSettings
+                  projectId:
+                    (selectedContent as any)?.projectId ||
+                    (sceneSettings as any)?.projectId,
+                  chapterId:
+                    (selectedContent as any)?.chapterId ||
+                    (sceneSettings as any)?.chapterId,
+                } as any
+              }
               mode="composite"
             />
           </Suspense>

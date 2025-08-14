@@ -358,3 +358,5 @@ export function Calendar({ onViewChange }: CalendarProps) {
     </div>
   );
 }
+
+export default Calendar;

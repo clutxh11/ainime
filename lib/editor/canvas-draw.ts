@@ -110,6 +110,28 @@ export function drawFrameImpl(ctx: CanvasRenderingContext2D, args: DrawArgs) {
     ctx.drawImage(img, x, y, width, height);
   };
 
+  const loadAndDraw = (src: string) => {
+    const signedMarker = "/storage/v1/object/sign/";
+    if (src.includes(signedMarker)) {
+      // Avoid triggering a network request for expiring signed URLs.
+      // A higher-level preload swaps these to blob URLs when available.
+      return;
+    }
+    let img = imageCache[src];
+    if (img) {
+      drawImageCentered(img);
+      return;
+    }
+    const loader = new Image();
+    loader.crossOrigin = "anonymous";
+    loader.onload = () => {
+      imageCache[src] = loader;
+      drawImageCentered(loader);
+    };
+    loader.onerror = () => {};
+    loader.src = src;
+  };
+
   const framesForIndex = drawingFrames.filter(
     (df) =>
       frameNumber >= df.frameIndex &&
@@ -131,8 +153,23 @@ export function drawFrameImpl(ctx: CanvasRenderingContext2D, args: DrawArgs) {
           if (layerVisibility[layerId] === false) continue;
           if (layerId.endsWith("-main") && pf.imageUrl) {
             const src = pf.imageUrl;
-            const img = imageCache[src];
-            if (img) drawImageCentered(img);
+            const signedMarker = "/storage/v1/object/sign/";
+            if (src.includes(signedMarker)) {
+              // Skip loading signed URLs here; rely on preload swap to blob URLs.
+              continue;
+            }
+            let img = imageCache[src];
+            if (img) {
+              drawImageCentered(img);
+            } else {
+              const loader = new Image();
+              loader.crossOrigin = "anonymous";
+              loader.onload = () => {
+                imageCache[src] = loader;
+                drawImageCentered(loader);
+              };
+              loader.src = src;
+            }
           }
           const strokes = layerStrokes[layerId];
           if (strokes) {
@@ -158,12 +195,15 @@ export function drawFrameImpl(ctx: CanvasRenderingContext2D, args: DrawArgs) {
   for (const frame of framesForIndex) {
     const folderId = `${frame.rowId}-${frame.frameIndex}`;
     const orderedLayers = layerOrder[folderId] || [];
+    // Fallback: if no layer order yet but imageUrl exists, draw the frame image
+    if (orderedLayers.length === 0 && frame.imageUrl) {
+      loadAndDraw(frame.imageUrl);
+    }
     for (const layerId of orderedLayers) {
       if (layerVisibility[layerId] === false) continue;
       ctx.globalAlpha = layerOpacities[layerId] ?? 1;
       if (layerId.endsWith("-main") && frame.imageUrl) {
-        const img = imageCache[frame.imageUrl];
-        if (img) drawImageCentered(img);
+        loadAndDraw(frame.imageUrl);
       }
       const strokes = layerStrokes[layerId];
       if (strokes) {

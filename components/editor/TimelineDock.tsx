@@ -27,6 +27,9 @@ interface Props {
   onDeleteFrame: () => void;
   onDeleteRow: () => void;
   onAddRow: () => void;
+  hideEditButtons?: boolean;
+  suppressFrames?: boolean;
+  activeCompositionLabel?: string;
 }
 
 export default function TimelineDock(props: Props) {
@@ -36,6 +39,7 @@ export default function TimelineDock(props: Props) {
       <TimelineGrid
         frames={frameCount}
         setFrames={setFrameCount}
+        activeCompositionLabel={(props as any).activeCompositionLabel}
         {...(rest as any)}
       />
     </div>
