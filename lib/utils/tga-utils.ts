@@ -1,4 +1,6 @@
-import TGA from "tga-js";
+// Using UTIF instead of tga-js for better TGA support
+// @ts-ignore
+import UTIF from 'utif';
 
 export interface TGAImageData {
   width: number;
@@ -32,25 +34,29 @@ export async function decodeTGA(file: File): Promise<TGAImageData> {
           return;
         }
 
-        const tga = new TGA(buffer);
-
-        // Check if TGA object was properly initialized
-        if (!tga || typeof tga.getImageData !== "function") {
-          reject(new Error("Invalid TGA decoder instance"));
+        // Use UTIF to decode TGA
+        const uint8Array = new Uint8Array(buffer);
+        const ifds = UTIF.decode(uint8Array);
+        
+        if (!ifds || ifds.length === 0) {
+          reject(new Error("UTIF could not decode TGA file"));
           return;
         }
-
-        const imageData = tga.getImageData();
-
-        if (
-          !imageData ||
-          !imageData.data ||
-          imageData.width <= 0 ||
-          imageData.height <= 0
-        ) {
-          reject(new Error("Invalid TGA data structure"));
+        
+        const page = ifds[0];
+        UTIF.decodeImage(uint8Array, page);
+        
+        if (!page.data || page.width <= 0 || page.height <= 0) {
+          reject(new Error("Invalid TGA data after UTIF decode"));
           return;
         }
+        
+        // Convert UTIF output to our expected format
+        const imageData: TGAImageData = {
+          width: page.width,
+          height: page.height,
+          data: new Uint8ClampedArray(page.data)
+        };
 
         resolve(imageData);
       } catch (error: any) {
@@ -204,10 +210,9 @@ export async function processTGAFiles(
         results.push({ file, blobUrl });
       } catch (error) {
         console.error(`Failed to process TGA file ${file.name}:`, error);
-        // Fallback: try to use the file directly (might work in some browsers)
-        console.log(`[TGA Utils] Fallback to direct file for: ${file.name}`);
-        const blobUrl = URL.createObjectURL(file);
-        results.push({ file, blobUrl });
+        // Skip the file since we can't decode it and browsers can't display TGA directly
+        console.log(`[TGA Utils] Skipping unsupported TGA file: ${file.name}`);
+        // Don't add the file to results - it won't work anyway
       }
     } else {
       // For non-TGA files, create blob URL directly
