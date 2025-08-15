@@ -2938,8 +2938,27 @@ export function AnimationEditor({
                     }
                     return [...prevRows, ...additions];
                   });
-                  const after = prev.concat([
-                    {
+                  // Create drawing frames for the asset(s)
+                  const newFrames = [];
+                  
+                  if (first.isSequence && first.sequenceFrames) {
+                    // For sequence assets, create a frame for each sequence frame
+                    for (let i = 0; i < first.sequenceFrames.length; i++) {
+                      const seqFrame = first.sequenceFrames[i];
+                      newFrames.push({
+                        rowId,
+                        frameIndex: i, // F1, F2, F3, etc.
+                        length: 1,
+                        imageUrl: seqFrame.blobUrl,
+                        fileName: `${first.name} [Frame ${i + 1}]`,
+                        folderId,
+                        sequenceIndex: i,
+                        isSequenceFrame: true,
+                      });
+                    }
+                  } else {
+                    // For regular assets, create a single frame
+                    newFrames.push({
                       rowId,
                       frameIndex: adjustedFrameIndex,
                       length: 1,
@@ -2949,8 +2968,10 @@ export function AnimationEditor({
                           : first.url,
                       fileName: first.name,
                       folderId,
-                    },
-                  ]);
+                    });
+                  }
+                  
+                  const after = prev.concat(newFrames);
                   console.log("[Composite] materialized", { after });
                   return after;
                 }),

@@ -100,7 +100,14 @@ export interface LayersPanelProps {
   ) => void;
   onFolderReceiveAssets?: (
     folderId: string,
-    assets: { id: string; name: string; url: string; file?: File }[]
+    assets: { 
+      id: string; 
+      name: string; 
+      url: string; 
+      file?: File; 
+      isSequence?: boolean;
+      sequenceFrames?: { file: File; blobUrl: string }[];
+    }[]
   ) => void;
   // Compositing only: notify when a specific asset in a folder is clicked
   onSelectCompAsset?: (folderId: string, index: number) => void;
@@ -796,9 +803,11 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
                             }
                           >
                             {compositionByFolder[folder.id] && (
-                              <span className="inline-flex items-center justify-center rounded bg-gray-800/80 px-1.5 py-0.5 text-[10px] text-gray-300">{`R${
-                                idx + 1
-                              } F1`}</span>
+                              <span className="inline-flex items-center justify-center rounded bg-gray-800/80 px-1.5 py-0.5 text-[10px] text-gray-300">
+                                {a.isSequence && a.sequenceFrames
+                                  ? `R${idx + 1} F1:${a.sequenceFrames.length}`
+                                  : `R${idx + 1} F1`}
+                              </span>
                             )}
                             <span className="truncate flex-1 flex items-center gap-1">
                               {a.isSequence && (
