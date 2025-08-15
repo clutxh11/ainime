@@ -380,6 +380,22 @@ export function AnimationEditor({
   const [isCreatingSet, setIsCreatingSet] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
+  // Helper function to find composition folder ID from timeline cell ID
+  const findCompositionFolder = (layerId: string): string | null => {
+    if (!layerId) return null;
+    // Extract row and frame from layerId (e.g., "row-2-1" -> row: "row-2", frame: 1)
+    const parts = layerId.split("-");
+    if (parts.length < 3) return null;
+    const rowId = `${parts[0]}-${parts[1]}`;
+    const frameIndex = parseInt(parts[2], 10);
+    
+    // Find a drawing frame with this rowId and frameIndex
+    const matchingFrame = drawingFrames.find(
+      (df) => df.rowId === rowId && df.frameIndex === frameIndex
+    );
+    return matchingFrame?.folderId || null;
+  };
+
   const [rows, setRows] = useState([
     { id: "row-1", name: "Row1" },
     { id: "row-2", name: "Row2" },
@@ -419,7 +435,7 @@ export function AnimationEditor({
   // Draw compositing canvas: render all assets for the active composition in row order (stacked)
   useEffect(() => {
     if (mode !== "composite") return;
-    const activeFolderId = getActiveFrameFolderId(selectedLayerId || "");
+    const activeFolderId = findCompositionFolder(selectedLayerId || "");
     if (!activeFolderId) return;
     const comp = compositionByFolder[activeFolderId];
     if (!comp || !compCanvasRef.current) return;
@@ -1678,7 +1694,7 @@ export function AnimationEditor({
   });
 
   const handleAddLayer = (activeLayerId: string) => {
-    const folderId = getActiveFrameFolderId(activeLayerId);
+    const folderId = findCompositionFolder(activeLayerId);
     if (!folderId) return;
 
     const newLayerIndex = (folderLayers[folderId] || []).length;
@@ -1713,7 +1729,7 @@ export function AnimationEditor({
 
   const handleDeleteFrame = () => {
     if (!selectedLayerId) return;
-    const frameFolderId = getActiveFrameFolderId(selectedLayerId);
+    const frameFolderId = findCompositionFolder(selectedLayerId);
     if (!frameFolderId) return;
     // useFolders hook provides delete by folder id
     (deleteFrameByFolderId as any)(frameFolderId);
@@ -1903,7 +1919,7 @@ export function AnimationEditor({
 
     // In compositing mode, use the LayersPanel's processAndAddFiles
     if (mode === "composite" && layersPanelRef.current) {
-      const activeFolderId = getActiveFrameFolderId(selectedLayerId || "");
+      const activeFolderId = findCompositionFolder(selectedLayerId || "");
 
       const sequence = detectImageSequence(files);
       if (sequence && sequence.frames.length >= 2) {
@@ -2066,7 +2082,7 @@ export function AnimationEditor({
                 const file = e.dataTransfer?.files?.[0];
                 if (!file || !file.type.startsWith("image/")) return;
                 // Determine current folder from selectedLayerId
-                const folderId = getActiveFrameFolderId(selectedLayerId || "");
+                const folderId = findCompositionFolder(selectedLayerId || "");
                 if (!folderId) {
                   // If none selected, create a new folder and use its main layer
                   const targetRowId = selectedRow || "row-1";
@@ -2104,7 +2120,7 @@ export function AnimationEditor({
                 }
 
                 const activeFolderId =
-                  getActiveFrameFolderId(selectedLayerId || "") ||
+                  findCompositionFolder(selectedLayerId || "") ||
                   (() => {
                     const targetRowId = selectedRow || "row-1";
                     const rowFrames = drawingFrames.filter(
@@ -2323,7 +2339,7 @@ export function AnimationEditor({
             {/* Compositing: show blank composition canvas only after a folder is marked as a composition */}
             {mode === "composite" &&
               (() => {
-                const activeFolderId = getActiveFrameFolderId(
+                const activeFolderId = findCompositionFolder(
                   selectedLayerId || ""
                 );
                 const comp = activeFolderId
@@ -2709,7 +2725,7 @@ export function AnimationEditor({
               drawingFrames={
                 (mode === "composite"
                   ? (() => {
-                      const activeFolderId = getActiveFrameFolderId(
+                      const activeFolderId = findCompositionFolder(
                         selectedLayerId || ""
                       );
                       if (!activeFolderId) return [] as any[];
@@ -2722,7 +2738,7 @@ export function AnimationEditor({
               }
               activeCompositionLabel={(() => {
                 if (mode !== "composite") return "";
-                const activeFolderId = getActiveFrameFolderId(
+                const activeFolderId = findCompositionFolder(
                   selectedLayerId || ""
                 );
                 if (!activeFolderId) return "";
@@ -2742,24 +2758,23 @@ export function AnimationEditor({
               selectedLayerId={selectedLayerId}
               setSelectedLayerId={(val: any) => {
                 if (mode === "composite") {
-                  const currentActiveFolderId = getActiveFrameFolderId(
-                    selectedLayerId || ""
-                  );
-                  const newActiveFolderId = getActiveFrameFolderId(val || "");
+                  const currentFolderId = findCompositionFolder(selectedLayerId || "");
+                  const newFolderId = findCompositionFolder(val || "");
 
                   // Only apply the override logic when switching between different compositions
                   // Don't override when clicking cells within the same composition
                   if (
-                    currentActiveFolderId &&
-                    newActiveFolderId &&
-                    currentActiveFolderId !== newActiveFolderId
+                    currentFolderId &&
+                    newFolderId &&
+                    currentFolderId !== newFolderId
                   ) {
-                    setSelectedLayerId(newActiveFolderId);
+                    // Switch to the new composition folder - use the folder ID directly
+                    setSelectedLayerId(newFolderId);
                     console.log(
                       "[Composite] Timeline setSelectedLayerId -> switching compositions, force F1",
                       {
-                        from: currentActiveFolderId,
-                        to: newActiveFolderId,
+                        from: currentFolderId,
+                        to: newFolderId,
                       }
                     );
                     setSelectedFrameNumber(1);
