@@ -100,11 +100,11 @@ export interface LayersPanelProps {
   ) => void;
   onFolderReceiveAssets?: (
     folderId: string,
-    assets: { 
-      id: string; 
-      name: string; 
-      url: string; 
-      file?: File; 
+    assets: {
+      id: string;
+      name: string;
+      url: string;
+      file?: File;
       isSequence?: boolean;
       sequenceFrames?: { file: File; blobUrl: string }[];
     }[]
@@ -156,11 +156,11 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
   } = props;
 
   // Root assets (not in a folder) and per-folder assets for compositing mode
-  type AssetItem = { 
-    id: string; 
-    name: string; 
-    url: string; 
-    file?: File; 
+  type AssetItem = {
+    id: string;
+    name: string;
+    url: string;
+    file?: File;
     isSequence?: boolean;
     sequenceFrames?: { file: File; blobUrl: string }[];
   };
@@ -203,18 +203,16 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
       // Process TGA files and convert to blob URLs
       const processedFiles = await processTGAFiles(files);
 
-      const additions: AssetItem[] = processedFiles.map(
-        ({ file, blobUrl }) => {
-          // Track blob URLs for cleanup
-          blobUrlsRef.current.add(blobUrl);
-          return {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            name: file.name,
-            url: blobUrl,
-            file,
-          };
-        }
-      );
+      const additions: AssetItem[] = processedFiles.map(({ file, blobUrl }) => {
+        // Track blob URLs for cleanup
+        blobUrlsRef.current.add(blobUrl);
+        return {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: file.name,
+          url: blobUrl,
+          file,
+        };
+      });
 
       if (folderId) {
         // Add to specific folder
@@ -281,26 +279,33 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
       try {
         // Process all frames and get blob URLs
         const processedFrames = await processTGAFiles(sequence.frames);
-        
+
         // Extract frame numbers from the first and last files
-        const firstFrameNum = sequence.frames[0].name.match(/(\d+)/)?.[0] || '0001';
-        const lastFrameNum = sequence.frames[sequence.frames.length - 1].name.match(/(\d+)/)?.[0] || '0001';
-        
+        const firstFrameNum =
+          sequence.frames[0].name.match(/(\d+)/)?.[0] || "0001";
+        const lastFrameNum =
+          sequence.frames[sequence.frames.length - 1].name.match(
+            /(\d+)/
+          )?.[0] || "0001";
+
         // Create a single sequence asset with formatted name
         const sequenceAsset: AssetItem = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: `${sequence.baseName}[${firstFrameNum.padStart(4, '0')}-${lastFrameNum.padStart(4, '0')}].${sequence.extension}`,
+          name: `${sequence.baseName}[${firstFrameNum.padStart(
+            4,
+            "0"
+          )}-${lastFrameNum.padStart(4, "0")}].${sequence.extension}`,
           url: processedFrames[0].blobUrl, // Use first frame as preview
           file: sequence.frames[0], // Store first frame as main file
           isSequence: true,
-          sequenceFrames: processedFrames.map(pf => ({
+          sequenceFrames: processedFrames.map((pf) => ({
             file: pf.file,
-            blobUrl: pf.blobUrl
-          }))
+            blobUrl: pf.blobUrl,
+          })),
         };
 
         // Track all blob URLs for cleanup
-        processedFrames.forEach(pf => blobUrlsRef.current.add(pf.blobUrl));
+        processedFrames.forEach((pf) => blobUrlsRef.current.add(pf.blobUrl));
 
         if (targetFolderId) {
           // Add to specific folder
@@ -308,13 +313,16 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
             const items = prev[targetFolderId] ? [...prev[targetFolderId]] : [];
             items.push(sequenceAsset);
             const newState = { ...prev, [targetFolderId]: items };
-            
+
             // Notify parent if this folder is a composition
-            if (props.onFolderReceiveAssets && compositionByFolder[targetFolderId]) {
+            if (
+              props.onFolderReceiveAssets &&
+              compositionByFolder[targetFolderId]
+            ) {
               const newAssets = [sequenceAsset];
               props.onFolderReceiveAssets(targetFolderId, newAssets);
             }
-            
+
             return newState;
           });
         } else {
@@ -322,7 +330,7 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
           setRootAssets((prev) => [...prev, sequenceAsset]);
         }
       } catch (error) {
-        console.error('Failed to import sequence:', error);
+        console.error("Failed to import sequence:", error);
       }
     } else {
       // Import as individual images
@@ -650,12 +658,12 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
                 <div
                   className="flex items-center gap-2 cursor-pointer ml-2"
                   onClick={(e) => {
-                    console.log("[LayersPanel] Folder clicked", { 
-                      folderId: folder.id, 
+                    console.log("[LayersPanel] Folder clicked", {
+                      folderId: folder.id,
                       event: e,
                       target: e.target,
                       currentTarget: e.currentTarget,
-                      timeStamp: e.timeStamp 
+                      timeStamp: e.timeStamp,
                     });
                     handleSidebarSelection(folder.id);
                   }}
@@ -820,7 +828,9 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
                             )}
                             <span className="truncate flex-1 flex items-center gap-1">
                               {a.isSequence && (
-                                <span className="inline-flex items-center justify-center rounded bg-purple-600/80 px-1.5 py-0.5 text-[9px] text-white font-medium">SEQ</span>
+                                <span className="inline-flex items-center justify-center rounded bg-purple-600/80 px-1.5 py-0.5 text-[9px] text-white font-medium">
+                                  SEQ
+                                </span>
                               )}
                               {formatDisplayName(a.name)}
                             </span>

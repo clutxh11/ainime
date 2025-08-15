@@ -2751,9 +2751,22 @@ export function AnimationEditor({
               setSelectedRow={setSelectedRow as any}
               selectedLayerId={selectedLayerId}
               setSelectedLayerId={(val: any) => {
+                console.log("[Timeline] setSelectedLayerId called", {
+                  mode,
+                  oldSelectedLayerId: selectedLayerId,
+                  newValue: val,
+                  timestamp: Date.now()
+                });
+                
                 if (mode === "composite") {
                   const currentFolderId = selectedLayerId;
                   const newFolderId = findCompositionFolder(val || "");
+
+                  console.log("[Timeline] Composition switching check", {
+                    currentFolderId,
+                    newFolderId,
+                    willSwitch: currentFolderId && newFolderId && currentFolderId !== newFolderId
+                  });
 
                   // Only apply the override logic when switching between different compositions
                   // Don't override when clicking cells within the same composition
@@ -2763,13 +2776,17 @@ export function AnimationEditor({
                     currentFolderId !== newFolderId
                   ) {
                     // Switch to the new composition folder - use the folder ID directly
+                    console.log("[Timeline] Switching compositions", {
+                      from: currentFolderId,
+                      to: newFolderId
+                    });
                     setSelectedLayerId(newFolderId);
-
                     setSelectedFrameNumber(1);
                     return;
                   }
                 }
                 // Allow normal layer ID setting for cell clicks within same composition
+                console.log("[Timeline] Setting selectedLayerId to", val);
                 setSelectedLayerId(val);
               }}
               selectedFrameNumber={selectedFrameNumber}
