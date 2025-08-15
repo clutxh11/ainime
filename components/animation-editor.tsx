@@ -964,19 +964,11 @@ export function AnimationEditor({
           const parts = id.split("-");
           if (parts.length >= 3) {
             const frameNumber = parseInt(parts[2], 10);
-            // TEMPORARILY DISABLED: This is causing timeline frame resets
-            // The issue is that timeline clicks are somehow triggering folder selection
-            // TODO: Fix the root cause of why timeline clicks trigger handleSidebarSelection
-            if (false && frameNumber === 0) {
+            // Only reset to F1 for composition folder selections (id ends with -0)
+            // Timeline cell clicks (id ends with -1, -2, etc.) should NOT trigger this reset
+            if (frameNumber === 0) {
               const existsAtF1 = drawingFrames.some(
                 (df) => (df as any).folderId === id && df.frameIndex === 0
-              );
-              console.log(
-                "[Composite] Sidebar selection -> setSelectedFrameNumber",
-                {
-                  id,
-                  existsAtF1,
-                }
               );
               setSelectedFrameNumber(existsAtF1 ? 1 : null);
             }
@@ -1984,8 +1976,8 @@ export function AnimationEditor({
             >
               <div className="ml-4 inline-block bg-gray-900/90 text-white text-base md:text-lg px-3 py-1.5 rounded shadow-lg border border-white/10">
                 {`${Math.round(normalizeAngle(rotationPreviewDeg))}°`}
-          </div>
-          </div>
+              </div>
+            </div>
           )}
         {/* Collapsible Toolbar - hidden in compositing mode */}
         {mode !== "composite" && (
@@ -2061,7 +2053,7 @@ export function AnimationEditor({
               eraserSize={eraserSize}
               setEraserSize={setEraserSize}
             />
-        </div>
+          </div>
         )}
 
         {/* Main Content Area */}
@@ -2408,7 +2400,7 @@ export function AnimationEditor({
                       className="relative"
                       style={{ width: comp.width, height: comp.height }}
                     >
-                <canvas
+                      <canvas
                         ref={compCanvasRef as any}
                         width={comp.width}
                         height={comp.height}
@@ -2699,10 +2691,10 @@ export function AnimationEditor({
                               }}
                             />
                           ))}
-                    </div>
+                        </div>
                       )}
                     </div>
-            </div>
+                  </div>
                 );
               })()}
           </div>
@@ -2763,8 +2755,6 @@ export function AnimationEditor({
                   const currentFolderId = selectedLayerId;
                   const newFolderId = findCompositionFolder(val || "");
 
-
-
                   // Only apply the override logic when switching between different compositions
                   // Don't override when clicking cells within the same composition
                   if (
@@ -2785,7 +2775,6 @@ export function AnimationEditor({
               selectedFrameNumber={selectedFrameNumber}
               setSelectedFrameNumber={(n: any) => {
                 if (mode === "composite") {
-
                   setSelectedFrameNumber(n);
                 } else {
                   setSelectedFrameNumber(n);
