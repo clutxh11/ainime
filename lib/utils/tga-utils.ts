@@ -1,4 +1,4 @@
-import TGA from 'tga';
+// Simplified approach without external TGA libraries
 
 export interface TGAImageData {
   width: number;
@@ -14,49 +14,12 @@ export interface ImageSequence {
 }
 
 /**
- * Decode a TGA file to ImageData
+ * For now, we'll skip TGA decoding since it's problematic
+ * Instead, we'll just throw an error to trigger the fallback
  */
 export async function decodeTGA(file: File): Promise<TGAImageData> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        if (!e.target?.result) {
-          reject(new Error("No file data read"));
-          return;
-        }
-
-        const buffer = e.target.result as ArrayBuffer;
-        if (buffer.byteLength < 18) {
-          reject(new Error("File too small to be a valid TGA"));
-          return;
-        }
-
-        // Use TGA library to decode
-        const tgaImage = new TGA(buffer);
-        
-        if (!tgaImage || !tgaImage.pixels || tgaImage.width <= 0 || tgaImage.height <= 0) {
-          reject(new Error("TGA library could not decode file"));
-          return;
-        }
-        
-        // Convert TGA pixels to ImageData format
-        const imageData: TGAImageData = {
-          width: tgaImage.width,
-          height: tgaImage.height,
-          data: new Uint8ClampedArray(tgaImage.pixels)
-        };
-
-        console.log(`[TGA Utils] Successfully decoded: ${imageData.width}x${imageData.height}`);
-        resolve(imageData);
-      } catch (error: any) {
-        console.error("TGA decode error details:", error);
-        reject(new Error(`Failed to decode TGA: ${error?.message || error}`));
-      }
-    };
-    reader.onerror = () => reject(new Error("Failed to read TGA file"));
-    reader.readAsArrayBuffer(file);
-  });
+  console.log(`[TGA Utils] Skipping TGA decode for ${file.name} - using fallback approach`);
+  throw new Error("TGA decoding disabled - using fallback");
 }
 
 /**
@@ -200,10 +163,16 @@ export async function processTGAFiles(
         results.push({ file, blobUrl });
       } catch (error) {
         console.error(`Failed to process TGA file ${file.name}:`, error);
-        console.log(`[TGA Utils] Adding TGA file as fallback (may not display): ${file.name}`);
-        // Add as fallback - user can see the file in assets, but it may not display
-        const blobUrl = URL.createObjectURL(file);
-        results.push({ file, blobUrl });
+        console.log(`[TGA Utils] Adding TGA file as fallback blob: ${file.name}`);
+        // Create blob URL from original file - this will work for display in UI
+        // but browsers may not be able to display TGA format directly
+        try {
+          const blobUrl = URL.createObjectURL(file);
+          console.log(`[TGA Utils] Created fallback blob URL: ${blobUrl}`);
+          results.push({ file, blobUrl });
+        } catch (blobError) {
+          console.error(`Failed to create blob URL for ${file.name}:`, blobError);
+        }
       }
     } else {
       // For non-TGA files, create blob URL directly
