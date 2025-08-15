@@ -957,16 +957,17 @@ export function AnimationEditor({
         // In compositing, clicking a folder should also switch the timeline
         // to that folder's frame context. If no frame exists yet (placeholder),
         // clear selection so grid shows empty.
-        // 
+        //
         // IMPORTANT: Only apply this for direct folder selections, NOT timeline cell clicks.
         // Timeline cell clicks should preserve the clicked frame number.
         if (mode === "composite") {
           const parts = id.split("-");
           if (parts.length >= 3) {
             const frameNumber = parseInt(parts[2], 10);
-            // Only reset to F1 for composition folder selections (id ends with -0)
-            // Timeline cell clicks (id ends with -1, -2, etc.) should NOT trigger this reset
-            if (frameNumber === 0) {
+            // TEMPORARILY DISABLED: This is causing timeline frame resets
+            // The issue is that timeline clicks are somehow triggering folder selection
+            // TODO: Fix the root cause of why timeline clicks trigger handleSidebarSelection
+            if (false && frameNumber === 0) {
               const existsAtF1 = drawingFrames.some(
                 (df) => (df as any).folderId === id && df.frameIndex === 0
               );
