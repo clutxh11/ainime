@@ -147,6 +147,13 @@ export default function TimelineGrid({
     handleType: "left" | "right",
     e: React.MouseEvent
   ) => {
+    console.log(`[Timeline] ${handleType} handle drag start:`, {
+      rowId,
+      frameIndex,
+      origLength,
+      origStartFrame,
+      handleType,
+    });
     setDragging({
       rowId,
       frameIndex,
@@ -194,10 +201,19 @@ export default function TimelineGrid({
       let delta = Math.round((e.clientX - dragging.startX) / cellWidth);
 
       if (dragging.handleType === "right") {
-        // Right handle: adjust end frame (length)
+        // Right handle: adjust end frame (length), keep start frame fixed
         let newLength = Math.max(1, dragging.origLength + delta);
-        let startFrame = dragging.origStartFrame;
+        let startFrame = dragging.origStartFrame; // Keep the current start frame fixed
         let endFrame = startFrame + newLength - 1;
+
+        console.log(`[Timeline] Right handle drag:`, {
+          delta,
+          origLength: dragging.origLength,
+          newLength,
+          origStartFrame: dragging.origStartFrame,
+          startFrame,
+          endFrame,
+        });
 
         if (endFrame >= frames) {
           setFrames((prev) => endFrame + 1);
