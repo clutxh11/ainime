@@ -38,6 +38,8 @@ import {
 } from "@/lib/utils/tga-utils";
 import { SequenceImportModal } from "@/components/ui/SequenceImportModal";
 import type { DrawingFrame } from "../timeline-grid";
+import ColorEffectsPanel from "./ColorEffectsPanel";
+import type { AssetEffects } from "@/lib/utils/color-effects";
 
 export interface SidebarFolder {
   id: string;
@@ -114,6 +116,10 @@ export interface LayersPanelProps {
   drawingFrames?: DrawingFrame[];
   // Compositing only: notify when a specific asset in a folder is clicked
   onSelectCompAsset?: (folderId: string, index: number) => void;
+  // Color effects system
+  assetEffects?: Record<string, AssetEffects>;
+  onAssetEffectsChange?: (identity: string, effects: AssetEffects) => void;
+  selectedAssetKey?: string | null;
   // Compositing only: highlight selected asset
   selectedAssetFolderId?: string;
   selectedAssetIndex?: number;
@@ -157,6 +163,9 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     handleCancelRename,
     handleAddLayer,
     drawingFrames = [],
+    assetEffects = {},
+    onAssetEffectsChange,
+    selectedAssetKey,
   } = props;
 
   // Root assets (not in a folder) and per-folder assets for compositing mode
@@ -667,6 +676,18 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
           </div>
         )}
       </div>
+
+      {/* Color Effects Panel - only show in composite mode when an asset is selected */}
+      {mode === "composite" && onAssetEffectsChange && (
+        <>
+          <div className="border-b border-gray-600 my-4 flex-shrink-0" />
+          <ColorEffectsPanel
+            assetIdentity={selectedAssetKey || null}
+            effects={selectedAssetKey ? assetEffects[selectedAssetKey] || {} : {}}
+            onEffectsChange={onAssetEffectsChange}
+          />
+        </>
+      )}
 
       <div className="border-b border-gray-600 my-4 flex-shrink-0" />
 

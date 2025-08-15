@@ -54,6 +54,7 @@ import useUndoRedo from "@/hooks/useUndoRedo";
 import usePlayback from "@/hooks/usePlayback";
 import useLayersSidebar from "@/hooks/useLayersSidebar";
 import useSelectionActions from "@/hooks/useSelectionActions";
+import { processImageWithEffects, type AssetEffects } from "@/lib/utils/color-effects";
 import useSceneLoader from "@/hooks/useSceneLoader";
 import useCanvasSetup from "@/hooks/useCanvasSetup";
 import useColorSets from "@/hooks/useColorSets";
@@ -298,7 +299,6 @@ export function AnimationEditor({
   const [boundsByAsset, setBoundsByAsset] = useState<
     Record<string, { x: number; y: number; width: number; height: number }>
   >({});
-  
 
   const [fittedCompByFolder, setFittedCompByFolder] = useState<
     Record<string, boolean>
@@ -335,6 +335,10 @@ export function AnimationEditor({
 
   // (moved below drawingFrames declaration)
   const imageCache = useRef<Record<string, HTMLImageElement>>({});
+  
+  // Asset effects (color key, color keep, etc.) - keyed by asset identity
+  const [assetEffects, setAssetEffects] = useState<Record<string, AssetEffects>>({});
+  
   const [isLooping, setIsLooping] = useState(false);
   const [contextMenu, setContextMenu] = useState({
     visible: false,
@@ -515,38 +519,40 @@ export function AnimationEditor({
     const drawSynchronously = async () => {
       // First, preload all images to avoid flicker during drawing
       const imagePromises = arrangedToDraw
-        .filter(cell => cell.imageUrl)
-        .map(cell => {
-          return new Promise<{ cell: any; img: HTMLImageElement }>((resolve, reject) => {
-            const imageUrl = cell.imageUrl as string;
-            
-            // Check cache first
-            const cachedImg = imageCache.current[imageUrl];
-            if (cachedImg && cachedImg.complete) {
-              resolve({ cell, img: cachedImg });
-              return;
+        .filter((cell) => cell.imageUrl)
+        .map((cell) => {
+          return new Promise<{ cell: any; img: HTMLImageElement }>(
+            (resolve, reject) => {
+              const imageUrl = cell.imageUrl as string;
+
+              // Check cache first
+              const cachedImg = imageCache.current[imageUrl];
+              if (cachedImg && cachedImg.complete) {
+                resolve({ cell, img: cachedImg });
+                return;
+              }
+
+              // Load and cache image
+              const img = new Image();
+              img.crossOrigin = "anonymous";
+              img.onload = () => {
+                imageCache.current[imageUrl] = img;
+                resolve({ cell, img });
+              };
+              img.onerror = reject;
+              img.src = imageUrl;
             }
-            
-            // Load and cache image
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.onload = () => {
-              imageCache.current[imageUrl] = img;
-              resolve({ cell, img });
-            };
-            img.onerror = reject;
-            img.src = imageUrl;
-          });
+          );
         });
 
       try {
         // Wait for all images to load before drawing any of them
         const loadedImages = await Promise.all(imagePromises);
-        
+
         // Clear canvas once
         ctx.clearRect(0, 0, comp.width, comp.height);
-        
-        // Draw all images synchronously in the correct order (back to front)
+
+                // Draw all images synchronously in the correct order (back to front)
         for (const { cell, img } of loadedImages) {
           // For sequence frames, use folderId as the transformation key to ensure
           // transformations persist across all frames in the sequence
@@ -564,6 +570,16 @@ export function AnimationEditor({
           const key = identity;
           const deg = rotationByAsset[key] ?? 0;
           
+          // Apply color effects if any are set for this asset
+          const effects = assetEffects[identity];
+          let imageToRender = img;
+          
+          if (effects && (effects.colorKey?.enabled || effects.colorKeep?.enabled)) {
+            // Process image with effects
+            const processedCanvas = processImageWithEffects(ctx, img, effects);
+            imageToRender = processedCanvas as any; // Canvas can be drawn like an image
+          }
+          
           if (deg !== 0) {
             ctx.save();
             // rotate around the image center
@@ -572,10 +588,10 @@ export function AnimationEditor({
             ctx.translate(cx, cy);
             ctx.rotate((deg * Math.PI) / 180);
             ctx.translate(-cx, -cy);
-            ctx.drawImage(img, x, y, drawW, drawH);
+            ctx.drawImage(imageToRender, x, y, drawW, drawH);
             ctx.restore();
           } else {
-            ctx.drawImage(img, x, y, drawW, drawH);
+            ctx.drawImage(imageToRender, x, y, drawW, drawH);
           }
         }
       } catch (error) {
@@ -3103,6 +3119,11 @@ export function AnimationEditor({
             img.src = df.imageUrl;
           }}
           drawingFrames={drawingFrames}
+          assetEffects={assetEffects}
+          onAssetEffectsChange={(identity, effects) => {
+            setAssetEffects(prev => ({ ...prev, [identity]: effects }));
+          }}
+          selectedAssetKey={selectedAssetKey}
         />
       </div>
 
