@@ -226,12 +226,52 @@ export default function TimelineGrid({
         // Find the next frame that would block expansion
         const blockingFrame = boundaries.find((frame) => frame.start > startFrame);
         
-        if (blockingFrame) {
-          // Can't extend past the blocking frame - stop one cell before it
-          const maxEndFrame = blockingFrame.start - 1;
-          if (targetEndFrame > maxEndFrame) {
-            targetEndFrame = maxEndFrame;
-            targetLength = Math.max(1, maxEndFrame - startFrame + 1);
+        let framesToUpdate = [];
+        
+        if (blockingFrame && targetEndFrame >= blockingFrame.start) {
+          // We're hitting a blocking frame - try to push it
+          const pushDistance = targetEndFrame - blockingFrame.start + 1; // How much we need to push
+          
+          // Check if we can push the blocking frame (and any frames behind it)
+          let canPush = true;
+          let framesToPush = [blockingFrame];
+          
+          // Find all frames that would need to be pushed in a chain
+          let currentPushEnd = blockingFrame.end + pushDistance;
+          boundaries.forEach((frame) => {
+            if (frame.start > blockingFrame.start && frame.start <= currentPushEnd) {
+              framesToPush.push(frame);
+              currentPushEnd = Math.max(currentPushEnd, frame.end + pushDistance);
+            }
+          });
+          
+          // Check if the final pushed position would have space
+          const finalPushEnd = Math.max(...framesToPush.map(f => f.end)) + pushDistance;
+          const nextFrameAfterPush = boundaries.find((frame) => 
+            frame.start > Math.max(...framesToPush.map(f => f.start))
+          );
+          
+          if (nextFrameAfterPush && finalPushEnd >= nextFrameAfterPush.start) {
+            // Can't push - would collide with frame behind
+            canPush = false;
+          }
+          
+          if (canPush) {
+            // Push all frames in the chain
+            framesToUpdate = framesToPush.map((frame) => ({
+              frameIndex: frame.frameIndex,
+              newStartFrame: frame.start + pushDistance
+            }));
+            
+            // We can extend to our target length
+            // (targetLength stays as calculated)
+          } else {
+            // Can't push - limit extension to just before the blocking frame
+            const maxEndFrame = blockingFrame.start - 1;
+            if (targetEndFrame > maxEndFrame) {
+              targetEndFrame = maxEndFrame;
+              targetLength = Math.max(1, maxEndFrame - startFrame + 1);
+            }
           }
         }
 
@@ -241,11 +281,20 @@ export default function TimelineGrid({
         }
 
         setDrawingFrames((prev) =>
-          prev.map((df) =>
-            df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex
-              ? { ...df, length: targetLength, startFrame }
-              : df
-          )
+          prev.map((df) => {
+            // Update the main frame being dragged
+            if (df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex) {
+              return { ...df, length: targetLength, startFrame };
+            }
+            
+            // Update any frames that need to be pushed
+            const pushUpdate = framesToUpdate.find(update => update.frameIndex === df.frameIndex);
+            if (pushUpdate && df.rowId === dragging.rowId) {
+              return { ...df, startFrame: pushUpdate.newStartFrame };
+            }
+            
+            return df;
+          })
         );
       } else {
         // Left handle: move start frame backward while keeping END FRAME absolutely fixed
@@ -261,12 +310,59 @@ export default function TimelineGrid({
           frame.end >= targetStartFrame && frame.start <= targetStartFrame
         );
         
-        if (blockingFrame) {
-          // Can't move start frame into an existing frame - stop after the blocking frame
-          const minStartFrame = blockingFrame.end + 1;
-          if (targetStartFrame < minStartFrame) {
-            targetStartFrame = minStartFrame;
-            targetLength = Math.max(1, originalEndFrame - targetStartFrame + 1);
+        let framesToUpdate = [];
+        
+        if (blockingFrame && targetStartFrame < blockingFrame.end + 1) {
+          // We're hitting a blocking frame - try to push it backward
+          const pushDistance = (blockingFrame.end + 1) - targetStartFrame; // How much we need to push
+          
+          // Check if we can push the blocking frame (and any frames in front of it)
+          let canPush = true;
+          let framesToPush = [blockingFrame];
+          
+          // Find all frames that would need to be pushed in a chain (frames to the left)
+          let currentPushStart = blockingFrame.start - pushDistance;
+          boundaries.forEach((frame) => {
+            if (frame.end < blockingFrame.end && frame.end >= currentPushStart) {
+              framesToPush.push(frame);
+              currentPushStart = Math.min(currentPushStart, frame.start - pushDistance);
+            }
+          });
+          
+          // Check if the final pushed position would have space (can't go below 0)
+          const finalPushStart = Math.min(...framesToPush.map(f => f.start)) - pushDistance;
+          
+          if (finalPushStart < 0) {
+            // Can't push - would go below frame 0
+            canPush = false;
+          } else {
+            // Check if pushing would collide with any frame to the left
+            const nextFrameBeforePush = boundaries.find((frame) => 
+              frame.end < Math.min(...framesToPush.map(f => f.start)) &&
+              frame.end >= finalPushStart
+            );
+            
+            if (nextFrameBeforePush) {
+              canPush = false;
+            }
+          }
+          
+          if (canPush) {
+            // Push all frames in the chain
+            framesToUpdate = framesToPush.map((frame) => ({
+              frameIndex: frame.frameIndex,
+              newStartFrame: frame.start - pushDistance
+            }));
+            
+            // We can move to our target start frame
+            // (targetStartFrame and targetLength stay as calculated)
+          } else {
+            // Can't push - limit movement to just after the blocking frame
+            const minStartFrame = blockingFrame.end + 1;
+            if (targetStartFrame < minStartFrame) {
+              targetStartFrame = minStartFrame;
+              targetLength = Math.max(1, originalEndFrame - targetStartFrame + 1);
+            }
           }
         }
 
@@ -276,11 +372,20 @@ export default function TimelineGrid({
         }
 
         setDrawingFrames((prev) =>
-          prev.map((df) =>
-            df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex
-              ? { ...df, length: targetLength, startFrame: targetStartFrame }
-              : df
-          )
+          prev.map((df) => {
+            // Update the main frame being dragged
+            if (df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex) {
+              return { ...df, length: targetLength, startFrame: targetStartFrame };
+            }
+            
+            // Update any frames that need to be pushed
+            const pushUpdate = framesToUpdate.find(update => update.frameIndex === df.frameIndex);
+            if (pushUpdate && df.rowId === dragging.rowId) {
+              return { ...df, startFrame: pushUpdate.newStartFrame };
+            }
+            
+            return df;
+          })
         );
       }
     };
