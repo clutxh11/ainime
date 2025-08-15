@@ -957,22 +957,29 @@ export function AnimationEditor({
         // In compositing, clicking a folder should also switch the timeline
         // to that folder's frame context. If no frame exists yet (placeholder),
         // clear selection so grid shows empty.
+        // 
+        // IMPORTANT: Only apply this for direct folder selections, NOT timeline cell clicks.
+        // Timeline cell clicks should preserve the clicked frame number.
         if (mode === "composite") {
           const parts = id.split("-");
           if (parts.length >= 3) {
-            // For compositing, the first cell is always F1 (index 0) regardless of folder index
-            const rowId = `${parts[0]}-${parts[1]}`;
-            const existsAtF1 = drawingFrames.some(
-              (df) => (df as any).folderId === id && df.frameIndex === 0
-            );
-            console.log(
-              "[Composite] Sidebar selection -> setSelectedFrameNumber",
-              {
-                id,
-                existsAtF1,
-              }
-            );
-            setSelectedFrameNumber(existsAtF1 ? 1 : null);
+            const frameNumber = parseInt(parts[2], 10);
+            // Only reset to F1 for composition folder selections (id ends with -0)
+            // Timeline cell clicks (id ends with -1, -2, etc.) should NOT trigger this reset
+            if (frameNumber === 0) {
+              const existsAtF1 = drawingFrames.some(
+                (df) => (df as any).folderId === id && df.frameIndex === 0
+              );
+              console.log(
+                "[Composite] Sidebar selection -> setSelectedFrameNumber",
+                {
+                  id,
+                  existsAtF1,
+                }
+              );
+              setSelectedFrameNumber(existsAtF1 ? 1 : null);
+            }
+            // For timeline cell clicks (frameNumber > 0), don't override the frame
           } else {
             setSelectedFrameNumber(null);
           }
@@ -2755,15 +2762,15 @@ export function AnimationEditor({
                   const currentFolderId = selectedLayerId;
                   const newFolderId = findCompositionFolder(val || "");
 
-                  console.log(
-                    "[Composite] Timeline click composition check",
-                    {
-                      clickedCell: val,
-                      currentFolderId,
-                      newFolderId,
-                      willSwitch: currentFolderId && newFolderId && currentFolderId !== newFolderId
-                    }
-                  );
+                  console.log("[Composite] Timeline click composition check", {
+                    clickedCell: val,
+                    currentFolderId,
+                    newFolderId,
+                    willSwitch:
+                      currentFolderId &&
+                      newFolderId &&
+                      currentFolderId !== newFolderId,
+                  });
 
                   // Only apply the override logic when switching between different compositions
                   // Don't override when clicking cells within the same composition
