@@ -390,10 +390,32 @@ export function AnimationEditor({
     const frameNumber = parseInt(parts[2], 10); // 1-based frame number from timeline
     const frameIndex = frameNumber; // Convert to 0-based for drawing frames
 
+    console.log("[findCompositionFolder] Debug", {
+      layerId,
+      rowId,
+      frameNumber,
+      frameIndex,
+      allDrawingFrames: drawingFrames.map(df => ({
+        rowId: df.rowId,
+        frameIndex: df.frameIndex,
+        folderId: df.folderId
+      }))
+    });
+
     // Find a drawing frame with this rowId and frameIndex
     const matchingFrame = drawingFrames.find(
       (df) => df.rowId === rowId && df.frameIndex === frameIndex
     );
+    
+    console.log("[findCompositionFolder] Result", {
+      matchingFrame: matchingFrame ? {
+        rowId: matchingFrame.rowId,
+        frameIndex: matchingFrame.frameIndex,
+        folderId: matchingFrame.folderId
+      } : null,
+      returnedFolderId: matchingFrame?.folderId || null
+    });
+    
     return matchingFrame?.folderId || null;
   };
 
@@ -2790,11 +2812,18 @@ export function AnimationEditor({
 
                   // For timeline cell clicks within the same composition,
                   // keep the composition folder selected, don't change to the cell ID
-                  if (currentFolderId && newFolderId && currentFolderId === newFolderId) {
-                    console.log("[Timeline] Cell click within same composition - keeping folder selected", {
-                      keepingFolderId: currentFolderId,
-                      cellClicked: val
-                    });
+                  if (
+                    currentFolderId &&
+                    newFolderId &&
+                    currentFolderId === newFolderId
+                  ) {
+                    console.log(
+                      "[Timeline] Cell click within same composition - keeping folder selected",
+                      {
+                        keepingFolderId: currentFolderId,
+                        cellClicked: val,
+                      }
+                    );
                     // Don't change selectedLayerId - keep the composition folder selected
                     return;
                   }
