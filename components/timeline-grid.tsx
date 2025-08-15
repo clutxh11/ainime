@@ -103,7 +103,7 @@ export default function TimelineGrid({
     startX: number;
     origLength: number;
     origStartFrame: number;
-    handleType: 'left' | 'right'; // Which handle is being dragged
+    handleType: "left" | "right"; // Which handle is being dragged
   }>(null);
 
   const handleAddFrame = () => {
@@ -144,16 +144,16 @@ export default function TimelineGrid({
     frameIndex: number,
     origLength: number,
     origStartFrame: number,
-    handleType: 'left' | 'right',
+    handleType: "left" | "right",
     e: React.MouseEvent
   ) => {
-    setDragging({ 
-      rowId, 
-      frameIndex, 
-      startX: e.clientX, 
-      origLength, 
-      origStartFrame, 
-      handleType 
+    setDragging({
+      rowId,
+      frameIndex,
+      startX: e.clientX,
+      origLength,
+      origStartFrame,
+      handleType,
     });
     e.stopPropagation();
   };
@@ -192,17 +192,17 @@ export default function TimelineGrid({
     const onMouseMove = (e: MouseEvent) => {
       const cellWidth = 64; // px, matches w-16
       let delta = Math.round((e.clientX - dragging.startX) / cellWidth);
-      
-      if (dragging.handleType === 'right') {
+
+      if (dragging.handleType === "right") {
         // Right handle: adjust end frame (length)
         let newLength = Math.max(1, dragging.origLength + delta);
         let startFrame = dragging.origStartFrame;
         let endFrame = startFrame + newLength - 1;
-        
+
         if (endFrame >= frames) {
           setFrames((prev) => endFrame + 1);
         }
-        
+
         setDrawingFrames((prev) =>
           prev.map((df) =>
             df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex
@@ -211,20 +211,20 @@ export default function TimelineGrid({
           )
         );
       } else {
-        // Left handle: adjust start frame
+        // Left handle: adjust start frame while keeping the same length
         let newStartFrame = Math.max(0, dragging.origStartFrame + delta);
-        let endFrame = dragging.origStartFrame + dragging.origLength - 1;
-        let newLength = Math.max(1, endFrame - newStartFrame + 1);
-        
-        // Ensure we have enough frames in the timeline
-        if (endFrame >= frames) {
-          setFrames((prev) => endFrame + 1);
+        let originalLength = dragging.origLength;
+        let newEndFrame = newStartFrame + originalLength - 1;
+
+        // Ensure we have enough frames in the timeline for the new end frame
+        if (newEndFrame >= frames) {
+          setFrames((prev) => newEndFrame + 1);
         }
-        
+
         setDrawingFrames((prev) =>
           prev.map((df) =>
             df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex
-              ? { ...df, length: newLength, startFrame: newStartFrame }
+              ? { ...df, length: originalLength, startFrame: newStartFrame }
               : df
           )
         );
@@ -445,7 +445,7 @@ export default function TimelineGrid({
                             frameIndex: i,
                             target: e.target,
                             currentTarget: e.currentTarget,
-                            timeStamp: e.timeStamp
+                            timeStamp: e.timeStamp,
                           });
                           e.stopPropagation();
                           handleCellClick(row.id, i);
@@ -482,7 +482,7 @@ export default function TimelineGrid({
                                       i,
                                       drawing.length,
                                       drawing.startFrame ?? i,
-                                      'right',
+                                      "right",
                                       e
                                     )
                                   }
@@ -505,7 +505,7 @@ export default function TimelineGrid({
                                       i,
                                       drawing.length,
                                       drawing.startFrame ?? i,
-                                      'left',
+                                      "left",
                                       e
                                     )
                                   }
@@ -524,7 +524,9 @@ export default function TimelineGrid({
                                   />
                                   <span className="select-none whitespace-nowrap text-left">{`R${
                                     rowIdx + 1
-                                  } F${(drawing.startFrame ?? i) + 1}:${(drawing.startFrame ?? i) + drawing.length}`}</span>
+                                  } F${(drawing.startFrame ?? i) + 1}:${
+                                    (drawing.startFrame ?? i) + drawing.length
+                                  }`}</span>
                                 </div>
                                 {/* Right handle for adjusting end frame */}
                                 <span
@@ -535,7 +537,7 @@ export default function TimelineGrid({
                                       i,
                                       drawing.length,
                                       drawing.startFrame ?? i,
-                                      'right',
+                                      "right",
                                       e
                                     )
                                   }
@@ -567,7 +569,7 @@ export default function TimelineGrid({
                                     i,
                                     drawing.length,
                                     drawing.startFrame ?? i,
-                                    'right',
+                                    "right",
                                     e
                                   )
                                 }
@@ -590,7 +592,7 @@ export default function TimelineGrid({
                                     i,
                                     drawing.length,
                                     drawing.startFrame ?? i,
-                                    'left',
+                                    "left",
                                     e
                                   )
                                 }
@@ -603,7 +605,9 @@ export default function TimelineGrid({
                               </span>
                               <span className="select-none whitespace-nowrap flex-1 text-center">{`R${
                                 rowIdx + 1
-                              } F${(drawing.startFrame ?? i) + 1}:${(drawing.startFrame ?? i) + drawing.length}`}</span>
+                              } F${(drawing.startFrame ?? i) + 1}:${
+                                (drawing.startFrame ?? i) + drawing.length
+                              }`}</span>
                               {/* Right handle for adjusting end frame */}
                               <span
                                 className="cursor-ew-resize pr-1 select-none flex items-center h-full"
@@ -613,7 +617,7 @@ export default function TimelineGrid({
                                     i,
                                     drawing.length,
                                     drawing.startFrame ?? i,
-                                    'right',
+                                    "right",
                                     e
                                   )
                                 }

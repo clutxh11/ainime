@@ -187,7 +187,10 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     // Handle extended frames by looking at drawingFrames
     const targetRowId = `row-${assetIndex + 1}`;
     const matchingFrame = drawingFrames.find(
-      (df) => df.folderId === folderId && df.rowId === targetRowId && df.frameIndex === 0
+      (df) =>
+        df.folderId === folderId &&
+        df.rowId === targetRowId &&
+        df.frameIndex === 0
     );
 
     if (matchingFrame && matchingFrame.length > 1) {
