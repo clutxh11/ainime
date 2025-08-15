@@ -4,8 +4,9 @@ export function getActiveFrameFolderId(selectedLayerId: string | null) {
   if (!selectedLayerId) return null;
   const parts = selectedLayerId.split("-");
   if (parts.length < 3) return null;
-  // Normalize to the folder id `${rowId}-${frameIndex}` which corresponds to the first 3 tokens
-  return `${parts[0]}-${parts[1]}-${parts[2]}`;
+  // For timeline cell IDs like "row-1-0", "row-1-1", etc., map them to the composition folder
+  // which is always at frame 0 (row-1-0)
+  return `${parts[0]}-${parts[1]}-0`;
 }
 
 export default function useFolders({

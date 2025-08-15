@@ -2739,11 +2739,14 @@ export function AnimationEditor({
                     selectedLayerId || ""
                   );
                   const newActiveFolderId = getActiveFrameFolderId(val || "");
-                  
+
                   // Only apply the override logic when switching between different compositions
                   // Don't override when clicking cells within the same composition
-                  if (currentActiveFolderId && newActiveFolderId && 
-                      currentActiveFolderId !== newActiveFolderId) {
+                  if (
+                    currentActiveFolderId &&
+                    newActiveFolderId &&
+                    currentActiveFolderId !== newActiveFolderId
+                  ) {
                     setSelectedLayerId(newActiveFolderId);
                     console.log(
                       "[Composite] Timeline setSelectedLayerId -> switching compositions, force F1",
