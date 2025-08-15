@@ -27,6 +27,9 @@ export interface DrawingFrame {
   fileName?: string;
   // Optional: source folder identity (used by compositing mode)
   folderId?: string;
+  // Sequence-specific properties
+  sequenceIndex?: number;
+  isSequenceFrame?: boolean;
 }
 
 interface TimelineGridProps {

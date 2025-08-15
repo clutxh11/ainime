@@ -434,10 +434,17 @@ export function AnimationEditor({
     const currentFrameIndex = selectedFrameNumber ? selectedFrameNumber - 1 : 0;
 
     const assetsToDraw = drawingFrames
-      .filter(
-        (df) =>
-          df.folderId === activeFolderId && df.frameIndex === currentFrameIndex
-      )
+      .filter((df) => {
+        if (df.folderId !== activeFolderId) return false;
+        
+        // For sequence frames, only show the frame that matches current frame number
+        if (df.isSequenceFrame) {
+          return df.frameIndex === currentFrameIndex;
+        }
+        
+        // For regular images, show them on all frames (they persist across frames)
+        return true;
+      })
       .sort((a, b) => {
         const ra = parseInt(a.rowId.split("-")[1], 10);
         const rb = parseInt(b.rowId.split("-")[1], 10);
@@ -2907,13 +2914,13 @@ export function AnimationEditor({
                     first,
                     before: prev,
                   });
-                  const adjustedFrameIndex = 0; // always F1
-                  const countForFolder = prev.filter(
-                    (df) =>
-                      df.folderId === folderId &&
-                      df.frameIndex === adjustedFrameIndex
-                  ).length;
-                  const nextRowNumber = countForFolder + 1; // 1-based
+                  // Count unique rows for this folder to determine next row number
+                  const uniqueRowsForFolder = new Set(
+                    prev
+                      .filter((df) => df.folderId === folderId)
+                      .map((df) => df.rowId)
+                  );
+                  const nextRowNumber = uniqueRowsForFolder.size + 1; // 1-based
                   const rowId = `row-${nextRowNumber}`;
                   // Ensure timeline has enough rows to show this new entry
                   setRows((prevRows) => {
@@ -2950,7 +2957,7 @@ export function AnimationEditor({
                     // For regular assets, create a single frame
                     newFrames.push({
                       rowId,
-                      frameIndex: adjustedFrameIndex,
+                      frameIndex: 0, // Regular images start at F1
                       length: 1,
                       imageUrl:
                         first.url.endsWith(".tga") && first.file
