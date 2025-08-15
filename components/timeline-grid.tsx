@@ -211,20 +211,20 @@ export default function TimelineGrid({
           )
         );
       } else {
-        // Left handle: adjust start frame while keeping the same length
+        // Left handle: adjust start frame while keeping the END FRAME fixed
         let newStartFrame = Math.max(0, dragging.origStartFrame + delta);
-        let originalLength = dragging.origLength;
-        let newEndFrame = newStartFrame + originalLength - 1;
+        let originalEndFrame = dragging.origStartFrame + dragging.origLength - 1; // Keep end fixed
+        let newLength = Math.max(1, originalEndFrame - newStartFrame + 1);
 
-        // Ensure we have enough frames in the timeline for the new end frame
-        if (newEndFrame >= frames) {
-          setFrames((prev) => newEndFrame + 1);
+        // Ensure we have enough frames in the timeline for the end frame
+        if (originalEndFrame >= frames) {
+          setFrames((prev) => originalEndFrame + 1);
         }
 
         setDrawingFrames((prev) =>
           prev.map((df) =>
             df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex
-              ? { ...df, length: originalLength, startFrame: newStartFrame }
+              ? { ...df, length: newLength, startFrame: newStartFrame }
               : df
           )
         );
