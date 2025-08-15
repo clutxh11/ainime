@@ -439,13 +439,13 @@ export function AnimationEditor({
         parseInt(d.rowId.split("-")[1], 10) === compSelectedAssetIndex + 1
     );
     if (!df) return null;
-    
+
     // For sequence frames, use only the folderId as the key to ensure
     // transformations are shared across all frames in the sequence
     if (df.isSequenceFrame) {
       return compSelectedAssetFolderId;
     }
-    
+
     // For single images, use the traditional folderId|fileName format
     const identity = df.fileName || df.imageUrl || null;
     return identity ? `${compSelectedAssetFolderId}|${identity}` : null;
@@ -496,12 +496,13 @@ export function AnimationEditor({
     // Ensure the currently selected asset draws on top during interactions to avoid visual 'glitching'
     const arrangedToDraw = (() => {
       if (!selectedAssetKey || !isMovingAsset) return assetsToDraw;
-      
+
       const isSelected = (cell: any) => {
         // Use the same key logic as in the drawing loop
-        const identity = cell.isSequenceFrame && cell.folderId
-          ? cell.folderId
-          : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
+        const identity =
+          cell.isSequenceFrame && cell.folderId
+            ? cell.folderId
+            : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
         return identity === selectedAssetKey;
       };
       const nonSelected = assetsToDraw.filter((c) => !isSelected(c));
@@ -519,9 +520,10 @@ export function AnimationEditor({
           img.onload = () => {
             // For sequence frames, use folderId as the transformation key to ensure
             // transformations persist across all frames in the sequence
-            const identity = cell.isSequenceFrame && cell.folderId
-              ? cell.folderId
-              : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
+            const identity =
+              cell.isSequenceFrame && cell.folderId
+                ? cell.folderId
+                : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
             const persisted = boundsByAsset[identity];
             const defaultX = Math.round((comp.width - img.naturalWidth) / 2);
             const defaultY = Math.round((comp.height - img.naturalHeight) / 2);
@@ -575,8 +577,11 @@ export function AnimationEditor({
     if (drawingFrames.length === 0) {
       return 1;
     }
-    // Find the last frame index that has content
-    return Math.max(1, ...drawingFrames.map((df) => df.frameIndex + df.length));
+    // Find the last frame index that has content, considering extended frames
+    return Math.max(1, ...drawingFrames.map((df) => {
+      const startFrame = df.startFrame ?? df.frameIndex;
+      return startFrame + df.length;
+    }));
   }, [drawingFrames]);
 
   // Generate unique stroke IDs
@@ -1656,7 +1661,6 @@ export function AnimationEditor({
     const realized = drawingFrames
       .map((df: any) => df.folderId)
       .filter((id: any) => typeof id === "string");
-
   }, [mode, compositeFolderIds, drawingFrames, effectiveCompositeIds]);
 
   const sidebarFolders = (
@@ -2240,18 +2244,14 @@ export function AnimationEditor({
                         .from(bucket)
                         .createSignedUrl(key, 60 * 60 * 24);
                       imageUrl = signed?.signedUrl || URL.createObjectURL(file);
-
                     } else {
                       imageUrl = URL.createObjectURL(file);
-
                     }
                   } catch {
                     imageUrl = URL.createObjectURL(file);
-
                   }
                 } else {
                   imageUrl = URL.createObjectURL(file);
-
                 }
 
                 // Attach to drawingFrames cell representing this folder's page (for preview)
@@ -2298,7 +2298,6 @@ export function AnimationEditor({
                     ...prev,
                     [`${rowKey}|${frameKey}`]: key,
                   }));
-
                 }
 
                 setSelectedLayerId(`${selRowId}-${selFrameIndex}-main`);
@@ -2316,7 +2315,6 @@ export function AnimationEditor({
                   } else {
                     drawFrame();
                   }
-
                 }
                 saveToUndoStackFromHook();
               }}
@@ -2759,13 +2757,9 @@ export function AnimationEditor({
               setSelectedRow={setSelectedRow as any}
               selectedLayerId={selectedLayerId}
               setSelectedLayerId={(val: any) => {
-
-
                 if (mode === "composite") {
                   const currentFolderId = selectedLayerId;
                   const newFolderId = findCompositionFolder(val || "");
-
-
 
                   // Only apply the override logic when switching between different compositions
                   // Don't override when clicking cells within the same composition
@@ -2788,7 +2782,6 @@ export function AnimationEditor({
                     newFolderId &&
                     currentFolderId === newFolderId
                   ) {
-
                     // Don't change selectedLayerId - keep the composition folder selected
                     return;
                   }
@@ -2943,8 +2936,6 @@ export function AnimationEditor({
             setTimeout(
               () =>
                 setDrawingFrames((prev) => {
-
-
                   // Get existing unique rows for this folder
                   const existingRowsForFolder = new Set(
                     prev
