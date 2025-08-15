@@ -176,7 +176,7 @@ export default function ColorEffectsPanel({
                 />
               </div>
               <p className="text-xs text-gray-500">
-                Keep the original transparency of the image
+                Keep the original transparency (recommended)
               </p>
             </div>
           </div>

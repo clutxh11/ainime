@@ -164,26 +164,18 @@ export function applyFill(
     // Skip transparent pixels
     if (a === 0) continue;
 
-    // Apply normal blend mode (replace with fill color)
-    const newR = fillRgb.r;
-    const newG = fillRgb.g;
-    const newB = fillRgb.b;
-    let newA = a;
-
     // Apply fill opacity by blending between original and fill color
-    const finalR = r + (newR - r) * fillOpacity;
-    const finalG = g + (newG - g) * fillOpacity;
-    const finalB = b + (newB - b) * fillOpacity;
+    const finalR = r + (fillRgb.r - r) * fillOpacity;
+    const finalG = g + (fillRgb.g - g) * fillOpacity;
+    const finalB = b + (fillRgb.b - b) * fillOpacity;
 
-    // Preserve original alpha if requested, otherwise apply fill opacity to alpha
-    if (!settings.preserveOriginalAlpha) {
-      newA = a * fillOpacity;
-    }
+    // Always preserve original alpha unless explicitly requested not to
+    const finalA = settings.preserveOriginalAlpha ? a : a * fillOpacity;
 
     data[i] = Math.round(Math.max(0, Math.min(255, finalR)));
     data[i + 1] = Math.round(Math.max(0, Math.min(255, finalG)));
     data[i + 2] = Math.round(Math.max(0, Math.min(255, finalB)));
-    data[i + 3] = Math.round(Math.max(0, Math.min(255, newA)));
+    data[i + 3] = Math.round(Math.max(0, Math.min(255, finalA)));
   }
 
   return new ImageData(data, imageData.width, imageData.height);
