@@ -147,25 +147,17 @@ export function applyFill(
   imageData: ImageData,
   settings: FillSettings
 ): ImageData {
-  console.log('Fill function called with settings:', settings);
-  
   if (!settings.enabled) {
-    console.log('Fill effect disabled, returning original');
     return imageData;
   }
 
   const fillRgb = hexToRgb(settings.fillColor);
-  console.log('Fill RGB:', fillRgb);
   if (!fillRgb) {
-    console.log('Invalid fill color, returning original');
     return imageData;
   }
 
   const data = new Uint8ClampedArray(imageData.data);
   const fillOpacity = settings.opacity / 100; // Convert to 0-1 range
-  console.log('Fill opacity:', fillOpacity);
-
-  let pixelsProcessed = 0;
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
@@ -174,8 +166,6 @@ export function applyFill(
 
     // Skip transparent pixels
     if (a === 0) continue;
-
-    pixelsProcessed++;
 
     // Apply fill opacity by blending between original and fill color
     const finalR = r + (fillRgb.r - r) * fillOpacity;
@@ -191,7 +181,6 @@ export function applyFill(
     data[i + 3] = Math.round(Math.max(0, Math.min(255, finalA)));
   }
 
-  console.log('Pixels processed:', pixelsProcessed);
   return new ImageData(data, imageData.width, imageData.height);
 }
 
@@ -217,27 +206,19 @@ export function processImageWithEffects(
   // Get image data for processing
   let imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
 
-  // Debug logging
-  console.log('Processing effects:', effects);
-  console.log('Fill enabled:', effects.fill?.enabled);
-  console.log('Fill settings:', effects.fill);
-
-  // Apply fill effect first (base color transformation)
-  if (effects.fill?.enabled) {
-    console.log('Applying fill effect with color:', effects.fill.fillColor);
-    imageData = applyFill(tempCtx, imageData, effects.fill);
-  }
-
-  // Apply color key effect
+  // Apply color key effect first (removes unwanted colors)
   if (effects.colorKey?.enabled) {
-    console.log('Applying color key effect');
     imageData = applyColorKey(tempCtx, imageData, effects.colorKey);
   }
 
-  // Apply color keep effect
+  // Apply color keep effect second (isolates specific colors)
   if (effects.colorKeep?.enabled) {
-    console.log('Applying color keep effect');
     imageData = applyColorKeep(tempCtx, imageData, effects.colorKeep);
+  }
+
+  // Apply fill effect last (colors the remaining pixels)
+  if (effects.fill?.enabled) {
+    imageData = applyFill(tempCtx, imageData, effects.fill);
   }
 
   // Put processed image data back
