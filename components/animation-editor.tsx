@@ -2699,10 +2699,9 @@ export function AnimationEditor({
                         selectedLayerId || ""
                       );
                       if (!activeFolderId) return [] as any[];
-                      // Always render F1 (index 0) for the active composition, scoped by folderId
+                      // Render all frames for the active composition, scoped by folderId
                       return drawingFrames.filter(
-                        (df) =>
-                          df.folderId === activeFolderId && df.frameIndex === 0
+                        (df) => df.folderId === activeFolderId
                       );
                     })()
                   : drawingFrames) as any
@@ -2940,7 +2939,7 @@ export function AnimationEditor({
                   });
                   // Create drawing frames for the asset(s)
                   const newFrames = [];
-                  
+
                   if (first.isSequence && first.sequenceFrames) {
                     // For sequence assets, create a frame for each sequence frame
                     for (let i = 0; i < first.sequenceFrames.length; i++) {
@@ -2970,7 +2969,7 @@ export function AnimationEditor({
                       folderId,
                     });
                   }
-                  
+
                   const after = prev.concat(newFrames);
                   console.log("[Composite] materialized", { after });
                   return after;
