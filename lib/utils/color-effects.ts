@@ -162,8 +162,7 @@ export function applyColorKeep(
 export function applyFill(
   ctx: CanvasRenderingContext2D,
   imageData: ImageData,
-  settings: FillSettings,
-  isStandalone: boolean = false
+  settings: FillSettings
 ): ImageData {
   if (!settings.enabled) {
     return imageData;
@@ -183,15 +182,7 @@ export function applyFill(
     const b = data[i + 2];
     const a = data[i + 3];
 
-    // When Fill is used standalone on TGA files, skip white backgrounds automatically
-    // This allows Fill to work like After Effects on animation cells
-    if (isStandalone) {
-      const isNearWhite = r > 240 && g > 240 && b > 240;
-      if (isNearWhite) {
-        console.log("Skipping white pixel:", { r, g, b });
-        continue;
-      }
-    }
+
 
     // Apply fill opacity by blending between original and fill color
     const finalR = r + (fillRgb.r - r) * fillOpacity;
@@ -218,8 +209,6 @@ export function processImageWithEffects(
   img: HTMLImageElement,
   effects: AssetEffects
 ): HTMLCanvasElement {
-  console.log("processImageWithEffects called with effects:", effects);
-  
   // Create a temporary canvas for processing
   const tempCanvas = document.createElement("canvas");
   tempCanvas.width = img.naturalWidth;
@@ -241,27 +230,17 @@ export function processImageWithEffects(
 
   // Apply color key effect first (removes unwanted colors)
   if (effects.colorKey?.enabled) {
-    console.log("Applying color key");
     imageData = applyColorKey(tempCtx, imageData, effects.colorKey);
   }
 
   // Apply color keep effect second (isolates specific colors)
   if (effects.colorKeep?.enabled) {
-    console.log("Applying color keep");
     imageData = applyColorKeep(tempCtx, imageData, effects.colorKeep);
   }
 
   // Apply fill effect last (colors the remaining pixels)
   if (effects.fill?.enabled) {
-    // Smart white detection: if Fill is used alone, automatically skip white backgrounds
-    const isStandaloneFill =
-      effects.colorKey?.enabled !== true && effects.colorKeep?.enabled !== true;
-    console.log("Fill standalone check:", {
-      colorKeyEnabled: effects.colorKey?.enabled,
-      colorKeepEnabled: effects.colorKeep?.enabled,
-      isStandaloneFill,
-    });
-    imageData = applyFill(tempCtx, imageData, effects.fill, isStandaloneFill);
+    imageData = applyFill(tempCtx, imageData, effects.fill);
   }
 
   // Put processed image data back

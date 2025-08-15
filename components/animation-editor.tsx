@@ -582,7 +582,9 @@ export function AnimationEditor({
 
           if (
             effects &&
-            (effects.colorKey?.enabled || effects.colorKeep?.enabled)
+            (effects.colorKey?.enabled ||
+              effects.colorKeep?.enabled ||
+              effects.fill?.enabled)
           ) {
             // Process image with effects
             const processedCanvas = processImageWithEffects(ctx, img, effects);
