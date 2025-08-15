@@ -1,4 +1,4 @@
-// Simplified approach without external TGA libraries
+// Custom TGA decoder - no external dependencies
 
 export interface TGAImageData {
   width: number;
