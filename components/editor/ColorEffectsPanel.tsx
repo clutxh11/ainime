@@ -42,7 +42,6 @@ export default function ColorEffectsPanel({
         ...updates,
       },
     };
-    console.log("updateColorKey:", { assetIdentity, updates, newEffects });
     onEffectsChange(assetIdentity, newEffects);
   };
 

@@ -454,16 +454,12 @@ export function AnimationEditor({
     // For sequence frames, use only the folderId as the key to ensure
     // transformations are shared across all frames in the sequence
     if (df.isSequenceFrame) {
-      const key = compSelectedAssetFolderId;
-      console.log("selectedAssetKey (sequence):", key);
-      return key;
+      return compSelectedAssetFolderId;
     }
 
     // For single images, use the traditional folderId|fileName format
     const identity = df.fileName || df.imageUrl || null;
-    const key = identity ? `${compSelectedAssetFolderId}|${identity}` : null;
-    console.log("selectedAssetKey (single):", key, { compSelectedAssetFolderId, identity });
-    return key;
+    return identity ? `${compSelectedAssetFolderId}|${identity}` : null;
   }, [compSelectedAssetFolderId, compSelectedAssetIndex, drawingFrames]);
 
   // Draw compositing canvas: render all assets for the active composition in row order (stacked)
@@ -569,7 +565,7 @@ export function AnimationEditor({
             cell.isSequenceFrame && cell.folderId
               ? cell.folderId
               : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
-          console.log("Canvas drawing identity:", identity, { activeFolderId, cell });
+
           const persisted = boundsByAsset[identity];
           const defaultX = Math.round((comp.width - img.naturalWidth) / 2);
           const defaultY = Math.round((comp.height - img.naturalHeight) / 2);
@@ -583,16 +579,11 @@ export function AnimationEditor({
           // Apply color effects if any are set for this asset
           const effects = assetEffects[identity];
           let imageToRender = img;
-          
-          if (effects) {
-            console.log("Found effects for identity:", identity, effects);
-          }
 
           if (
             effects &&
             (effects.colorKey?.enabled || effects.colorKeep?.enabled)
           ) {
-            console.log("Applying effects to image:", identity, effects);
             // Process image with effects
             const processedCanvas = processImageWithEffects(ctx, img, effects);
             imageToRender = processedCanvas as any; // Canvas can be drawn like an image
@@ -3139,7 +3130,6 @@ export function AnimationEditor({
           drawingFrames={drawingFrames}
           assetEffects={assetEffects}
           onAssetEffectsChange={(identity, effects) => {
-            console.log("Setting asset effects:", { identity, effects });
             setAssetEffects((prev) => ({ ...prev, [identity]: effects }));
           }}
           selectedAssetKey={selectedAssetKey}
