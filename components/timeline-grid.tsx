@@ -402,22 +402,30 @@ export default function TimelineGrid({
                     ? ([] as DrawingFrame[])
                     : drawingFrames;
                   const drawing = framesForRender.find(
-                    (df) => df.rowId === row.id && df.frameIndex === i
+                    (df) => {
+                      const startFrame = df.startFrame ?? df.frameIndex;
+                      return df.rowId === row.id && startFrame === i;
+                    }
                   );
                   // Check if this cell is covered by an extended drawing frame
                   const covered = framesForRender.find(
-                    (df) =>
-                      df.rowId === row.id &&
-                      i > df.frameIndex &&
-                      i < df.frameIndex + df.length
+                    (df) => {
+                      const startFrame = df.startFrame ?? df.frameIndex;
+                      return (
+                        df.rowId === row.id &&
+                        i > startFrame &&
+                        i < startFrame + df.length
+                      );
+                    }
                   );
                   if (drawing) {
+                    const effectiveStartFrame = drawing.startFrame ?? drawing.frameIndex;
                     const isDragging =
                       dragging &&
                       dragging.rowId === row.id &&
-                      dragging.frameIndex === i;
+                      dragging.frameIndex === drawing.frameIndex; // Keep using original frameIndex for drag tracking
                     const isSingle = drawing.length === 1;
-                    const folderId = `${row.id}-${i}`;
+                    const folderId = `${row.id}-${effectiveStartFrame}`;
                     // Check if this cell should be highlighted based on selectedLayerId
                     const isSelected =
                       selectedLayerId === folderId ||
@@ -442,13 +450,13 @@ export default function TimelineGrid({
                         onClick={(e) => {
                           console.log("[Timeline] Cell clicked", {
                             rowId: row.id,
-                            frameIndex: i,
+                            frameIndex: effectiveStartFrame,
                             target: e.target,
                             currentTarget: e.currentTarget,
                             timeStamp: e.timeStamp,
                           });
                           e.stopPropagation();
-                          handleCellClick(row.id, i);
+                          handleCellClick(row.id, effectiveStartFrame);
                         }}
                         onDrop={(e) => resolveDrop(row.id, i, e)}
                         onDragOver={handleDragOver}
