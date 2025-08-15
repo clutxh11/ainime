@@ -649,7 +649,16 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
                 </div>
                 <div
                   className="flex items-center gap-2 cursor-pointer ml-2"
-                  onClick={() => handleSidebarSelection(folder.id)}
+                  onClick={(e) => {
+                    console.log("[LayersPanel] Folder clicked", { 
+                      folderId: folder.id, 
+                      event: e,
+                      target: e.target,
+                      currentTarget: e.currentTarget,
+                      timeStamp: e.timeStamp 
+                    });
+                    handleSidebarSelection(folder.id);
+                  }}
                 >
                   <Folder className="w-4 h-4 text-gray-400" />
                   {editingFolderId === folder.id ? (

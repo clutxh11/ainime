@@ -403,6 +403,13 @@ export default function TimelineGrid({
                           padding: 0,
                         }}
                         onClick={(e) => {
+                          console.log("[Timeline] Cell clicked", {
+                            rowId: row.id,
+                            frameIndex: i,
+                            target: e.target,
+                            currentTarget: e.currentTarget,
+                            timeStamp: e.timeStamp
+                          });
                           e.stopPropagation();
                           handleCellClick(row.id, i);
                         }}
