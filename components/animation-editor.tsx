@@ -387,7 +387,8 @@ export function AnimationEditor({
     const parts = layerId.split("-");
     if (parts.length < 3) return null;
     const rowId = `${parts[0]}-${parts[1]}`;
-    const frameIndex = parseInt(parts[2], 10);
+    const frameNumber = parseInt(parts[2], 10); // 1-based frame number from timeline
+    const frameIndex = frameNumber; // Convert to 0-based for drawing frames
 
     // Find a drawing frame with this rowId and frameIndex
     const matchingFrame = drawingFrames.find(
@@ -2753,6 +2754,16 @@ export function AnimationEditor({
                 if (mode === "composite") {
                   const currentFolderId = selectedLayerId;
                   const newFolderId = findCompositionFolder(val || "");
+
+                  console.log(
+                    "[Composite] Timeline click composition check",
+                    {
+                      clickedCell: val,
+                      currentFolderId,
+                      newFolderId,
+                      willSwitch: currentFolderId && newFolderId && currentFolderId !== newFolderId
+                    }
+                  );
 
                   // Only apply the override logic when switching between different compositions
                   // Don't override when clicking cells within the same composition
