@@ -109,6 +109,14 @@ export interface LayersPanelProps {
       sequenceFrames?: { file: File; blobUrl: string }[];
     }[]
   ) => void;
+  // For frame stretching support
+  drawingFrames?: Array<{
+    rowId: string;
+    frameIndex: number;
+    length: number;
+    folderId?: string;
+    isSequenceFrame?: boolean;
+  }>;
   // Compositing only: notify when a specific asset in a folder is clicked
   onSelectCompAsset?: (folderId: string, index: number) => void;
   // Compositing only: highlight selected asset
@@ -153,6 +161,7 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     handleSaveRename,
     handleCancelRename,
     handleAddLayer,
+    drawingFrames = [],
   } = props;
 
   // Root assets (not in a folder) and per-folder assets for compositing mode
@@ -165,6 +174,33 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     sequenceFrames?: { file: File; blobUrl: string }[];
   };
   const [rootAssets, setRootAssets] = React.useState<AssetItem[]>([]);
+
+  // Helper function to get frame range for an asset
+  const getAssetFrameRange = (folderId: string, assetIndex: number): string => {
+    if (!compositionByFolder || !compositionByFolder[folderId]) {
+      return `R${assetIndex + 1} F1`;
+    }
+
+    const asset = (assetsByFolder[folderId] || [])[assetIndex];
+    if (!asset) return `R${assetIndex + 1} F1`;
+
+    // Handle sequences
+    if (asset.isSequence && asset.sequenceFrames) {
+      return `R${assetIndex + 1} F1:${asset.sequenceFrames.length}`;
+    }
+
+    // Handle extended frames by looking at drawingFrames
+    const targetRowId = `row-${assetIndex + 1}`;
+    const matchingFrame = drawingFrames.find(
+      (df) => df.folderId === folderId && df.rowId === targetRowId && df.frameIndex === 0
+    );
+
+    if (matchingFrame && matchingFrame.length > 1) {
+      return `R${assetIndex + 1} F1:${matchingFrame.length}`;
+    }
+
+    return `R${assetIndex + 1} F1`;
+  };
   const [assetsByFolder, setAssetsByFolder] = React.useState<
     Record<string, AssetItem[]>
   >({});
@@ -821,9 +857,7 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
                           >
                             {compositionByFolder[folder.id] && (
                               <span className="inline-flex items-center justify-center rounded bg-gray-800/80 px-1.5 py-0.5 text-[10px] text-gray-300">
-                                {a.isSequence && a.sequenceFrames
-                                  ? `R${idx + 1} F1:${a.sequenceFrames.length}`
-                                  : `R${idx + 1} F1`}
+                                {getAssetFrameRange(folder.id, idx)}
                               </span>
                             )}
                             <span className="truncate flex-1 flex items-center gap-1">

@@ -390,32 +390,11 @@ export function AnimationEditor({
     const frameNumber = parseInt(parts[2], 10); // 1-based frame number from timeline
     const frameIndex = frameNumber; // Convert to 0-based for drawing frames
 
-    console.log("[findCompositionFolder] Debug", {
-      layerId,
-      rowId,
-      frameNumber,
-      frameIndex,
-      allDrawingFrames: drawingFrames.map(df => ({
-        rowId: df.rowId,
-        frameIndex: df.frameIndex,
-        folderId: df.folderId
-      }))
-    });
-
     // Find a drawing frame with this rowId and frameIndex
     const matchingFrame = drawingFrames.find(
       (df) => df.rowId === rowId && df.frameIndex === frameIndex
     );
-    
-    console.log("[findCompositionFolder] Result", {
-      matchingFrame: matchingFrame ? {
-        rowId: matchingFrame.rowId,
-        frameIndex: matchingFrame.frameIndex,
-        folderId: matchingFrame.folderId
-      } : null,
-      returnedFolderId: matchingFrame?.folderId || null
-    });
-    
+
     return matchingFrame?.folderId || null;
   };
 
@@ -473,13 +452,18 @@ export function AnimationEditor({
     // Get the current frame index (0-based) from selectedFrameNumber (1-based)
     const currentFrameIndex = selectedFrameNumber ? selectedFrameNumber - 1 : 0;
 
-    const assetsToDraw = drawingFrames
-      .filter((df) => {
-        if (df.folderId !== activeFolderId) return false;
-
-        // For both sequence frames AND regular images, only show when frame matches
-        return df.frameIndex === currentFrameIndex;
-      })
+            const assetsToDraw = drawingFrames
+          .filter((df) => {
+            if (df.folderId !== activeFolderId) return false;
+            
+            // For frames with length > 1 (extended frames), check if current frame is within the range
+            if (df.length && df.length > 1) {
+              return currentFrameIndex >= df.frameIndex && currentFrameIndex < df.frameIndex + df.length;
+            }
+            
+            // For regular frames and sequence frames, only show when frame matches exactly
+            return df.frameIndex === currentFrameIndex;
+          })
       .sort((a, b) => {
         const ra = parseInt(a.rowId.split("-")[1], 10);
         const rb = parseInt(b.rowId.split("-")[1], 10);
