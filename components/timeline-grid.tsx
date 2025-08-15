@@ -147,6 +147,13 @@ export default function TimelineGrid({
     handleType: "left" | "right",
     e: React.MouseEvent
   ) => {
+    console.log("[Timeline] Handle drag start:", {
+      rowId,
+      frameIndex,
+      origLength,
+      origStartFrame,
+      handleType
+    });
     setDragging({
       rowId,
       frameIndex,
@@ -215,6 +222,15 @@ export default function TimelineGrid({
         let newStartFrame = Math.max(0, dragging.origStartFrame + delta);
         let originalLength = dragging.origLength;
         let newEndFrame = newStartFrame + originalLength - 1;
+
+        console.log("[Timeline] Left handle drag:", {
+          delta,
+          origStartFrame: dragging.origStartFrame,
+          newStartFrame,
+          originalLength,
+          newEndFrame,
+          frames
+        });
 
         // Ensure we have enough frames in the timeline for the new end frame
         if (newEndFrame >= frames) {
@@ -489,7 +505,7 @@ export default function TimelineGrid({
                                       row.id,
                                       i,
                                       drawing.length,
-                                      drawing.startFrame ?? i,
+                                      drawing.startFrame ?? drawing.frameIndex,
                                       "right",
                                       e
                                     )
@@ -510,9 +526,9 @@ export default function TimelineGrid({
                                   onMouseDown={(e) =>
                                     onMouseDownHandle(
                                       row.id,
-                                      i,
+                                      drawing.frameIndex,
                                       drawing.length,
-                                      drawing.startFrame ?? i,
+                                      drawing.startFrame ?? drawing.frameIndex,
                                       "left",
                                       e
                                     )
@@ -544,7 +560,7 @@ export default function TimelineGrid({
                                       row.id,
                                       i,
                                       drawing.length,
-                                      drawing.startFrame ?? i,
+                                      drawing.startFrame ?? drawing.frameIndex,
                                       "right",
                                       e
                                     )
@@ -574,9 +590,9 @@ export default function TimelineGrid({
                                 onMouseDown={(e) =>
                                   onMouseDownHandle(
                                     row.id,
-                                    i,
+                                    drawing.frameIndex,
                                     drawing.length,
-                                    drawing.startFrame ?? i,
+                                    drawing.startFrame ?? drawing.frameIndex,
                                     "right",
                                     e
                                   )
@@ -597,9 +613,9 @@ export default function TimelineGrid({
                                 onMouseDown={(e) =>
                                   onMouseDownHandle(
                                     row.id,
-                                    i,
+                                    drawing.frameIndex,
                                     drawing.length,
-                                    drawing.startFrame ?? i,
+                                    drawing.startFrame ?? drawing.frameIndex,
                                     "left",
                                     e
                                   )
@@ -622,9 +638,9 @@ export default function TimelineGrid({
                                 onMouseDown={(e) =>
                                   onMouseDownHandle(
                                     row.id,
-                                    i,
+                                    drawing.frameIndex,
                                     drawing.length,
-                                    drawing.startFrame ?? i,
+                                    drawing.startFrame ?? drawing.frameIndex,
                                     "right",
                                     e
                                   )
