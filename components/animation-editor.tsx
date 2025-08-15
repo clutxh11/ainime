@@ -435,7 +435,8 @@ export function AnimationEditor({
   // Draw compositing canvas: render all assets for the active composition in row order (stacked)
   useEffect(() => {
     if (mode !== "composite") return;
-    const activeFolderId = findCompositionFolder(selectedLayerId || "");
+    // Use selectedLayerId directly as the active folder ID
+    const activeFolderId = selectedLayerId;
     if (!activeFolderId) return;
     const comp = compositionByFolder[activeFolderId];
     if (!comp || !compCanvasRef.current) return;
@@ -2334,9 +2335,8 @@ export function AnimationEditor({
             {/* Compositing: show blank composition canvas only after a folder is marked as a composition */}
             {mode === "composite" &&
               (() => {
-                const activeFolderId = findCompositionFolder(
-                  selectedLayerId || ""
-                );
+                // Check if selectedLayerId is a composition folder directly
+                const activeFolderId = selectedLayerId;
                 const comp = activeFolderId
                   ? compositionByFolder[activeFolderId]
                   : undefined;
@@ -2720,9 +2720,8 @@ export function AnimationEditor({
               drawingFrames={
                 (mode === "composite"
                   ? (() => {
-                      const activeFolderId = findCompositionFolder(
-                        selectedLayerId || ""
-                      );
+                      // Use selectedLayerId directly as the active folder ID
+                      const activeFolderId = selectedLayerId;
                       if (!activeFolderId) return [] as any[];
                       // Render all frames for the active composition, scoped by folderId
                       return drawingFrames.filter(
@@ -2733,9 +2732,8 @@ export function AnimationEditor({
               }
               activeCompositionLabel={(() => {
                 if (mode !== "composite") return "";
-                const activeFolderId = findCompositionFolder(
-                  selectedLayerId || ""
-                );
+                // Use selectedLayerId directly as the active folder ID
+                const activeFolderId = selectedLayerId;
                 if (!activeFolderId) return "";
                 // Only show indicator if this folder has composition settings
                 if (!compositionByFolder[activeFolderId]) return "";
@@ -2753,9 +2751,7 @@ export function AnimationEditor({
               selectedLayerId={selectedLayerId}
               setSelectedLayerId={(val: any) => {
                 if (mode === "composite") {
-                  const currentFolderId = findCompositionFolder(
-                    selectedLayerId || ""
-                  );
+                  const currentFolderId = selectedLayerId;
                   const newFolderId = findCompositionFolder(val || "");
 
                   // Only apply the override logic when switching between different compositions
