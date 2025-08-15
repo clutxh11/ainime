@@ -147,13 +147,7 @@ export default function TimelineGrid({
     handleType: "left" | "right",
     e: React.MouseEvent
   ) => {
-    console.log(`[Timeline] ${handleType} handle drag start:`, {
-      rowId,
-      frameIndex,
-      origLength,
-      origStartFrame,
-      handleType,
-    });
+
     setDragging({
       rowId,
       frameIndex,
@@ -604,13 +598,7 @@ export default function TimelineGrid({
                           padding: 0,
                         }}
                         onClick={(e) => {
-                          console.log("[Timeline] Cell clicked", {
-                            rowId: row.id,
-                            frameIndex: effectiveStartFrame,
-                            target: e.target,
-                            currentTarget: e.currentTarget,
-                            timeStamp: e.timeStamp,
-                          });
+
                           e.stopPropagation();
                           handleCellClick(row.id, effectiveStartFrame);
                         }}

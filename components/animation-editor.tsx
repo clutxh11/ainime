@@ -438,7 +438,16 @@ export function AnimationEditor({
         d.frameIndex === 0 &&
         parseInt(d.rowId.split("-")[1], 10) === compSelectedAssetIndex + 1
     );
-    const identity = df?.fileName || df?.imageUrl || null;
+    if (!df) return null;
+    
+    // For sequence frames, use only the folderId as the key to ensure
+    // transformations are shared across all frames in the sequence
+    if (df.isSequenceFrame) {
+      return compSelectedAssetFolderId;
+    }
+    
+    // For single images, use the traditional folderId|fileName format
+    const identity = df.fileName || df.imageUrl || null;
     return identity ? `${compSelectedAssetFolderId}|${identity}` : null;
   }, [compSelectedAssetFolderId, compSelectedAssetIndex, drawingFrames]);
 
@@ -487,13 +496,12 @@ export function AnimationEditor({
     // Ensure the currently selected asset draws on top during interactions to avoid visual 'glitching'
     const arrangedToDraw = (() => {
       if (!selectedAssetKey || !isMovingAsset) return assetsToDraw;
-      const [selFolderId, ...rest] = selectedAssetKey.split("|");
-      const selIdentity = rest.join("|");
-      if (!selFolderId || !selIdentity) return assetsToDraw;
+      
       const isSelected = (cell: any) => {
-        const identity = `${activeFolderId}|${
-          cell.fileName || cell.imageUrl || ""
-        }`;
+        // Use the same key logic as in the drawing loop
+        const identity = cell.isSequenceFrame && cell.folderId
+          ? cell.folderId
+          : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
         return identity === selectedAssetKey;
       };
       const nonSelected = assetsToDraw.filter((c) => !isSelected(c));
@@ -509,9 +517,11 @@ export function AnimationEditor({
           const img = new Image();
           img.crossOrigin = "anonymous";
           img.onload = () => {
-            const identity = `${activeFolderId}|${
-              cell.fileName || cell.imageUrl || ""
-            }`;
+            // For sequence frames, use folderId as the transformation key to ensure
+            // transformations persist across all frames in the sequence
+            const identity = cell.isSequenceFrame && cell.folderId
+              ? cell.folderId
+              : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
             const persisted = boundsByAsset[identity];
             const defaultX = Math.round((comp.width - img.naturalWidth) / 2);
             const defaultY = Math.round((comp.height - img.naturalHeight) / 2);
@@ -1646,12 +1656,7 @@ export function AnimationEditor({
     const realized = drawingFrames
       .map((df: any) => df.folderId)
       .filter((id: any) => typeof id === "string");
-    console.log("[Composite] Folders state", {
-      placeholders: compositeFolderIds,
-      realized,
-      effectiveCompositeIds,
-      drawingFrames,
-    });
+
   }, [mode, compositeFolderIds, drawingFrames, effectiveCompositeIds]);
 
   const sidebarFolders = (
@@ -2092,10 +2097,7 @@ export function AnimationEditor({
               onDragOver={(e) => e.preventDefault()}
               onDrop={async (e) => {
                 e.preventDefault();
-                console.log("[CanvasDrop] received", {
-                  mode,
-                  filesLen: e.dataTransfer?.files?.length,
-                });
+
                 const file = e.dataTransfer?.files?.[0];
                 if (!file || !file.type.startsWith("image/")) return;
                 // Determine current folder from selectedLayerId
@@ -2238,23 +2240,18 @@ export function AnimationEditor({
                         .from(bucket)
                         .createSignedUrl(key, 60 * 60 * 24);
                       imageUrl = signed?.signedUrl || URL.createObjectURL(file);
-                      console.log("[Drop] Signed URL created", {
-                        key,
-                        imageUrl,
-                      });
+
                     } else {
                       imageUrl = URL.createObjectURL(file);
-                      console.log("[Drop] Upload error, using blob URL", upErr);
+
                     }
                   } catch {
                     imageUrl = URL.createObjectURL(file);
-                    console.log(
-                      "[Drop] Exception during upload, using blob URL"
-                    );
+
                   }
                 } else {
                   imageUrl = URL.createObjectURL(file);
-                  console.log("[Drop] Storage disabled, using blob URL");
+
                 }
 
                 // Attach to drawingFrames cell representing this folder's page (for preview)
@@ -2301,10 +2298,7 @@ export function AnimationEditor({
                     ...prev,
                     [`${rowKey}|${frameKey}`]: key,
                   }));
-                  console.log("[Drop] Saved frameAssetKey", {
-                    cell: `${rowKey}|${frameKey}`,
-                    key,
-                  });
+
                 }
 
                 setSelectedLayerId(`${selRowId}-${selFrameIndex}-main`);
@@ -2322,7 +2316,7 @@ export function AnimationEditor({
                   } else {
                     drawFrame();
                   }
-                  console.log("[Drop] Using image URL", imageUrl);
+
                 }
                 saveToUndoStackFromHook();
               }}
@@ -2395,13 +2389,7 @@ export function AnimationEditor({
                   (df) => df.folderId === activeFolderId && df.frameIndex === 0
                 );
                 const imgSrc = f1?.imageUrl;
-                console.log("[Composite] render", {
-                  imgSrc,
-                  bounds: compImageBounds,
-                  compSize: { w: comp.width, h: comp.height },
-                  zoom,
-                  panOffset,
-                });
+
                 return (
                   <div
                     className="flex items-center justify-center"
@@ -2771,25 +2759,13 @@ export function AnimationEditor({
               setSelectedRow={setSelectedRow as any}
               selectedLayerId={selectedLayerId}
               setSelectedLayerId={(val: any) => {
-                console.log("[Timeline] setSelectedLayerId called", {
-                  mode,
-                  oldSelectedLayerId: selectedLayerId,
-                  newValue: val,
-                  timestamp: Date.now(),
-                });
+
 
                 if (mode === "composite") {
                   const currentFolderId = selectedLayerId;
                   const newFolderId = findCompositionFolder(val || "");
 
-                  console.log("[Timeline] Composition switching check", {
-                    currentFolderId,
-                    newFolderId,
-                    willSwitch:
-                      currentFolderId &&
-                      newFolderId &&
-                      currentFolderId !== newFolderId,
-                  });
+
 
                   // Only apply the override logic when switching between different compositions
                   // Don't override when clicking cells within the same composition
@@ -2799,10 +2775,7 @@ export function AnimationEditor({
                     currentFolderId !== newFolderId
                   ) {
                     // Switch to the new composition folder - use the folder ID directly
-                    console.log("[Timeline] Switching compositions", {
-                      from: currentFolderId,
-                      to: newFolderId,
-                    });
+
                     setSelectedLayerId(newFolderId);
                     setSelectedFrameNumber(1);
                     return;
@@ -2815,19 +2788,13 @@ export function AnimationEditor({
                     newFolderId &&
                     currentFolderId === newFolderId
                   ) {
-                    console.log(
-                      "[Timeline] Cell click within same composition - keeping folder selected",
-                      {
-                        keepingFolderId: currentFolderId,
-                        cellClicked: val,
-                      }
-                    );
+
                     // Don't change selectedLayerId - keep the composition folder selected
                     return;
                   }
                 }
                 // Allow normal layer ID setting for other cases
-                console.log("[Timeline] Setting selectedLayerId to", val);
+
                 setSelectedLayerId(val);
               }}
               selectedFrameNumber={selectedFrameNumber}
@@ -2976,11 +2943,7 @@ export function AnimationEditor({
             setTimeout(
               () =>
                 setDrawingFrames((prev) => {
-                  console.log("[Composite] onFolderReceiveAssets", {
-                    folderId,
-                    assets,
-                    before: prev,
-                  });
+
 
                   // Get existing unique rows for this folder
                   const existingRowsForFolder = new Set(
@@ -3045,7 +3008,7 @@ export function AnimationEditor({
                   });
 
                   const after = prev.concat(allNewFrames);
-                  console.log("[Composite] materialized", { after });
+
                   return after;
                 }),
               0
