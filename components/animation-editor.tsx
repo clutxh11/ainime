@@ -2755,9 +2755,9 @@ export function AnimationEditor({
                   mode,
                   oldSelectedLayerId: selectedLayerId,
                   newValue: val,
-                  timestamp: Date.now()
+                  timestamp: Date.now(),
                 });
-                
+
                 if (mode === "composite") {
                   const currentFolderId = selectedLayerId;
                   const newFolderId = findCompositionFolder(val || "");
@@ -2765,7 +2765,10 @@ export function AnimationEditor({
                   console.log("[Timeline] Composition switching check", {
                     currentFolderId,
                     newFolderId,
-                    willSwitch: currentFolderId && newFolderId && currentFolderId !== newFolderId
+                    willSwitch:
+                      currentFolderId &&
+                      newFolderId &&
+                      currentFolderId !== newFolderId,
                   });
 
                   // Only apply the override logic when switching between different compositions
@@ -2778,14 +2781,25 @@ export function AnimationEditor({
                     // Switch to the new composition folder - use the folder ID directly
                     console.log("[Timeline] Switching compositions", {
                       from: currentFolderId,
-                      to: newFolderId
+                      to: newFolderId,
                     });
                     setSelectedLayerId(newFolderId);
                     setSelectedFrameNumber(1);
                     return;
                   }
+
+                  // For timeline cell clicks within the same composition,
+                  // keep the composition folder selected, don't change to the cell ID
+                  if (currentFolderId && newFolderId && currentFolderId === newFolderId) {
+                    console.log("[Timeline] Cell click within same composition - keeping folder selected", {
+                      keepingFolderId: currentFolderId,
+                      cellClicked: val
+                    });
+                    // Don't change selectedLayerId - keep the composition folder selected
+                    return;
+                  }
                 }
-                // Allow normal layer ID setting for cell clicks within same composition
+                // Allow normal layer ID setting for other cases
                 console.log("[Timeline] Setting selectedLayerId to", val);
                 setSelectedLayerId(val);
               }}
