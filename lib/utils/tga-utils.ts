@@ -41,9 +41,9 @@ export async function decodeTGA(file: File): Promise<TGAImageData> {
         const colorMapType = view.getUint8(1);
         const imageType = view.getUint8(2);
         
-        // We only support uncompressed true-color images (type 2)
-        if (imageType !== 2) {
-          reject(new Error(`Unsupported TGA image type: ${imageType}. Only uncompressed true-color (type 2) is supported.`));
+        // Support uncompressed (type 2) and RLE compressed (type 10) true-color images
+        if (imageType !== 2 && imageType !== 10) {
+          reject(new Error(`Unsupported TGA image type: ${imageType}. Only uncompressed (type 2) and RLE compressed (type 10) true-color images are supported.`));
           return;
         }
         
@@ -74,38 +74,111 @@ export async function decodeTGA(file: File): Promise<TGAImageData> {
           dataOffset += colorMapLength * Math.ceil(colorMapEntrySize / 8);
         }
         
-        // Check if we have enough data
-        const expectedDataSize = width * height * bytesPerPixel;
-        if (buffer.byteLength < dataOffset + expectedDataSize) {
-          reject(new Error("TGA file appears to be truncated"));
-          return;
+        // Check if we have enough data (only for uncompressed images)
+        if (imageType === 2) {
+          const expectedDataSize = width * height * bytesPerPixel;
+          if (buffer.byteLength < dataOffset + expectedDataSize) {
+            reject(new Error("TGA file appears to be truncated"));
+            return;
+          }
         }
         
         // Determine if image is flipped (bit 5 of image descriptor)
         const isTopDown = (imageDescriptor & 0x20) !== 0;
         
-        // Read pixel data
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            // Calculate source position
-            const srcY = isTopDown ? y : (height - 1 - y); // TGA is usually bottom-up
-            const srcIndex = dataOffset + (srcY * width + x) * bytesPerPixel;
+        // Read pixel data (handle both uncompressed and RLE compressed)
+        if (imageType === 2) {
+          // Uncompressed
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              // Calculate source position
+              const srcY = isTopDown ? y : (height - 1 - y); // TGA is usually bottom-up
+              const srcIndex = dataOffset + (srcY * width + x) * bytesPerPixel;
+              
+              // Calculate destination position (always top-down for canvas)
+              const dstIndex = (y * width + x) * 4;
+              
+              if (bitsPerPixel === 24) {
+                // BGR format in TGA
+                imageData[dstIndex + 0] = view.getUint8(srcIndex + 2); // R
+                imageData[dstIndex + 1] = view.getUint8(srcIndex + 1); // G
+                imageData[dstIndex + 2] = view.getUint8(srcIndex + 0); // B
+                imageData[dstIndex + 3] = 255; // A (opaque)
+              } else if (bitsPerPixel === 32) {
+                // BGRA format in TGA
+                imageData[dstIndex + 0] = view.getUint8(srcIndex + 2); // R
+                imageData[dstIndex + 1] = view.getUint8(srcIndex + 1); // G
+                imageData[dstIndex + 2] = view.getUint8(srcIndex + 0); // B
+                imageData[dstIndex + 3] = view.getUint8(srcIndex + 3); // A
+              }
+            }
+          }
+        } else if (imageType === 10) {
+          // RLE compressed
+          let srcIndex = dataOffset;
+          let dstPixelIndex = 0;
+          const totalPixels = width * height;
+          
+          while (dstPixelIndex < totalPixels && srcIndex < buffer.byteLength) {
+            const header = view.getUint8(srcIndex++);
+            const isRLEPacket = (header & 0x80) !== 0;
+            const pixelCount = (header & 0x7F) + 1;
             
-            // Calculate destination position (always top-down for canvas)
-            const dstIndex = (y * width + x) * 4;
-            
-            if (bitsPerPixel === 24) {
-              // BGR format in TGA
-              imageData[dstIndex + 0] = view.getUint8(srcIndex + 2); // R
-              imageData[dstIndex + 1] = view.getUint8(srcIndex + 1); // G
-              imageData[dstIndex + 2] = view.getUint8(srcIndex + 0); // B
-              imageData[dstIndex + 3] = 255; // A (opaque)
-            } else if (bitsPerPixel === 32) {
-              // BGRA format in TGA
-              imageData[dstIndex + 0] = view.getUint8(srcIndex + 2); // R
-              imageData[dstIndex + 1] = view.getUint8(srcIndex + 1); // G
-              imageData[dstIndex + 2] = view.getUint8(srcIndex + 0); // B
-              imageData[dstIndex + 3] = view.getUint8(srcIndex + 3); // A
+            if (isRLEPacket) {
+              // RLE packet: repeat the next pixel
+              let r, g, b, a;
+              if (bitsPerPixel === 24) {
+                b = view.getUint8(srcIndex++);
+                g = view.getUint8(srcIndex++);
+                r = view.getUint8(srcIndex++);
+                a = 255;
+              } else if (bitsPerPixel === 32) {
+                b = view.getUint8(srcIndex++);
+                g = view.getUint8(srcIndex++);
+                r = view.getUint8(srcIndex++);
+                a = view.getUint8(srcIndex++);
+              }
+              
+              // Repeat this pixel
+              for (let i = 0; i < pixelCount && dstPixelIndex < totalPixels; i++) {
+                const x = dstPixelIndex % width;
+                const y = Math.floor(dstPixelIndex / width);
+                const adjustedY = isTopDown ? y : (height - 1 - y);
+                const dstIndex = (adjustedY * width + x) * 4;
+                
+                imageData[dstIndex + 0] = r!;
+                imageData[dstIndex + 1] = g!;
+                imageData[dstIndex + 2] = b!;
+                imageData[dstIndex + 3] = a!;
+                dstPixelIndex++;
+              }
+            } else {
+              // Raw packet: read individual pixels
+              for (let i = 0; i < pixelCount && dstPixelIndex < totalPixels; i++) {
+                let r, g, b, a;
+                if (bitsPerPixel === 24) {
+                  b = view.getUint8(srcIndex++);
+                  g = view.getUint8(srcIndex++);
+                  r = view.getUint8(srcIndex++);
+                  a = 255;
+                } else if (bitsPerPixel === 32) {
+                  b = view.getUint8(srcIndex++);
+                  g = view.getUint8(srcIndex++);
+                  r = view.getUint8(srcIndex++);
+                  a = view.getUint8(srcIndex++);
+                }
+                
+                const x = dstPixelIndex % width;
+                const y = Math.floor(dstPixelIndex / width);
+                const adjustedY = isTopDown ? y : (height - 1 - y);
+                const dstIndex = (adjustedY * width + x) * 4;
+                
+                imageData[dstIndex + 0] = r!;
+                imageData[dstIndex + 1] = g!;
+                imageData[dstIndex + 2] = b!;
+                imageData[dstIndex + 3] = a!;
+                dstPixelIndex++;
+              }
             }
           }
         }
