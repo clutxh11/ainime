@@ -503,7 +503,7 @@ export default function TimelineGrid({
                                   onMouseDown={(e) =>
                                     onMouseDownHandle(
                                       row.id,
-                                      i,
+                                      drawing.frameIndex,
                                       drawing.length,
                                       drawing.startFrame ?? drawing.frameIndex,
                                       "right",
@@ -558,7 +558,7 @@ export default function TimelineGrid({
                                   onMouseDown={(e) =>
                                     onMouseDownHandle(
                                       row.id,
-                                      i,
+                                      drawing.frameIndex,
                                       drawing.length,
                                       drawing.startFrame ?? drawing.frameIndex,
                                       "right",
@@ -587,13 +587,7 @@ export default function TimelineGrid({
                               {/* Right handle for extending single frame */}
                               <span
                                 className="cursor-ew-resize pr-1 select-none flex items-center h-full"
-                                onMouseDown={(e) => {
-                                  console.log('[Timeline] Right handle click - debug values:', {
-                                    visualPosition_i: i,
-                                    drawing_frameIndex: drawing.frameIndex,
-                                    drawing_startFrame: drawing.startFrame,
-                                    effective_startFrame: drawing.startFrame ?? drawing.frameIndex
-                                  });
+                                onMouseDown={(e) =>
                                   onMouseDownHandle(
                                     row.id,
                                     drawing.frameIndex,
@@ -601,8 +595,8 @@ export default function TimelineGrid({
                                     drawing.startFrame ?? drawing.frameIndex,
                                     "right",
                                     e
-                                  );
-                                }}
+                                  )
+                                }
                                 style={{
                                   userSelect: "none",
                                   fontSize: "0.7em",
