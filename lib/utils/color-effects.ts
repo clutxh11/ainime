@@ -145,35 +145,33 @@ export function applyColorKeep(
 export function applyFill(
   ctx: CanvasRenderingContext2D,
   imageData: ImageData,
-  settings: FillSettings
+  settings: FillSettings,
+  isStandalone: boolean = false
 ): ImageData {
-  console.log('Fill function called with settings:', settings);
-  
   if (!settings.enabled) {
-    console.log('Fill disabled');
     return imageData;
   }
 
   const fillRgb = hexToRgb(settings.fillColor);
-  console.log('Fill RGB:', fillRgb);
   if (!fillRgb) {
-    console.log('Invalid fill color');
     return imageData;
   }
 
   const data = new Uint8ClampedArray(imageData.data);
   const fillOpacity = settings.opacity / 100; // Convert to 0-1 range
-  console.log('Fill opacity:', fillOpacity);
   
-  let pixelsChanged = 0;
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
     const b = data[i + 2];
     const a = data[i + 3];
 
-    // Apply fill to all pixels with any alpha value
-    // This matches After Effects Fill behavior
+    // When Fill is used standalone on TGA files, skip white backgrounds automatically
+    // This allows Fill to work like After Effects on animation cells
+    if (isStandalone) {
+      const isNearWhite = r > 240 && g > 240 && b > 240;
+      if (isNearWhite) continue;
+    }
     
     // Apply fill opacity by blending between original and fill color
     const finalR = r + (fillRgb.r - r) * fillOpacity;
@@ -187,11 +185,8 @@ export function applyFill(
     data[i + 1] = Math.round(Math.max(0, Math.min(255, finalG)));
     data[i + 2] = Math.round(Math.max(0, Math.min(255, finalB)));
     data[i + 3] = Math.round(Math.max(0, Math.min(255, finalA)));
-    
-    pixelsChanged++;
   }
 
-  console.log('Fill processed', pixelsChanged, 'pixels');
   return new ImageData(data, imageData.width, imageData.height);
 }
 
@@ -203,10 +198,6 @@ export function processImageWithEffects(
   img: HTMLImageElement,
   effects: AssetEffects
 ): HTMLCanvasElement {
-  console.log('Processing effects:', effects);
-  console.log('Fill enabled:', effects.fill?.enabled);
-  console.log('Fill settings:', effects.fill);
-  
   // Create a temporary canvas for processing
   const tempCanvas = document.createElement('canvas');
   tempCanvas.width = img.naturalWidth;
@@ -223,20 +214,19 @@ export function processImageWithEffects(
 
   // Apply color key effect first (removes unwanted colors)
   if (effects.colorKey?.enabled) {
-    console.log('Applying color key');
     imageData = applyColorKey(tempCtx, imageData, effects.colorKey);
   }
 
   // Apply color keep effect second (isolates specific colors)
   if (effects.colorKeep?.enabled) {
-    console.log('Applying color keep');
     imageData = applyColorKeep(tempCtx, imageData, effects.colorKeep);
   }
 
   // Apply fill effect last (colors the remaining pixels)
   if (effects.fill?.enabled) {
-    console.log('Applying fill with color:', effects.fill.fillColor);
-    imageData = applyFill(tempCtx, imageData, effects.fill);
+    // Smart white detection: if Fill is used alone, automatically skip white backgrounds
+    const isStandaloneeFill = !effects.colorKey?.enabled && !effects.colorKeep?.enabled;
+    imageData = applyFill(tempCtx, imageData, effects.fill, isStandaloneeFill);
   }
 
   // Put processed image data back
