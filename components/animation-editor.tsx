@@ -432,9 +432,12 @@ export function AnimationEditor({
 
     // Get the current frame index (0-based) from selectedFrameNumber (1-based)
     const currentFrameIndex = selectedFrameNumber ? selectedFrameNumber - 1 : 0;
-    
+
     const assetsToDraw = drawingFrames
-      .filter((df) => df.folderId === activeFolderId && df.frameIndex === currentFrameIndex)
+      .filter(
+        (df) =>
+          df.folderId === activeFolderId && df.frameIndex === currentFrameIndex
+      )
       .sort((a, b) => {
         const ra = parseInt(a.rowId.split("-")[1], 10);
         const rb = parseInt(b.rowId.split("-")[1], 10);
@@ -2732,59 +2735,40 @@ export function AnimationEditor({
               selectedLayerId={selectedLayerId}
               setSelectedLayerId={(val: any) => {
                 if (mode === "composite") {
-                  const activeFolderId = getActiveFrameFolderId(
+                  const currentActiveFolderId = getActiveFrameFolderId(
                     selectedLayerId || ""
                   );
-                  if (activeFolderId) {
-                    setSelectedLayerId(activeFolderId);
+                  const newActiveFolderId = getActiveFrameFolderId(val || "");
+                  
+                  // Only apply the override logic when switching between different compositions
+                  // Don't override when clicking cells within the same composition
+                  if (currentActiveFolderId && newActiveFolderId && 
+                      currentActiveFolderId !== newActiveFolderId) {
+                    setSelectedLayerId(newActiveFolderId);
                     console.log(
-                      "[Composite] Timeline setSelectedLayerId -> force F1",
+                      "[Composite] Timeline setSelectedLayerId -> switching compositions, force F1",
                       {
-                        activeFolderId,
+                        from: currentActiveFolderId,
+                        to: newActiveFolderId,
                       }
                     );
                     setSelectedFrameNumber(1);
-                    // Ensure F1 exists visually: if a frame exists for this comp but not at index 0,
-                    // mirror it into index 0 so the grid and canvas show content consistently.
-                    const parts = activeFolderId.split("-");
-                    const rowId = `${parts[0]}-${parts[1]}`;
-                    setDrawingFrames((prev) => {
-                      const hasF1 = prev.some(
-                        (df) =>
-                          df.folderId === activeFolderId && df.frameIndex === 0
-                      );
-                      if (hasF1) return prev;
-                      const anyCell = prev.find(
-                        (df) => df.folderId === activeFolderId
-                      );
-                      if (!anyCell) return prev;
-                      return [
-                        ...prev,
-                        {
-                          rowId,
-                          frameIndex: 0,
-                          length: 1,
-                          imageUrl: anyCell.imageUrl,
-                          fileName: anyCell.fileName,
-                          folderId: activeFolderId,
-                        },
-                      ];
-                    });
                     return;
                   }
                 }
+                // Allow normal layer ID setting for cell clicks within same composition
                 setSelectedLayerId(val);
               }}
               selectedFrameNumber={selectedFrameNumber}
               setSelectedFrameNumber={(n: any) => {
                 if (mode === "composite") {
                   console.log(
-                    "[Composite] Timeline setSelectedFrameNumber -> clamp to 1",
+                    "[Composite] Timeline setSelectedFrameNumber -> allow frame change",
                     {
                       requested: n,
                     }
                   );
-                  setSelectedFrameNumber(1);
+                  setSelectedFrameNumber(n);
                 } else {
                   setSelectedFrameNumber(n);
                 }

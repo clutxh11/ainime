@@ -206,12 +206,8 @@ export default function TimelineGrid({
     if (setSelectedLayerId && setSelectedFrameNumber) {
       const folderId = `${rowId}-${frameIndex}`;
       setSelectedLayerId(folderId);
-      // In compositing mode, always clamp to F1
-      if ((activeCompositionLabel as any) !== undefined) {
-        setSelectedFrameNumber(1);
-      } else {
-        setSelectedFrameNumber(frameIndex + 1);
-      }
+      // Set frame number to the clicked frame (1-based)
+      setSelectedFrameNumber(frameIndex + 1);
     }
   };
 
