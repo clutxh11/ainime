@@ -1062,11 +1062,12 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
                       "[Composite] Create Composition OK, materialize all assets",
                       { folderId, count: items.length }
                     );
-                    items.forEach((asset, index) => {
+                    // Send all assets in one call to prevent duplicate timeline entries
+                    if (items.length > 0) {
                       setTimeout(() => {
-                        props.onFolderReceiveAssets?.(folderId, [asset]);
-                      }, index * 5);
-                    });
+                        props.onFolderReceiveAssets?.(folderId, items);
+                      }, 5);
+                    }
                   }
                 }
                 setCompositionModal((s) => ({ ...s, open: false }));

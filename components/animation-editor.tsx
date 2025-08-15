@@ -436,12 +436,12 @@ export function AnimationEditor({
     const assetsToDraw = drawingFrames
       .filter((df) => {
         if (df.folderId !== activeFolderId) return false;
-        
+
         // For sequence frames, only show the frame that matches current frame number
         if (df.isSequenceFrame) {
           return df.frameIndex === currentFrameIndex;
         }
-        
+
         // For regular images, show them on all frames (they persist across frames)
         return true;
       })
@@ -2843,22 +2843,35 @@ export function AnimationEditor({
           onReorderCompAssets={(folderId, from, to) => {
             // Reorder z-index for compositing by reordering the drawingFrames entries for this folder
             setDrawingFrames((prev) => {
-              const f1Frames = prev.filter(
-                (df) => df.folderId === folderId && df.frameIndex === 0
-              );
-              if (f1Frames.length <= 1) return prev;
-              const others = prev.filter(
-                (df) => !(df.folderId === folderId && df.frameIndex === 0)
-              );
-              const items = [...f1Frames];
-              const [m] = items.splice(from, 1);
-              items.splice(to, 0, m);
-              // Reassign rowIds to keep R1, R2, R3 order after reorder
-              const reassigned = items.map((df, idx) => ({
-                ...df,
-                rowId: `row-${idx + 1}`,
-              }));
-              return [...others, ...reassigned];
+              // Group frames by asset/row - for sequences, we need to move all frames together
+              const assetFrameGroups = prev
+                .filter((df) => df.folderId === folderId)
+                .reduce((acc, df) => {
+                  const rowKey = df.rowId;
+                  if (!acc[rowKey]) acc[rowKey] = [];
+                  acc[rowKey].push(df);
+                  return acc;
+                }, {} as Record<string, typeof prev>);
+
+              const otherFrames = prev.filter((df) => df.folderId !== folderId);
+              const groupKeys = Object.keys(assetFrameGroups).sort();
+
+              if (groupKeys.length <= 1) return prev;
+
+              // Reorder the asset groups
+              const [movedGroup] = groupKeys.splice(from, 1);
+              groupKeys.splice(to, 0, movedGroup);
+
+              // Reassign rowIds and flatten back to individual frames
+              const reorderedFrames = groupKeys.flatMap((groupKey, idx) => {
+                const newRowId = `row-${idx + 1}`;
+                return assetFrameGroups[groupKey].map((df) => ({
+                  ...df,
+                  rowId: newRowId,
+                }));
+              });
+
+              return [...otherFrames, ...reorderedFrames];
             });
             // Update selected index if it was moved
             setCompSelectedAssetIndex((cur) => {
@@ -2902,7 +2915,6 @@ export function AnimationEditor({
           }}
           onFolderReceiveAssets={(folderId, assets) => {
             if (!assets || assets.length === 0) return;
-            const first = assets[0];
             // For compositing, each new asset should occupy the next row at F1 (R1 F1, R2 F1, ...)
             const parts = folderId.split("-");
             const frameIndex = parseInt(parts[2], 10);
@@ -2911,64 +2923,73 @@ export function AnimationEditor({
                 setDrawingFrames((prev) => {
                   console.log("[Composite] onFolderReceiveAssets", {
                     folderId,
-                    first,
+                    assets,
                     before: prev,
                   });
-                  // Count unique rows for this folder to determine next row number
-                  const uniqueRowsForFolder = new Set(
+
+                  // Get existing unique rows for this folder
+                  const existingRowsForFolder = new Set(
                     prev
                       .filter((df) => df.folderId === folderId)
                       .map((df) => df.rowId)
                   );
-                  const nextRowNumber = uniqueRowsForFolder.size + 1; // 1-based
-                  const rowId = `row-${nextRowNumber}`;
-                  // Ensure timeline has enough rows to show this new entry
+
+                  const allNewFrames = [];
+                  let currentRowNumber = existingRowsForFolder.size + 1; // Start from next available row
+
+                  // Process each asset
+                  for (const asset of assets) {
+                    const rowId = `row-${currentRowNumber}`;
+
+                    if (asset.isSequence && asset.sequenceFrames) {
+                      // For sequence assets, create a frame for each sequence frame
+                      for (let i = 0; i < asset.sequenceFrames.length; i++) {
+                        const seqFrame = asset.sequenceFrames[i];
+                        allNewFrames.push({
+                          rowId,
+                          frameIndex: i, // F1, F2, F3, etc.
+                          length: 1,
+                          imageUrl: seqFrame.blobUrl,
+                          fileName: `${asset.name} [Frame ${i + 1}]`,
+                          folderId,
+                          sequenceIndex: i,
+                          isSequenceFrame: true,
+                        });
+                      }
+                    } else {
+                      // For regular assets, create a single frame
+                      allNewFrames.push({
+                        rowId,
+                        frameIndex: 0, // Regular images start at F1
+                        length: 1,
+                        imageUrl:
+                          asset.url.endsWith(".tga") && asset.file
+                            ? URL.createObjectURL(asset.file)
+                            : asset.url,
+                        fileName: asset.name,
+                        folderId,
+                      });
+                    }
+
+                    currentRowNumber++; // Move to next row for next asset
+                  }
+
+                  // Ensure timeline has enough rows to show all new entries
                   setRows((prevRows) => {
                     const numbers = prevRows
                       .map((r) => r.id.match(/row-(\d+)/)?.[1])
                       .map((n) => (n ? parseInt(n, 10) : 0));
                     const maxExisting = Math.max(0, ...numbers);
-                    if (maxExisting >= nextRowNumber) return prevRows;
+                    const maxNeeded = currentRowNumber - 1; // currentRowNumber is now one past the last used
+                    if (maxExisting >= maxNeeded) return prevRows;
                     const additions = [] as any[];
-                    for (let i = maxExisting + 1; i <= nextRowNumber; i++) {
+                    for (let i = maxExisting + 1; i <= maxNeeded; i++) {
                       additions.push({ id: `row-${i}`, name: `Row${i}` });
                     }
                     return [...prevRows, ...additions];
                   });
-                  // Create drawing frames for the asset(s)
-                  const newFrames = [];
 
-                  if (first.isSequence && first.sequenceFrames) {
-                    // For sequence assets, create a frame for each sequence frame
-                    for (let i = 0; i < first.sequenceFrames.length; i++) {
-                      const seqFrame = first.sequenceFrames[i];
-                      newFrames.push({
-                        rowId,
-                        frameIndex: i, // F1, F2, F3, etc.
-                        length: 1,
-                        imageUrl: seqFrame.blobUrl,
-                        fileName: `${first.name} [Frame ${i + 1}]`,
-                        folderId,
-                        sequenceIndex: i,
-                        isSequenceFrame: true,
-                      });
-                    }
-                  } else {
-                    // For regular assets, create a single frame
-                    newFrames.push({
-                      rowId,
-                      frameIndex: 0, // Regular images start at F1
-                      length: 1,
-                      imageUrl:
-                        first.url.endsWith(".tga") && first.file
-                          ? URL.createObjectURL(first.file)
-                          : first.url,
-                      fileName: first.name,
-                      folderId,
-                    });
-                  }
-
-                  const after = prev.concat(newFrames);
+                  const after = prev.concat(allNewFrames);
                   console.log("[Composite] materialized", { after });
                   return after;
                 }),
@@ -2982,16 +3003,17 @@ export function AnimationEditor({
             }, 1);
             // Initialize selection and bounds for this comp so clicking doesn't shift
             const comp = compositionByFolder[folderId];
-            if (comp) {
+            if (comp && assets.length > 0) {
+              const firstAsset = assets[0];
               setCompSelectedAssetFolderId(folderId);
               setCompSelectedAssetIndex((prev) =>
                 prev == null ? 0 : prev + 1
               );
               // Initialize selection bounds from the image's natural size centered on canvas
               const src =
-                (first.url.endsWith(".tga") && first.file
-                  ? URL.createObjectURL(first.file)
-                  : first.url) || "";
+                (firstAsset.url.endsWith(".tga") && firstAsset.file
+                  ? URL.createObjectURL(firstAsset.file)
+                  : firstAsset.url) || "";
               const img = new Image();
               img.onload = () => {
                 const w = img.naturalWidth || comp.width;
