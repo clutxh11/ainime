@@ -163,6 +163,9 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     files: File[];
   }>({ open: false, sequence: null, targetFolderId: undefined, files: [] });
 
+  // Track blob URLs for cleanup
+  const blobUrlsRef = React.useRef<Set<string>>(new Set());
+
   // Helper: shorten long filenames for display while preserving the extension
   const formatDisplayName = React.useCallback(
     (name: string, max: number = 28) => {
@@ -187,12 +190,16 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
       const processedFiles = await processTGAFiles(files);
 
       const additions: AssetItem[] = processedFiles.map(
-        ({ file, blobUrl }) => ({
-          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: file.name,
-          url: blobUrl,
-          file,
-        })
+        ({ file, blobUrl }) => {
+          // Track blob URLs for cleanup
+          blobUrlsRef.current.add(blobUrl);
+          return {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            name: file.name,
+            url: blobUrl,
+            file,
+          };
+        }
       );
 
       if (folderId) {
@@ -402,15 +409,12 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
   // Cleanup blob URLs when component unmounts
   React.useEffect(() => {
     return () => {
-      const allUrls = [
-        ...rootAssets.map((a) => a.url),
-        ...Object.values(assetsByFolder)
-          .flat()
-          .map((a) => a.url),
-      ];
-      cleanupBlobURLs(allUrls);
+      // Clean up all tracked blob URLs
+      const urlsToCleanup = Array.from(blobUrlsRef.current);
+      cleanupBlobURLs(urlsToCleanup);
+      blobUrlsRef.current.clear();
     };
-  }, [rootAssets, assetsByFolder]);
+  }, []); // No dependencies - only cleanup on unmount
 
   // Expose methods to parent via ref
   React.useImperativeHandle(ref, () => ({

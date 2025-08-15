@@ -2987,15 +2987,31 @@ export function AnimationEditor({
             // In compositing mode, do not create extra editor layers here
           }}
           onSelectCompAsset={(folderId, index) => {
+            console.log(`[Composite] onSelectCompAsset called`, { folderId, index });
             // Select asset within comp and compute its natural bounds
             const comp = compositionByFolder[folderId];
-            if (!comp) return;
+            if (!comp) {
+              console.log(`[Composite] No comp found for folderId:`, folderId);
+              return;
+            }
+            console.log(`[Composite] Looking for drawingFrame:`, {
+              folderId,
+              frameIndex: 0,
+              expectedRowId: `row-${index + 1}-0`,
+              availableFrames: drawingFrames.map(d => ({
+                folderId: d.folderId,
+                frameIndex: d.frameIndex,
+                rowId: d.rowId,
+                imageUrl: d.imageUrl?.substring(0, 50) + '...'
+              }))
+            });
             const df = drawingFrames.find(
               (d) =>
                 d.folderId === folderId &&
                 d.frameIndex === 0 &&
                 parseInt(d.rowId.split("-")[1], 10) === index + 1
             );
+            console.log(`[Composite] Found drawingFrame:`, df ? { rowId: df.rowId, hasImageUrl: !!df.imageUrl } : 'none');
             if (!df?.imageUrl) return;
             const img = new Image();
             img.onload = () => {
