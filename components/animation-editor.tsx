@@ -430,8 +430,11 @@ export function AnimationEditor({
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, comp.width, comp.height);
 
+    // Get the current frame index (0-based) from selectedFrameNumber (1-based)
+    const currentFrameIndex = selectedFrameNumber ? selectedFrameNumber - 1 : 0;
+    
     const assetsToDraw = drawingFrames
-      .filter((df) => df.folderId === activeFolderId)
+      .filter((df) => df.folderId === activeFolderId && df.frameIndex === currentFrameIndex)
       .sort((a, b) => {
         const ra = parseInt(a.rowId.split("-")[1], 10);
         const rb = parseInt(b.rowId.split("-")[1], 10);
@@ -499,6 +502,7 @@ export function AnimationEditor({
   }, [
     mode,
     selectedLayerId,
+    selectedFrameNumber,
     compositionByFolder,
     drawingFrames,
     rotationByAsset,
