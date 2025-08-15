@@ -617,6 +617,7 @@ export function AnimationEditor({
     drawingFrames,
     rotationByAsset,
     boundsByAsset,
+    assetEffects,
   ]);
 
   // In compositing mode we allow creating folders without timeline cells.
