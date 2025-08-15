@@ -229,7 +229,8 @@ export default function TimelineGrid({
       } else {
         // Left handle: adjust start frame while keeping the END FRAME fixed
         let newStartFrame = Math.max(0, dragging.origStartFrame + delta);
-        let originalEndFrame = dragging.origStartFrame + dragging.origLength - 1; // Keep end fixed
+        let originalEndFrame =
+          dragging.origStartFrame + dragging.origLength - 1; // Keep end fixed
         let newLength = Math.max(1, originalEndFrame - newStartFrame + 1);
 
         // Ensure we have enough frames in the timeline for the end frame
@@ -417,25 +418,22 @@ export default function TimelineGrid({
                   const framesForRender = suppressFrames
                     ? ([] as DrawingFrame[])
                     : drawingFrames;
-                  const drawing = framesForRender.find(
-                    (df) => {
-                      const startFrame = df.startFrame ?? df.frameIndex;
-                      return df.rowId === row.id && startFrame === i;
-                    }
-                  );
+                  const drawing = framesForRender.find((df) => {
+                    const startFrame = df.startFrame ?? df.frameIndex;
+                    return df.rowId === row.id && startFrame === i;
+                  });
                   // Check if this cell is covered by an extended drawing frame
-                  const covered = framesForRender.find(
-                    (df) => {
-                      const startFrame = df.startFrame ?? df.frameIndex;
-                      return (
-                        df.rowId === row.id &&
-                        i > startFrame &&
-                        i < startFrame + df.length
-                      );
-                    }
-                  );
+                  const covered = framesForRender.find((df) => {
+                    const startFrame = df.startFrame ?? df.frameIndex;
+                    return (
+                      df.rowId === row.id &&
+                      i > startFrame &&
+                      i < startFrame + df.length
+                    );
+                  });
                   if (drawing) {
-                    const effectiveStartFrame = drawing.startFrame ?? drawing.frameIndex;
+                    const effectiveStartFrame =
+                      drawing.startFrame ?? drawing.frameIndex;
                     const isDragging =
                       dragging &&
                       dragging.rowId === row.id &&

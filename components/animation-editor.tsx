@@ -388,12 +388,20 @@ export function AnimationEditor({
     if (parts.length < 3) return null;
     const rowId = `${parts[0]}-${parts[1]}`;
     const frameNumber = parseInt(parts[2], 10); // 1-based frame number from timeline
-    const frameIndex = frameNumber; // Convert to 0-based for drawing frames
+    const frameIndex = frameNumber; // Convert to 0-based for timeline position
 
-    // Find a drawing frame with this rowId and frameIndex
-    const matchingFrame = drawingFrames.find(
-      (df) => df.rowId === rowId && df.frameIndex === frameIndex
-    );
+    // Find a drawing frame that covers this timeline position
+    // The frame covers this position if frameIndex is within its range
+    const matchingFrame = drawingFrames.find((df) => {
+      if (df.rowId !== rowId) return false;
+      
+      // Get the effective start frame (use startFrame if available, otherwise frameIndex)
+      const startFrame = df.startFrame ?? df.frameIndex;
+      const endFrame = startFrame + df.length - 1;
+      
+      // Check if the timeline position falls within this frame's range
+      return frameIndex >= startFrame && frameIndex <= endFrame;
+    });
 
     return matchingFrame?.folderId || null;
   };
