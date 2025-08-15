@@ -388,7 +388,7 @@ export function AnimationEditor({
     if (parts.length < 3) return null;
     const rowId = `${parts[0]}-${parts[1]}`;
     const frameIndex = parseInt(parts[2], 10);
-    
+
     // Find a drawing frame with this rowId and frameIndex
     const matchingFrame = drawingFrames.find(
       (df) => df.rowId === rowId && df.frameIndex === frameIndex
@@ -453,13 +453,8 @@ export function AnimationEditor({
       .filter((df) => {
         if (df.folderId !== activeFolderId) return false;
 
-        // For sequence frames, only show the frame that matches current frame number
-        if (df.isSequenceFrame) {
-          return df.frameIndex === currentFrameIndex;
-        }
-
-        // For regular images, show them on all frames (they persist across frames)
-        return true;
+        // For both sequence frames AND regular images, only show when frame matches
+        return df.frameIndex === currentFrameIndex;
       })
       .sort((a, b) => {
         const ra = parseInt(a.rowId.split("-")[1], 10);
@@ -2758,7 +2753,9 @@ export function AnimationEditor({
               selectedLayerId={selectedLayerId}
               setSelectedLayerId={(val: any) => {
                 if (mode === "composite") {
-                  const currentFolderId = findCompositionFolder(selectedLayerId || "");
+                  const currentFolderId = findCompositionFolder(
+                    selectedLayerId || ""
+                  );
                   const newFolderId = findCompositionFolder(val || "");
 
                   // Only apply the override logic when switching between different compositions
