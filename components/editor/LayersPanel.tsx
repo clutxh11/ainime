@@ -684,7 +684,10 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
           <ColorEffectsPanel
             assetIdentity={selectedAssetKey || null}
             effects={selectedAssetKey ? assetEffects[selectedAssetKey] || {} : {}}
-            onEffectsChange={onAssetEffectsChange}
+            onEffectsChange={(identity, effects) => {
+              console.log("ColorEffectsPanel onEffectsChange:", { identity, effects, selectedAssetKey });
+              onAssetEffectsChange?.(identity, effects);
+            }}
           />
         </>
       )}

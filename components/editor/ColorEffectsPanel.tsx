@@ -42,6 +42,7 @@ export default function ColorEffectsPanel({
         ...updates,
       },
     };
+    console.log("updateColorKey:", { assetIdentity, updates, newEffects });
     onEffectsChange(assetIdentity, newEffects);
   };
 
@@ -242,38 +243,7 @@ export default function ColorEffectsPanel({
         )}
       </div>
 
-      {/* Quick Presets */}
-      <div className="pt-3 border-t border-gray-700">
-        <Label className="text-xs text-gray-400 mb-2 block">Quick Presets</Label>
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => updateColorKey({
-              enabled: true,
-              keyColor: "#ffffff",
-              tolerance: 10,
-              softness: 5
-            })}
-            className="text-xs"
-          >
-            Remove White
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => updateColorKeep({
-              enabled: true,
-              keepColor: "#ff00ff",
-              tolerance: 15,
-              softness: 2
-            })}
-            className="text-xs"
-          >
-            Keep Magenta
-          </Button>
-        </div>
-      </div>
+
     </div>
   );
 }

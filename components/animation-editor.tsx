@@ -54,7 +54,10 @@ import useUndoRedo from "@/hooks/useUndoRedo";
 import usePlayback from "@/hooks/usePlayback";
 import useLayersSidebar from "@/hooks/useLayersSidebar";
 import useSelectionActions from "@/hooks/useSelectionActions";
-import { processImageWithEffects, type AssetEffects } from "@/lib/utils/color-effects";
+import {
+  processImageWithEffects,
+  type AssetEffects,
+} from "@/lib/utils/color-effects";
 import useSceneLoader from "@/hooks/useSceneLoader";
 import useCanvasSetup from "@/hooks/useCanvasSetup";
 import useColorSets from "@/hooks/useColorSets";
@@ -335,10 +338,12 @@ export function AnimationEditor({
 
   // (moved below drawingFrames declaration)
   const imageCache = useRef<Record<string, HTMLImageElement>>({});
-  
+
   // Asset effects (color key, color keep, etc.) - keyed by asset identity
-  const [assetEffects, setAssetEffects] = useState<Record<string, AssetEffects>>({});
-  
+  const [assetEffects, setAssetEffects] = useState<
+    Record<string, AssetEffects>
+  >({});
+
   const [isLooping, setIsLooping] = useState(false);
   const [contextMenu, setContextMenu] = useState({
     visible: false,
@@ -449,12 +454,16 @@ export function AnimationEditor({
     // For sequence frames, use only the folderId as the key to ensure
     // transformations are shared across all frames in the sequence
     if (df.isSequenceFrame) {
-      return compSelectedAssetFolderId;
+      const key = compSelectedAssetFolderId;
+      console.log("selectedAssetKey (sequence):", key);
+      return key;
     }
 
     // For single images, use the traditional folderId|fileName format
     const identity = df.fileName || df.imageUrl || null;
-    return identity ? `${compSelectedAssetFolderId}|${identity}` : null;
+    const key = identity ? `${compSelectedAssetFolderId}|${identity}` : null;
+    console.log("selectedAssetKey (single):", key, { compSelectedAssetFolderId, identity });
+    return key;
   }, [compSelectedAssetFolderId, compSelectedAssetIndex, drawingFrames]);
 
   // Draw compositing canvas: render all assets for the active composition in row order (stacked)
@@ -552,7 +561,7 @@ export function AnimationEditor({
         // Clear canvas once
         ctx.clearRect(0, 0, comp.width, comp.height);
 
-                // Draw all images synchronously in the correct order (back to front)
+        // Draw all images synchronously in the correct order (back to front)
         for (const { cell, img } of loadedImages) {
           // For sequence frames, use folderId as the transformation key to ensure
           // transformations persist across all frames in the sequence
@@ -560,6 +569,7 @@ export function AnimationEditor({
             cell.isSequenceFrame && cell.folderId
               ? cell.folderId
               : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
+          console.log("Canvas drawing identity:", identity, { activeFolderId, cell });
           const persisted = boundsByAsset[identity];
           const defaultX = Math.round((comp.width - img.naturalWidth) / 2);
           const defaultY = Math.round((comp.height - img.naturalHeight) / 2);
@@ -569,17 +579,25 @@ export function AnimationEditor({
           const drawH = persisted ? persisted.height : img.naturalHeight;
           const key = identity;
           const deg = rotationByAsset[key] ?? 0;
-          
+
           // Apply color effects if any are set for this asset
           const effects = assetEffects[identity];
           let imageToRender = img;
           
-          if (effects && (effects.colorKey?.enabled || effects.colorKeep?.enabled)) {
+          if (effects) {
+            console.log("Found effects for identity:", identity, effects);
+          }
+
+          if (
+            effects &&
+            (effects.colorKey?.enabled || effects.colorKeep?.enabled)
+          ) {
+            console.log("Applying effects to image:", identity, effects);
             // Process image with effects
             const processedCanvas = processImageWithEffects(ctx, img, effects);
             imageToRender = processedCanvas as any; // Canvas can be drawn like an image
           }
-          
+
           if (deg !== 0) {
             ctx.save();
             // rotate around the image center
@@ -3121,7 +3139,8 @@ export function AnimationEditor({
           drawingFrames={drawingFrames}
           assetEffects={assetEffects}
           onAssetEffectsChange={(identity, effects) => {
-            setAssetEffects(prev => ({ ...prev, [identity]: effects }));
+            console.log("Setting asset effects:", { identity, effects });
+            setAssetEffects((prev) => ({ ...prev, [identity]: effects }));
           }}
           selectedAssetKey={selectedAssetKey}
         />
