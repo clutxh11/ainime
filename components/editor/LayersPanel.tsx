@@ -29,6 +29,7 @@ import {
   Eye,
   Folder,
   MoreVertical,
+  Copy,
 } from "lucide-react";
 import {
   detectImageSequence,
@@ -396,6 +397,124 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     fps: number;
   }>({ open: false, folderId: null, width: 1920, height: 1080, fps: 24 });
 
+  // Duplicate selected asset/folder
+  const handleDuplicateSelected = () => {
+    if (!selectedLayerId) return;
+
+    // Check if it's a folder from sidebarFolders
+    const selectedFolder = sidebarFolders.find(f => f.id === selectedLayerId);
+    if (selectedFolder) {
+      // For folders, we'll create a new folder and copy its contents
+      // This needs to be handled by the parent component since folder creation
+      // involves more complex state management
+      const originalName = folderNames[selectedLayerId] || selectedFolder.label;
+      const duplicateName = getDuplicateName(originalName, Object.values(folderNames));
+      
+      // Create new folder first
+      addFolder();
+      
+      // We'll need to wait for the new folder to be created and then copy its contents
+      // For now, let's add a timeout to handle the async nature
+      setTimeout(() => {
+        // Find the newest folder (last in sidebarFolders)
+        const allFolderIds = sidebarFolders.map(f => f.id);
+        const newestFolderId = allFolderIds[allFolderIds.length - 1];
+        
+        if (newestFolderId) {
+          // Update the folder name
+          setFolderNames(prev => ({
+            ...prev,
+            [newestFolderId]: duplicateName
+          }));
+
+          // Copy composition settings if it's a composition folder
+          if (compositionByFolder[selectedLayerId]) {
+            const compSettings = compositionByFolder[selectedLayerId];
+            props.onSetComposition?.(newestFolderId, compSettings);
+          }
+
+          // Copy all assets from the original folder
+          const originalAssets = assetsByFolder[selectedLayerId] || [];
+          if (originalAssets.length > 0) {
+            const duplicatedAssets = originalAssets.map(asset => ({
+              ...asset,
+              id: `asset-${Date.now()}-${Math.random()}`,
+              name: getDuplicateName(asset.name, originalAssets.map(a => a.name))
+            }));
+            
+            setAssetsByFolder(prev => ({
+              ...prev,
+              [newestFolderId]: duplicatedAssets
+            }));
+
+            // Notify parent if there's a handler for folder receiving assets
+            props.onFolderReceiveAssets?.(newestFolderId, duplicatedAssets);
+          }
+        }
+      }, 100);
+      
+      return;
+    }
+
+    // Check if it's an asset in root or folder
+    const findAssetLocation = () => {
+      // Check root assets
+      const rootIndex = rootAssets.findIndex(asset => asset.id === selectedLayerId);
+      if (rootIndex >= 0) {
+        return { type: 'root' as const, asset: rootAssets[rootIndex], index: rootIndex };
+      }
+
+      // Check folder assets
+      for (const [folderId, assets] of Object.entries(assetsByFolder)) {
+        const assetIndex = assets.findIndex(asset => asset.id === selectedLayerId);
+        if (assetIndex >= 0) {
+          return { type: 'folder' as const, folderId, asset: assets[assetIndex], index: assetIndex };
+        }
+      }
+      return null;
+    };
+
+    const location = findAssetLocation();
+    if (!location) return;
+
+    // Duplicate the asset
+    const originalAsset = location.asset;
+    const existingNames = location.type === 'root' 
+      ? rootAssets.map(a => a.name)
+      : (assetsByFolder[location.folderId] || []).map(a => a.name);
+      
+    const duplicatedAsset: AssetItem = {
+      ...originalAsset,
+      id: `asset-${Date.now()}-${Math.random()}`,
+      name: getDuplicateName(originalAsset.name, existingNames)
+    };
+
+    if (location.type === 'root') {
+      setRootAssets(prev => [...prev, duplicatedAsset]);
+    } else if (location.type === 'folder') {
+      setAssetsByFolder(prev => ({
+        ...prev,
+        [location.folderId]: [...(prev[location.folderId] || []), duplicatedAsset]
+      }));
+
+      // Notify parent about the new asset in the folder
+      props.onFolderReceiveAssets?.(location.folderId, [duplicatedAsset]);
+    }
+  };
+
+  // Helper function to generate unique duplicate names
+  const getDuplicateName = (originalName: string, existingNames: string[]): string => {
+    let counter = 1;
+    let newName = `${originalName} Copy`;
+    
+    while (existingNames.includes(newName)) {
+      counter++;
+      newName = `${originalName} Copy ${counter}`;
+    }
+    
+    return newName;
+  };
+
   const onPanelDragOver = (e: React.DragEvent) => {
     if (mode !== "composite") return;
     e.preventDefault();
@@ -575,7 +694,7 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
             {mode === "composite" ? "Assets" : "Layers"}
           </h2>
           {mode === "composite" && (
-            <div className="mt-2">
+            <div className="mt-2 flex items-center gap-1">
               <Button
                 size="icon"
                 variant="ghost"
@@ -584,6 +703,16 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
                 title="New Folder"
               >
                 <Folder className="w-5 h-5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={handleDuplicateSelected}
+                className="w-8 h-8"
+                title="Duplicate Selected"
+                disabled={!selectedLayerId}
+              >
+                <Copy className="w-5 h-5" />
               </Button>
             </div>
           )}
