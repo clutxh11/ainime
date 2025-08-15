@@ -4,7 +4,7 @@ import { Label } from "../ui/label";
 import { Slider } from "../ui/slider";
 import { Switch } from "../ui/switch";
 import { Input } from "../ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+
 import { Palette, Pipette, Eye, EyeOff, PaintBucket, Check } from "lucide-react";
 import type { AssetEffects, ColorKeySettings, ColorKeepSettings, FillSettings } from "@/lib/utils/color-effects";
 
@@ -69,7 +69,6 @@ export default function ColorEffectsPanel({
         enabled: false,
         fillColor: "#ff0000",
         opacity: 100,
-        blendMode: "normal" as const,
         preserveOriginalAlpha: true,
         ...effects.fill,
         ...updates,
@@ -96,7 +95,6 @@ export default function ColorEffectsPanel({
     enabled: false,
     fillColor: "#ff0000",
     opacity: 100,
-    blendMode: "normal" as const,
     preserveOriginalAlpha: true,
   };
 
@@ -167,29 +165,7 @@ export default function ColorEffectsPanel({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs text-gray-400">Blend Mode</Label>
-              <Select
-                value={fillSettings.blendMode}
-                onValueChange={(value: FillSettings['blendMode']) => updateFill({ blendMode: value })}
-              >
-                <SelectTrigger className="w-full h-8 text-xs bg-gray-800 border-gray-600">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-800 border-gray-600">
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="multiply">Multiply</SelectItem>
-                  <SelectItem value="screen">Screen</SelectItem>
-                  <SelectItem value="overlay">Overlay</SelectItem>
-                  <SelectItem value="soft-light">Soft Light</SelectItem>
-                  <SelectItem value="hard-light">Hard Light</SelectItem>
-                  <SelectItem value="color-dodge">Color Dodge</SelectItem>
-                  <SelectItem value="color-burn">Color Burn</SelectItem>
-                  <SelectItem value="darken">Darken</SelectItem>
-                  <SelectItem value="lighten">Lighten</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">

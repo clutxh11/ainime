@@ -21,7 +21,6 @@ export interface FillSettings {
   enabled: boolean;
   fillColor: string; // hex color to fill with
   opacity: number; // 0-100, opacity of the fill
-  blendMode: 'normal' | 'multiply' | 'screen' | 'overlay' | 'soft-light' | 'hard-light' | 'color-dodge' | 'color-burn' | 'darken' | 'lighten';
   preserveOriginalAlpha: boolean; // whether to preserve the original alpha channel
 }
 
@@ -141,7 +140,7 @@ export function applyColorKeep(
 
 /**
  * Apply fill effect to an image on canvas
- * Fills the image with a solid color using various blend modes
+ * Fills the image with a solid color in normal blend mode
  */
 export function applyFill(
   ctx: CanvasRenderingContext2D,
@@ -165,87 +164,25 @@ export function applyFill(
     // Skip transparent pixels
     if (a === 0) continue;
 
-    let newR = r;
-    let newG = g;
-    let newB = b;
+    // Apply normal blend mode (replace with fill color)
+    const newR = fillRgb.r;
+    const newG = fillRgb.g;
+    const newB = fillRgb.b;
     let newA = a;
 
-    // Apply blend mode
-    switch (settings.blendMode) {
-      case 'normal':
-        newR = fillRgb.r;
-        newG = fillRgb.g;
-        newB = fillRgb.b;
-        break;
+    // Apply fill opacity by blending between original and fill color
+    const finalR = r + (newR - r) * fillOpacity;
+    const finalG = g + (newG - g) * fillOpacity;
+    const finalB = b + (newB - b) * fillOpacity;
 
-      case 'multiply':
-        newR = (r * fillRgb.r) / 255;
-        newG = (g * fillRgb.g) / 255;
-        newB = (b * fillRgb.b) / 255;
-        break;
-
-      case 'screen':
-        newR = 255 - ((255 - r) * (255 - fillRgb.r)) / 255;
-        newG = 255 - ((255 - g) * (255 - fillRgb.g)) / 255;
-        newB = 255 - ((255 - b) * (255 - fillRgb.b)) / 255;
-        break;
-
-      case 'overlay':
-        newR = r < 128 ? (2 * r * fillRgb.r) / 255 : 255 - (2 * (255 - r) * (255 - fillRgb.r)) / 255;
-        newG = g < 128 ? (2 * g * fillRgb.g) / 255 : 255 - (2 * (255 - g) * (255 - fillRgb.g)) / 255;
-        newB = b < 128 ? (2 * b * fillRgb.b) / 255 : 255 - (2 * (255 - b) * (255 - fillRgb.b)) / 255;
-        break;
-
-      case 'soft-light':
-        newR = r < 128 ? r + (fillRgb.r - 128) * (r / 255) : r + (fillRgb.r - 128) * (1 - r / 255);
-        newG = g < 128 ? g + (fillRgb.g - 128) * (g / 255) : g + (fillRgb.g - 128) * (1 - g / 255);
-        newB = b < 128 ? b + (fillRgb.b - 128) * (b / 255) : b + (fillRgb.b - 128) * (1 - b / 255);
-        break;
-
-      case 'hard-light':
-        newR = fillRgb.r < 128 ? (2 * r * fillRgb.r) / 255 : 255 - (2 * (255 - r) * (255 - fillRgb.r)) / 255;
-        newG = fillRgb.g < 128 ? (2 * g * fillRgb.g) / 255 : 255 - (2 * (255 - g) * (255 - fillRgb.g)) / 255;
-        newB = fillRgb.b < 128 ? (2 * b * fillRgb.b) / 255 : 255 - (2 * (255 - b) * (255 - fillRgb.b)) / 255;
-        break;
-
-      case 'color-dodge':
-        newR = r === 255 ? 255 : Math.min(255, (r * 255) / (255 - fillRgb.r));
-        newG = g === 255 ? 255 : Math.min(255, (g * 255) / (255 - fillRgb.g));
-        newB = b === 255 ? 255 : Math.min(255, (b * 255) / (255 - fillRgb.b));
-        break;
-
-      case 'color-burn':
-        newR = r === 0 ? 0 : Math.max(0, 255 - ((255 - r) * 255) / fillRgb.r);
-        newG = g === 0 ? 0 : Math.max(0, 255 - ((255 - g) * 255) / fillRgb.g);
-        newB = b === 0 ? 0 : Math.max(0, 255 - ((255 - b) * 255) / fillRgb.b);
-        break;
-
-      case 'darken':
-        newR = Math.min(r, fillRgb.r);
-        newG = Math.min(g, fillRgb.g);
-        newB = Math.min(b, fillRgb.b);
-        break;
-
-      case 'lighten':
-        newR = Math.max(r, fillRgb.r);
-        newG = Math.max(g, fillRgb.g);
-        newB = Math.max(b, fillRgb.b);
-        break;
-    }
-
-    // Apply fill opacity
-    newR = r + (newR - r) * fillOpacity;
-    newG = g + (newG - g) * fillOpacity;
-    newB = b + (newB - b) * fillOpacity;
-
-    // Preserve original alpha if requested
+    // Preserve original alpha if requested, otherwise apply fill opacity to alpha
     if (!settings.preserveOriginalAlpha) {
       newA = a * fillOpacity;
     }
 
-    data[i] = Math.round(Math.max(0, Math.min(255, newR)));
-    data[i + 1] = Math.round(Math.max(0, Math.min(255, newG)));
-    data[i + 2] = Math.round(Math.max(0, Math.min(255, newB)));
+    data[i] = Math.round(Math.max(0, Math.min(255, finalR)));
+    data[i + 1] = Math.round(Math.max(0, Math.min(255, finalG)));
+    data[i + 2] = Math.round(Math.max(0, Math.min(255, finalB)));
     data[i + 3] = Math.round(Math.max(0, Math.min(255, newA)));
   }
 
