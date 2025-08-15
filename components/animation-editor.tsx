@@ -298,6 +298,8 @@ export function AnimationEditor({
   const [boundsByAsset, setBoundsByAsset] = useState<
     Record<string, { x: number; y: number; width: number; height: number }>
   >({});
+  
+
   const [fittedCompByFolder, setFittedCompByFolder] = useState<
     Record<string, boolean>
   >({});
@@ -510,50 +512,78 @@ export function AnimationEditor({
       return [...nonSelected, ...selectedOnly];
     })();
 
-    const drawSequentially = async () => {
-      for (const cell of arrangedToDraw) {
-        if (!cell.imageUrl) continue;
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise<void>((resolve) => {
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          img.onload = () => {
-            // For sequence frames, use folderId as the transformation key to ensure
-            // transformations persist across all frames in the sequence
-            const identity =
-              cell.isSequenceFrame && cell.folderId
-                ? cell.folderId
-                : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
-            const persisted = boundsByAsset[identity];
-            const defaultX = Math.round((comp.width - img.naturalWidth) / 2);
-            const defaultY = Math.round((comp.height - img.naturalHeight) / 2);
-            const x = persisted ? persisted.x : defaultX;
-            const y = persisted ? persisted.y : defaultY;
-            const drawW = persisted ? persisted.width : img.naturalWidth;
-            const drawH = persisted ? persisted.height : img.naturalHeight;
-            const key = identity;
-            const deg = rotationByAsset[key] ?? 0;
-            if (deg !== 0) {
-              ctx.save();
-              // rotate around the image center
-              const cx = x + drawW / 2;
-              const cy = y + drawH / 2;
-              ctx.translate(cx, cy);
-              ctx.rotate((deg * Math.PI) / 180);
-              ctx.translate(-cx, -cy);
-              ctx.drawImage(img, x, y, drawW, drawH);
-              ctx.restore();
-            } else {
-              ctx.drawImage(img, x, y, drawW, drawH);
+    const drawSynchronously = async () => {
+      // First, preload all images to avoid flicker during drawing
+      const imagePromises = arrangedToDraw
+        .filter(cell => cell.imageUrl)
+        .map(cell => {
+          return new Promise<{ cell: any; img: HTMLImageElement }>((resolve, reject) => {
+            const imageUrl = cell.imageUrl as string;
+            
+            // Check cache first
+            const cachedImg = imageCache.current[imageUrl];
+            if (cachedImg && cachedImg.complete) {
+              resolve({ cell, img: cachedImg });
+              return;
             }
-            resolve();
-          };
-          img.src = cell.imageUrl as string;
+            
+            // Load and cache image
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+              imageCache.current[imageUrl] = img;
+              resolve({ cell, img });
+            };
+            img.onerror = reject;
+            img.src = imageUrl;
+          });
         });
+
+      try {
+        // Wait for all images to load before drawing any of them
+        const loadedImages = await Promise.all(imagePromises);
+        
+        // Clear canvas once
+        ctx.clearRect(0, 0, comp.width, comp.height);
+        
+        // Draw all images synchronously in the correct order (back to front)
+        for (const { cell, img } of loadedImages) {
+          // For sequence frames, use folderId as the transformation key to ensure
+          // transformations persist across all frames in the sequence
+          const identity =
+            cell.isSequenceFrame && cell.folderId
+              ? cell.folderId
+              : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
+          const persisted = boundsByAsset[identity];
+          const defaultX = Math.round((comp.width - img.naturalWidth) / 2);
+          const defaultY = Math.round((comp.height - img.naturalHeight) / 2);
+          const x = persisted ? persisted.x : defaultX;
+          const y = persisted ? persisted.y : defaultY;
+          const drawW = persisted ? persisted.width : img.naturalWidth;
+          const drawH = persisted ? persisted.height : img.naturalHeight;
+          const key = identity;
+          const deg = rotationByAsset[key] ?? 0;
+          
+          if (deg !== 0) {
+            ctx.save();
+            // rotate around the image center
+            const cx = x + drawW / 2;
+            const cy = y + drawH / 2;
+            ctx.translate(cx, cy);
+            ctx.rotate((deg * Math.PI) / 180);
+            ctx.translate(-cx, -cy);
+            ctx.drawImage(img, x, y, drawW, drawH);
+            ctx.restore();
+          } else {
+            ctx.drawImage(img, x, y, drawW, drawH);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading images for frame:", error);
       }
     };
 
-    drawSequentially();
+    drawSynchronously();
   }, [
     mode,
     selectedLayerId,
@@ -578,10 +608,13 @@ export function AnimationEditor({
       return 1;
     }
     // Find the last frame index that has content, considering extended frames
-    return Math.max(1, ...drawingFrames.map((df) => {
-      const startFrame = df.startFrame ?? df.frameIndex;
-      return startFrame + df.length;
-    }));
+    return Math.max(
+      1,
+      ...drawingFrames.map((df) => {
+        const startFrame = df.startFrame ?? df.frameIndex;
+        return startFrame + df.length;
+      })
+    );
   }, [drawingFrames]);
 
   // Generate unique stroke IDs
