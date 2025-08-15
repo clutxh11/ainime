@@ -394,11 +394,11 @@ export function AnimationEditor({
     // The frame covers this position if frameIndex is within its range
     const matchingFrame = drawingFrames.find((df) => {
       if (df.rowId !== rowId) return false;
-      
+
       // Get the effective start frame (use startFrame if available, otherwise frameIndex)
       const startFrame = df.startFrame ?? df.frameIndex;
       const endFrame = startFrame + df.length - 1;
-      
+
       // Check if the timeline position falls within this frame's range
       return frameIndex >= startFrame && frameIndex <= endFrame;
     });

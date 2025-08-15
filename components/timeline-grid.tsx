@@ -200,40 +200,77 @@ export default function TimelineGrid({
       const cellWidth = 64; // px, matches w-16
       let delta = Math.round((e.clientX - dragging.startX) / cellWidth);
 
+      // Helper function to find collision boundaries for a given row
+      const findCollisionBoundaries = (rowId: string, excludeFrameIndex: number) => {
+        const rowFrames = drawingFrames
+          .filter((df) => df.rowId === rowId && df.frameIndex !== excludeFrameIndex)
+          .map((df) => ({
+            frameIndex: df.frameIndex,
+            start: df.startFrame ?? df.frameIndex,
+            end: (df.startFrame ?? df.frameIndex) + df.length - 1,
+          }))
+          .sort((a, b) => a.start - b.start);
+
+        return rowFrames;
+      };
+
       if (dragging.handleType === "right") {
-        // Right handle: adjust end frame (length), keep start frame fixed
-        let newLength = Math.max(1, dragging.origLength + delta);
+        // Right handle: extend end frame, keep start frame fixed
         let startFrame = dragging.origStartFrame; // Keep the current start frame fixed
-        let endFrame = startFrame + newLength - 1;
+        let targetLength = Math.max(1, dragging.origLength + delta);
+        let targetEndFrame = startFrame + targetLength - 1;
 
-        console.log(`[Timeline] Right handle drag:`, {
-          delta,
-          origLength: dragging.origLength,
-          newLength,
-          origStartFrame: dragging.origStartFrame,
-          startFrame,
-          endFrame,
-        });
+        // Find collision boundaries - frames that could block this expansion
+        const boundaries = findCollisionBoundaries(dragging.rowId, dragging.frameIndex);
+        
+        // Find the next frame that would block expansion
+        const blockingFrame = boundaries.find((frame) => frame.start > startFrame);
+        
+        if (blockingFrame) {
+          // Can't extend past the blocking frame - stop one cell before it
+          const maxEndFrame = blockingFrame.start - 1;
+          if (targetEndFrame > maxEndFrame) {
+            targetEndFrame = maxEndFrame;
+            targetLength = Math.max(1, maxEndFrame - startFrame + 1);
+          }
+        }
 
-        if (endFrame >= frames) {
-          setFrames((prev) => endFrame + 1);
+        // Ensure we have enough timeline frames
+        if (targetEndFrame >= frames) {
+          setFrames((prev) => targetEndFrame + 1);
         }
 
         setDrawingFrames((prev) =>
           prev.map((df) =>
             df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex
-              ? { ...df, length: newLength, startFrame }
+              ? { ...df, length: targetLength, startFrame }
               : df
           )
         );
       } else {
-        // Left handle: adjust start frame while keeping the END FRAME fixed
-        let newStartFrame = Math.max(0, dragging.origStartFrame + delta);
-        let originalEndFrame =
-          dragging.origStartFrame + dragging.origLength - 1; // Keep end fixed
-        let newLength = Math.max(1, originalEndFrame - newStartFrame + 1);
+        // Left handle: move start frame backward while keeping END FRAME absolutely fixed
+        let originalEndFrame = dragging.origStartFrame + dragging.origLength - 1; // FIXED end position
+        let targetStartFrame = Math.max(0, dragging.origStartFrame + delta);
+        let targetLength = Math.max(1, originalEndFrame - targetStartFrame + 1);
 
-        // Ensure we have enough frames in the timeline for the end frame
+        // Find collision boundaries - frames that could block moving the start backward  
+        const boundaries = findCollisionBoundaries(dragging.rowId, dragging.frameIndex);
+        
+        // Find frames that would block moving the start frame backward
+        const blockingFrame = boundaries.find((frame) => 
+          frame.end >= targetStartFrame && frame.start <= targetStartFrame
+        );
+        
+        if (blockingFrame) {
+          // Can't move start frame into an existing frame - stop after the blocking frame
+          const minStartFrame = blockingFrame.end + 1;
+          if (targetStartFrame < minStartFrame) {
+            targetStartFrame = minStartFrame;
+            targetLength = Math.max(1, originalEndFrame - targetStartFrame + 1);
+          }
+        }
+
+        // Ensure we have enough timeline frames for the end frame
         if (originalEndFrame >= frames) {
           setFrames((prev) => originalEndFrame + 1);
         }
@@ -241,7 +278,7 @@ export default function TimelineGrid({
         setDrawingFrames((prev) =>
           prev.map((df) =>
             df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex
-              ? { ...df, length: newLength, startFrame: newStartFrame }
+              ? { ...df, length: targetLength, startFrame: targetStartFrame }
               : df
           )
         );
