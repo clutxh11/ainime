@@ -402,7 +402,10 @@ export default function TimelineGrid({
                           fontSize: "0.75rem",
                           padding: 0,
                         }}
-                        onClick={() => handleCellClick(row.id, i)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCellClick(row.id, i);
+                        }}
                         onDrop={(e) => resolveDrop(row.id, i, e)}
                         onDragOver={handleDragOver}
                       >
