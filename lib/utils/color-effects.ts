@@ -170,7 +170,10 @@ export function applyFill(
     // This allows Fill to work like After Effects on animation cells
     if (isStandalone) {
       const isNearWhite = r > 240 && g > 240 && b > 240;
-      if (isNearWhite) continue;
+      if (isNearWhite) {
+        console.log('Skipping white pixel:', { r, g, b });
+        continue;
+      }
     }
     
     // Apply fill opacity by blending between original and fill color
@@ -225,8 +228,13 @@ export function processImageWithEffects(
   // Apply fill effect last (colors the remaining pixels)
   if (effects.fill?.enabled) {
     // Smart white detection: if Fill is used alone, automatically skip white backgrounds
-    const isStandaloneeFill = !effects.colorKey?.enabled && !effects.colorKeep?.enabled;
-    imageData = applyFill(tempCtx, imageData, effects.fill, isStandaloneeFill);
+    const isStandaloneFill = !effects.colorKey?.enabled && !effects.colorKeep?.enabled;
+    console.log('Fill standalone check:', {
+      colorKeyEnabled: effects.colorKey?.enabled,
+      colorKeepEnabled: effects.colorKeep?.enabled,
+      isStandaloneFill
+    });
+    imageData = applyFill(tempCtx, imageData, effects.fill, isStandaloneFill);
   }
 
   // Put processed image data back
