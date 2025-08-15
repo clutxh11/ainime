@@ -35,19 +35,30 @@ export interface AssetEffects {
  */
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : null;
+  return result
+    ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16),
+      }
+    : null;
 }
 
 /**
  * Calculate color distance between two RGB colors
  */
-function colorDistance(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
+function colorDistance(
+  r1: number,
+  g1: number,
+  b1: number,
+  r2: number,
+  g2: number,
+  b2: number
+): number {
   // Using Euclidean distance in RGB space
-  return Math.sqrt(Math.pow(r1 - r2, 2) + Math.pow(g1 - g2, 2) + Math.pow(b1 - b2, 2));
+  return Math.sqrt(
+    Math.pow(r1 - r2, 2) + Math.pow(g1 - g2, 2) + Math.pow(b1 - b2, 2)
+  );
 }
 
 /**
@@ -82,7 +93,10 @@ export function applyColorKey(
     if (distance <= tolerance) {
       // Within key range - calculate alpha based on distance and softness
       if (softness > 0) {
-        const alpha = Math.max(0, (distance - tolerance * (1 - softness)) / (tolerance * softness));
+        const alpha = Math.max(
+          0,
+          (distance - tolerance * (1 - softness)) / (tolerance * softness)
+        );
         data[i + 3] = Math.round(a * alpha);
       } else {
         // Hard key - fully transparent
@@ -126,7 +140,10 @@ export function applyColorKeep(
     if (distance > tolerance) {
       // Outside keep range - calculate alpha based on distance and softness
       if (softness > 0) {
-        const alpha = Math.max(0, 1 - (distance - tolerance) / (tolerance * softness));
+        const alpha = Math.max(
+          0,
+          1 - (distance - tolerance) / (tolerance * softness)
+        );
         data[i + 3] = Math.round(a * alpha);
       } else {
         // Hard keep - fully transparent
@@ -159,7 +176,7 @@ export function applyFill(
 
   const data = new Uint8ClampedArray(imageData.data);
   const fillOpacity = settings.opacity / 100; // Convert to 0-1 range
-  
+
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
@@ -171,11 +188,11 @@ export function applyFill(
     if (isStandalone) {
       const isNearWhite = r > 240 && g > 240 && b > 240;
       if (isNearWhite) {
-        console.log('Skipping white pixel:', { r, g, b });
+        console.log("Skipping white pixel:", { r, g, b });
         continue;
       }
     }
-    
+
     // Apply fill opacity by blending between original and fill color
     const finalR = r + (fillRgb.r - r) * fillOpacity;
     const finalG = g + (fillRgb.g - g) * fillOpacity;
@@ -201,38 +218,48 @@ export function processImageWithEffects(
   img: HTMLImageElement,
   effects: AssetEffects
 ): HTMLCanvasElement {
+  console.log("processImageWithEffects called with effects:", effects);
+  
   // Create a temporary canvas for processing
-  const tempCanvas = document.createElement('canvas');
+  const tempCanvas = document.createElement("canvas");
   tempCanvas.width = img.naturalWidth;
   tempCanvas.height = img.naturalHeight;
-  const tempCtx = tempCanvas.getContext('2d');
-  
+  const tempCtx = tempCanvas.getContext("2d");
+
   if (!tempCtx) return tempCanvas;
 
   // Draw original image
   tempCtx.drawImage(img, 0, 0);
-  
+
   // Get image data for processing
-  let imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+  let imageData = tempCtx.getImageData(
+    0,
+    0,
+    tempCanvas.width,
+    tempCanvas.height
+  );
 
   // Apply color key effect first (removes unwanted colors)
   if (effects.colorKey?.enabled) {
+    console.log("Applying color key");
     imageData = applyColorKey(tempCtx, imageData, effects.colorKey);
   }
 
   // Apply color keep effect second (isolates specific colors)
   if (effects.colorKeep?.enabled) {
+    console.log("Applying color keep");
     imageData = applyColorKeep(tempCtx, imageData, effects.colorKeep);
   }
 
   // Apply fill effect last (colors the remaining pixels)
   if (effects.fill?.enabled) {
     // Smart white detection: if Fill is used alone, automatically skip white backgrounds
-    const isStandaloneFill = !effects.colorKey?.enabled && !effects.colorKeep?.enabled;
-    console.log('Fill standalone check:', {
+    const isStandaloneFill =
+      effects.colorKey?.enabled !== true && effects.colorKeep?.enabled !== true;
+    console.log("Fill standalone check:", {
       colorKeyEnabled: effects.colorKey?.enabled,
       colorKeepEnabled: effects.colorKeep?.enabled,
-      isStandaloneFill
+      isStandaloneFill,
     });
     imageData = applyFill(tempCtx, imageData, effects.fill, isStandaloneFill);
   }
