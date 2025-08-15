@@ -70,6 +70,7 @@ export default function ColorEffectsPanel({
         fillColor: "#ff0000",
         opacity: 100,
         preserveOriginalAlpha: true,
+        ignoreWhite: true, // Default to true for animation workflows
         ...effects.fill,
         ...updates,
       },
@@ -96,6 +97,7 @@ export default function ColorEffectsPanel({
     fillColor: "#ff0000",
     opacity: 100,
     preserveOriginalAlpha: true,
+    ignoreWhite: true,
   };
 
   return (
@@ -166,6 +168,19 @@ export default function ColorEffectsPanel({
             </div>
 
 
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-gray-400">Ignore White</Label>
+                <Switch
+                  checked={fillSettings.ignoreWhite}
+                  onCheckedChange={(ignoreWhite) => updateFill({ ignoreWhite })}
+                />
+              </div>
+              <p className="text-xs text-gray-500">
+                Skip white backgrounds (for animation)
+              </p>
+            </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">

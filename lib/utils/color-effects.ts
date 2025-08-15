@@ -22,6 +22,7 @@ export interface FillSettings {
   fillColor: string; // hex color to fill with
   opacity: number; // 0-100, opacity of the fill
   preserveOriginalAlpha: boolean; // whether to preserve the original alpha channel
+  ignoreWhite: boolean; // skip white/near-white pixels (common for animation backgrounds)
 }
 
 export interface AssetEffects {
@@ -164,8 +165,14 @@ export function applyFill(
     const b = data[i + 2];
     const a = data[i + 3];
 
-    // Apply fill to all pixels (including white backgrounds)
-    // In After Effects, Fill effect works on all pixels regardless of alpha
+    // Skip transparent pixels
+    if (a === 0) continue;
+
+    // Skip white/near-white pixels if ignoreWhite is enabled (for animation backgrounds)
+    if (settings.ignoreWhite) {
+      const isNearWhite = r > 240 && g > 240 && b > 240;
+      if (isNearWhite) continue;
+    }
     
     // Apply fill opacity by blending between original and fill color
     const finalR = r + (fillRgb.r - r) * fillOpacity;
