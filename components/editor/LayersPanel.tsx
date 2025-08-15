@@ -37,6 +37,7 @@ import {
   type ImageSequence,
 } from "@/lib/utils/tga-utils";
 import { SequenceImportModal } from "@/components/ui/SequenceImportModal";
+import type { DrawingFrame } from "../timeline-grid";
 
 export interface SidebarFolder {
   id: string;
@@ -110,13 +111,7 @@ export interface LayersPanelProps {
     }[]
   ) => void;
   // For frame stretching support
-  drawingFrames?: Array<{
-    rowId: string;
-    frameIndex: number;
-    length: number;
-    folderId?: string;
-    isSequenceFrame?: boolean;
-  }>;
+  drawingFrames?: DrawingFrame[];
   // Compositing only: notify when a specific asset in a folder is clicked
   onSelectCompAsset?: (folderId: string, index: number) => void;
   // Compositing only: highlight selected asset
@@ -196,7 +191,9 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     );
 
     if (matchingFrame && matchingFrame.length > 1) {
-      return `R${assetIndex + 1} F1:${matchingFrame.length}`;
+      const startFrame = matchingFrame.startFrame ?? matchingFrame.frameIndex;
+      const endFrame = startFrame + matchingFrame.length - 1;
+      return `R${assetIndex + 1} F${startFrame + 1}:${endFrame + 1}`;
     }
 
     return `R${assetIndex + 1} F1`;

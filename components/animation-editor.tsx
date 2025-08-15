@@ -452,18 +452,24 @@ export function AnimationEditor({
     // Get the current frame index (0-based) from selectedFrameNumber (1-based)
     const currentFrameIndex = selectedFrameNumber ? selectedFrameNumber - 1 : 0;
 
-            const assetsToDraw = drawingFrames
-          .filter((df) => {
-            if (df.folderId !== activeFolderId) return false;
-            
-            // For frames with length > 1 (extended frames), check if current frame is within the range
-            if (df.length && df.length > 1) {
-              return currentFrameIndex >= df.frameIndex && currentFrameIndex < df.frameIndex + df.length;
-            }
-            
-            // For regular frames and sequence frames, only show when frame matches exactly
-            return df.frameIndex === currentFrameIndex;
-          })
+    const assetsToDraw = drawingFrames
+      .filter((df) => {
+        if (df.folderId !== activeFolderId) return false;
+
+        // Get the effective start frame
+        const startFrame = df.startFrame ?? df.frameIndex;
+
+        // For frames with length > 1 (extended frames), check if current frame is within the range
+        if (df.length && df.length > 1) {
+          return (
+            currentFrameIndex >= startFrame &&
+            currentFrameIndex < startFrame + df.length
+          );
+        }
+
+        // For regular frames and sequence frames, only show when frame matches exactly
+        return df.frameIndex === currentFrameIndex;
+      })
       .sort((a, b) => {
         const ra = parseInt(a.rowId.split("-")[1], 10);
         const rb = parseInt(b.rowId.split("-")[1], 10);
@@ -3101,6 +3107,7 @@ export function AnimationEditor({
             };
             img.src = df.imageUrl;
           }}
+          drawingFrames={drawingFrames}
         />
       </div>
 

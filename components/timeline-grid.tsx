@@ -22,6 +22,7 @@ import {
 export interface DrawingFrame {
   rowId: string;
   frameIndex: number;
+  startFrame?: number; // Starting frame for stretched frames (0-based), defaults to frameIndex
   length: number; // for future extension
   imageUrl?: string; // for template image
   fileName?: string;
@@ -101,6 +102,8 @@ export default function TimelineGrid({
     frameIndex: number;
     startX: number;
     origLength: number;
+    origStartFrame: number;
+    handleType: 'left' | 'right'; // Which handle is being dragged
   }>(null);
 
   const handleAddFrame = () => {
@@ -140,9 +143,18 @@ export default function TimelineGrid({
     rowId: string,
     frameIndex: number,
     origLength: number,
+    origStartFrame: number,
+    handleType: 'left' | 'right',
     e: React.MouseEvent
   ) => {
-    setDragging({ rowId, frameIndex, startX: e.clientX, origLength });
+    setDragging({ 
+      rowId, 
+      frameIndex, 
+      startX: e.clientX, 
+      origLength, 
+      origStartFrame, 
+      handleType 
+    });
     e.stopPropagation();
   };
 
@@ -180,18 +192,43 @@ export default function TimelineGrid({
     const onMouseMove = (e: MouseEvent) => {
       const cellWidth = 64; // px, matches w-16
       let delta = Math.round((e.clientX - dragging.startX) / cellWidth);
-      let newLength = Math.max(1, dragging.origLength + delta);
-      let endFrame = dragging.frameIndex + newLength - 1;
-      if (endFrame >= frames) {
-        setFrames((prev) => endFrame + 1);
+      
+      if (dragging.handleType === 'right') {
+        // Right handle: adjust end frame (length)
+        let newLength = Math.max(1, dragging.origLength + delta);
+        let startFrame = dragging.origStartFrame;
+        let endFrame = startFrame + newLength - 1;
+        
+        if (endFrame >= frames) {
+          setFrames((prev) => endFrame + 1);
+        }
+        
+        setDrawingFrames((prev) =>
+          prev.map((df) =>
+            df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex
+              ? { ...df, length: newLength, startFrame }
+              : df
+          )
+        );
+      } else {
+        // Left handle: adjust start frame
+        let newStartFrame = Math.max(0, dragging.origStartFrame + delta);
+        let endFrame = dragging.origStartFrame + dragging.origLength - 1;
+        let newLength = Math.max(1, endFrame - newStartFrame + 1);
+        
+        // Ensure we have enough frames in the timeline
+        if (endFrame >= frames) {
+          setFrames((prev) => endFrame + 1);
+        }
+        
+        setDrawingFrames((prev) =>
+          prev.map((df) =>
+            df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex
+              ? { ...df, length: newLength, startFrame: newStartFrame }
+              : df
+          )
+        );
       }
-      setDrawingFrames((prev) =>
-        prev.map((df) =>
-          df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex
-            ? { ...df, length: newLength }
-            : df
-        )
-      );
     };
     const onMouseUp = () => {
       setDragging(null);
@@ -436,6 +473,7 @@ export default function TimelineGrid({
                                     i + 1
                                   }`}</span>
                                 </div>
+                                {/* Right handle for extending single frame */}
                                 <span
                                   className="cursor-ew-resize pr-1 select-none flex items-center h-full"
                                   onMouseDown={(e) =>
@@ -443,6 +481,8 @@ export default function TimelineGrid({
                                       row.id,
                                       i,
                                       drawing.length,
+                                      drawing.startFrame ?? i,
+                                      'right',
                                       e
                                     )
                                   }
@@ -456,7 +496,27 @@ export default function TimelineGrid({
                               </>
                             ) : (
                               <>
-                                <div className="flex flex-row items-center flex-1 h-full pl-1">
+                                {/* Left handle for adjusting start frame */}
+                                <span
+                                  className="cursor-ew-resize pl-1 select-none flex items-center h-full"
+                                  onMouseDown={(e) =>
+                                    onMouseDownHandle(
+                                      row.id,
+                                      i,
+                                      drawing.length,
+                                      drawing.startFrame ?? i,
+                                      'left',
+                                      e
+                                    )
+                                  }
+                                  style={{
+                                    userSelect: "none",
+                                    fontSize: "0.7em",
+                                  }}
+                                >
+                                  ||
+                                </span>
+                                <div className="flex flex-row items-center flex-1 h-full">
                                   <img
                                     src={drawing.imageUrl}
                                     alt="template"
@@ -464,8 +524,9 @@ export default function TimelineGrid({
                                   />
                                   <span className="select-none whitespace-nowrap text-left">{`R${
                                     rowIdx + 1
-                                  } F${i + 1}:${i + drawing.length}`}</span>
+                                  } F${(drawing.startFrame ?? i) + 1}:${(drawing.startFrame ?? i) + drawing.length}`}</span>
                                 </div>
+                                {/* Right handle for adjusting end frame */}
                                 <span
                                   className="cursor-ew-resize pr-1 select-none flex items-center h-full"
                                   onMouseDown={(e) =>
@@ -473,6 +534,8 @@ export default function TimelineGrid({
                                       row.id,
                                       i,
                                       drawing.length,
+                                      drawing.startFrame ?? i,
+                                      'right',
                                       e
                                     )
                                   }
@@ -495,6 +558,7 @@ export default function TimelineGrid({
                                   i + 1
                                 }`}</span>
                               </div>
+                              {/* Right handle for extending single frame */}
                               <span
                                 className="cursor-ew-resize pr-1 select-none flex items-center h-full"
                                 onMouseDown={(e) =>
@@ -502,6 +566,8 @@ export default function TimelineGrid({
                                     row.id,
                                     i,
                                     drawing.length,
+                                    drawing.startFrame ?? i,
+                                    'right',
                                     e
                                   )
                                 }
@@ -515,9 +581,30 @@ export default function TimelineGrid({
                             </>
                           ) : (
                             <div className="flex flex-row items-center h-full w-full justify-between">
-                              <span className="pl-1 select-none whitespace-nowrap flex-1 text-left">{`R${
+                              {/* Left handle for adjusting start frame */}
+                              <span
+                                className="cursor-ew-resize pl-1 select-none flex items-center h-full"
+                                onMouseDown={(e) =>
+                                  onMouseDownHandle(
+                                    row.id,
+                                    i,
+                                    drawing.length,
+                                    drawing.startFrame ?? i,
+                                    'left',
+                                    e
+                                  )
+                                }
+                                style={{
+                                  userSelect: "none",
+                                  fontSize: "0.7em",
+                                }}
+                              >
+                                ||
+                              </span>
+                              <span className="select-none whitespace-nowrap flex-1 text-center">{`R${
                                 rowIdx + 1
-                              } F${i + 1}:${i + drawing.length}`}</span>
+                              } F${(drawing.startFrame ?? i) + 1}:${(drawing.startFrame ?? i) + drawing.length}`}</span>
+                              {/* Right handle for adjusting end frame */}
                               <span
                                 className="cursor-ew-resize pr-1 select-none flex items-center h-full"
                                 onMouseDown={(e) =>
@@ -525,6 +612,8 @@ export default function TimelineGrid({
                                     row.id,
                                     i,
                                     drawing.length,
+                                    drawing.startFrame ?? i,
+                                    'right',
                                     e
                                   )
                                 }
