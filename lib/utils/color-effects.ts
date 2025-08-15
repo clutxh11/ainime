@@ -164,9 +164,9 @@ export function applyFill(
     const b = data[i + 2];
     const a = data[i + 3];
 
-    // Skip transparent pixels
-    if (a === 0) continue;
-
+    // Apply fill to all pixels (including white backgrounds)
+    // In After Effects, Fill effect works on all pixels regardless of alpha
+    
     // Apply fill opacity by blending between original and fill color
     const finalR = r + (fillRgb.r - r) * fillOpacity;
     const finalG = g + (fillRgb.g - g) * fillOpacity;
