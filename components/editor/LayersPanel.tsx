@@ -649,10 +649,7 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
                 </div>
                 <div
                   className="flex items-center gap-2 cursor-pointer ml-2"
-                  onClick={(e) => {
-                    console.log("[LayersPanel] Folder clicked", { folderId: folder.id, event: e });
-                    handleSidebarSelection(folder.id);
-                  }}
+                  onClick={() => handleSidebarSelection(folder.id)}
                 >
                   <Folder className="w-4 h-4 text-gray-400" />
                   {editingFolderId === folder.id ? (
@@ -903,10 +900,7 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
                               ? "bg-blue-600"
                               : "bg-gray-600 hover:bg-gray-500"
                           }`}
-                          onClick={(e) => {
-                            console.log("[LayersPanel] Layer clicked", { layerId, event: e });
-                            handleSidebarSelection(layerId);
-                          }}
+                          onClick={() => handleSidebarSelection(layerId)}
                         >
                           <div className="flex items-center gap-2 flex-1">
                             <Eye

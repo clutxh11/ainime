@@ -1984,8 +1984,8 @@ export function AnimationEditor({
             >
               <div className="ml-4 inline-block bg-gray-900/90 text-white text-base md:text-lg px-3 py-1.5 rounded shadow-lg border border-white/10">
                 {`${Math.round(normalizeAngle(rotationPreviewDeg))}°`}
-              </div>
-            </div>
+          </div>
+          </div>
           )}
         {/* Collapsible Toolbar - hidden in compositing mode */}
         {mode !== "composite" && (
@@ -2061,7 +2061,7 @@ export function AnimationEditor({
               eraserSize={eraserSize}
               setEraserSize={setEraserSize}
             />
-          </div>
+        </div>
         )}
 
         {/* Main Content Area */}
@@ -2408,7 +2408,7 @@ export function AnimationEditor({
                       className="relative"
                       style={{ width: comp.width, height: comp.height }}
                     >
-                      <canvas
+                <canvas
                         ref={compCanvasRef as any}
                         width={comp.width}
                         height={comp.height}
@@ -2699,10 +2699,10 @@ export function AnimationEditor({
                               }}
                             />
                           ))}
-                        </div>
+                    </div>
                       )}
                     </div>
-                  </div>
+            </div>
                 );
               })()}
           </div>
@@ -2763,15 +2763,7 @@ export function AnimationEditor({
                   const currentFolderId = selectedLayerId;
                   const newFolderId = findCompositionFolder(val || "");
 
-                  console.log("[Composite] Timeline click composition check", {
-                    clickedCell: val,
-                    currentFolderId,
-                    newFolderId,
-                    willSwitch:
-                      currentFolderId &&
-                      newFolderId &&
-                      currentFolderId !== newFolderId,
-                  });
+
 
                   // Only apply the override logic when switching between different compositions
                   // Don't override when clicking cells within the same composition
@@ -2782,13 +2774,7 @@ export function AnimationEditor({
                   ) {
                     // Switch to the new composition folder - use the folder ID directly
                     setSelectedLayerId(newFolderId);
-                    console.log(
-                      "[Composite] Timeline setSelectedLayerId -> switching compositions, force F1",
-                      {
-                        from: currentFolderId,
-                        to: newFolderId,
-                      }
-                    );
+
                     setSelectedFrameNumber(1);
                     return;
                   }
@@ -2799,12 +2785,7 @@ export function AnimationEditor({
               selectedFrameNumber={selectedFrameNumber}
               setSelectedFrameNumber={(n: any) => {
                 if (mode === "composite") {
-                  console.log(
-                    "[Composite] Timeline setSelectedFrameNumber -> allow frame change",
-                    {
-                      requested: n,
-                    }
-                  );
+
                   setSelectedFrameNumber(n);
                 } else {
                   setSelectedFrameNumber(n);
