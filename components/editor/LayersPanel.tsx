@@ -483,6 +483,8 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     const originalName = folderNames[folderId] || sidebarFolders.find(f => f.id === folderId)?.label || 'Folder';
     const duplicateName = getDuplicateName(originalName, Object.values(folderNames));
     
+    console.log('Duplicating folder:', { folderId, originalName, duplicateName });
+    
     // Create new folder first
     addFolder();
     
@@ -491,6 +493,8 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
       // Find the newest folder (last in sidebarFolders)
       const allFolderIds = sidebarFolders.map(f => f.id);
       const newestFolderId = allFolderIds[allFolderIds.length - 1];
+      
+      console.log('After folder creation:', { allFolderIds, newestFolderId, originalFolderId: folderId });
       
       if (newestFolderId && newestFolderId !== folderId) {
         // Update the folder name
@@ -502,17 +506,22 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
         // Copy composition settings if it's a composition folder
         if (compositionByFolder[folderId]) {
           const compSettings = compositionByFolder[folderId];
+          console.log('Copying composition settings:', compSettings);
           props.onSetComposition?.(newestFolderId, compSettings);
         }
 
         // Copy all assets from the original folder
         const originalAssets = assetsByFolder[folderId] || [];
+        console.log('Original assets to copy:', originalAssets);
+        
         if (originalAssets.length > 0) {
           const duplicatedAssets = originalAssets.map((asset, index) => ({
             ...asset,
             id: `asset-${Date.now()}-${index}-${Math.random()}`,
             name: getDuplicateName(asset.name, originalAssets.map(a => a.name))
           }));
+          
+          console.log('Duplicated assets:', duplicatedAssets);
           
           setAssetsByFolder(prev => ({
             ...prev,
@@ -522,6 +531,8 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
           // Notify parent if there's a handler for folder receiving assets
           props.onFolderReceiveAssets?.(newestFolderId, duplicatedAssets);
         }
+      } else {
+        console.log('No new folder found or same folder ID');
       }
     }, 100);
   };

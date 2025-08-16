@@ -578,6 +578,7 @@ export function AnimationEditor({
 
           // Apply color effects if any are set for this asset
           const effects = assetEffects[identity];
+          console.log('Asset identity and effects:', { identity, effects, fileName: cell.fileName, imageUrl: cell.imageUrl });
           let imageToRender = img;
 
           if (
@@ -2066,8 +2067,8 @@ export function AnimationEditor({
             >
               <div className="ml-4 inline-block bg-gray-900/90 text-white text-base md:text-lg px-3 py-1.5 rounded shadow-lg border border-white/10">
                 {`${Math.round(normalizeAngle(rotationPreviewDeg))}°`}
-              </div>
-            </div>
+          </div>
+          </div>
           )}
         {/* Collapsible Toolbar - hidden in compositing mode */}
         {mode !== "composite" && (
@@ -2143,7 +2144,7 @@ export function AnimationEditor({
               eraserSize={eraserSize}
               setEraserSize={setEraserSize}
             />
-          </div>
+        </div>
         )}
 
         {/* Main Content Area */}
@@ -2758,10 +2759,10 @@ export function AnimationEditor({
                               }}
                             />
                           ))}
-                        </div>
+                    </div>
                       )}
                     </div>
-                  </div>
+            </div>
                 );
               })()}
           </div>
