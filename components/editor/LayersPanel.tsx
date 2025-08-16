@@ -115,6 +115,7 @@ export interface LayersPanelProps {
   ) => void;
   // For frame stretching support
   drawingFrames?: DrawingFrame[];
+  setDrawingFrames?: (fn: (prev: any[]) => any[]) => void;
   // Compositing only: notify when a specific asset in a folder is clicked
   onSelectCompAsset?: (folderId: string, index: number) => void;
   // Color effects system
@@ -610,65 +611,88 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
         props.onFolderReceiveAssets?.(newFolderId, duplicatedAssets);
       }
     } else {
-      // Handle regular folders (not composition folders) - use addFolder hook
-      console.log("Duplicating regular folder using addFolder hook");
+      // Handle regular folders (not composition folders) - create directly
+      console.log("Duplicating regular folder directly");
 
-      // Store current state before creating new folder
-      const currentFolderIds = new Set(sidebarFolders.map((f) => f.id));
-      console.log("Current folder IDs before creation:", currentFolderIds);
+      // Generate new folder ID using the same logic as composition folders
+      const targetRowId = "row-1";
+      const realizedMax = drawingFrames
+        ? Math.max(
+            ...drawingFrames
+              .filter((df: any) => df.rowId === targetRowId)
+              .map((f: any) => f.frameIndex),
+            -1
+          )
+        : -1;
+      
+      // Include all existing folder IDs to avoid conflicts
+      const allExistingIds = [
+        ...sidebarFolders.map(f => f.id),
+        ...(props.compositeFolderIds || [])
+      ];
+      
+      const placeholderMax = allExistingIds.reduce(
+        (acc: number, id: string) => {
+          const parts = id.split("-");
+          const idx = parseInt(parts[2] || "0", 10);
+          return Number.isFinite(idx) ? Math.max(acc, idx) : acc;
+        },
+        -1
+      );
+      const nextIndex = Math.max(realizedMax, placeholderMax) + 1;
+      const newFolderId = `${targetRowId}-${nextIndex}`;
 
-      // Create new folder using the hook
-      addFolder();
+      console.log("Creating new regular folder:", {
+        newFolderId,
+        realizedMax,
+        placeholderMax,
+        nextIndex,
+        allExistingIds,
+        drawingFramesLength: drawingFrames?.length || 0,
+        sidebarFolderIds: sidebarFolders.map(f => f.id),
+      });
 
-      // Use a timeout to find the new folder
-      setTimeout(() => {
-        const allFolderIds = sidebarFolders.map((f) => f.id);
-        const newFolderIds = allFolderIds.filter(
-          (id) => !currentFolderIds.has(id)
-        );
+      // Create a drawingFrame entry for the regular folder
+      const newDrawingFrame = {
+        rowId: targetRowId,
+        frameIndex: nextIndex,
+        length: 1,
+        imageUrl: "",
+        fileName: "",
+        folderId: newFolderId, // This makes it a "realized" folder
+      };
 
-        console.log("After addFolder call:", {
-          allFolderIds,
-          newFolderIds,
-          sidebarFoldersLength: sidebarFolders.length,
-        });
+      // Add to drawingFrames (this makes it appear in sidebarFolders)
+      props.setDrawingFrames?.((prev: any[]) => [...prev, newDrawingFrame]);
 
-        if (newFolderIds.length > 0) {
-          const newestFolderId = newFolderIds[0];
-          console.log("Found new regular folder:", newestFolderId);
+      // Update the folder name
+      setFolderNames((prev) => ({
+        ...prev,
+        [newFolderId]: duplicateName,
+      }));
 
-          // Update the folder name
-          setFolderNames((prev) => ({
-            ...prev,
-            [newestFolderId]: duplicateName,
-          }));
+      // Copy all assets from the original folder
+      const originalAssets = assetsByFolder[folderId] || [];
+      console.log("Original assets to copy:", originalAssets);
 
-          // Copy all assets from the original folder
-          const originalAssets = assetsByFolder[folderId] || [];
-          console.log("Original assets to copy:", originalAssets);
+      if (originalAssets.length > 0) {
+        const duplicatedAssets = originalAssets.map((asset, index) => ({
+          ...asset,
+          id: `asset-${Date.now()}-${index}-${Math.random()}`,
+          // Don't add "Copy" to asset names since the folder already has "Copy" in its name
+          name: asset.name,
+        }));
 
-          if (originalAssets.length > 0) {
-            const duplicatedAssets = originalAssets.map((asset, index) => ({
-              ...asset,
-              id: `asset-${Date.now()}-${index}-${Math.random()}`,
-              // Don't add "Copy" to asset names since the folder already has "Copy" in its name
-              name: asset.name,
-            }));
+        console.log("Duplicated assets:", duplicatedAssets);
 
-            console.log("Duplicated assets:", duplicatedAssets);
+        setAssetsByFolder((prev) => ({
+          ...prev,
+          [newFolderId]: duplicatedAssets,
+        }));
 
-            setAssetsByFolder((prev) => ({
-              ...prev,
-              [newestFolderId]: duplicatedAssets,
-            }));
-
-            // Notify parent if there's a handler for folder receiving assets
-            props.onFolderReceiveAssets?.(newestFolderId, duplicatedAssets);
-          }
-        } else {
-          console.log("Failed to find new regular folder");
-        }
-      }, 200); // Single timeout, no retry loop for regular folders
+        // Notify parent if there's a handler for folder receiving assets
+        props.onFolderReceiveAssets?.(newFolderId, duplicatedAssets);
+      }
     }
   };
 
