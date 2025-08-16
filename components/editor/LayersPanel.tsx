@@ -407,21 +407,23 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
       const folderAssets = assetsByFolder[props.selectedAssetFolderId] || [];
       if (folderAssets.length > props.selectedAssetIndex) {
         const originalAsset = folderAssets[props.selectedAssetIndex];
-        const existingNames = folderAssets.map(a => a.name);
-        
+        const existingNames = folderAssets.map((a) => a.name);
+
         const duplicatedAsset: AssetItem = {
           ...originalAsset,
           id: `asset-${Date.now()}-${Math.random()}`,
-          name: getDuplicateName(originalAsset.name, existingNames)
+          name: getDuplicateName(originalAsset.name, existingNames),
         };
 
-        setAssetsByFolder(prev => ({
+        setAssetsByFolder((prev) => ({
           ...prev,
-          [props.selectedAssetFolderId!]: [...folderAssets, duplicatedAsset]
+          [props.selectedAssetFolderId!]: [...folderAssets, duplicatedAsset],
         }));
 
         // Notify parent about the new asset in the folder
-        props.onFolderReceiveAssets?.(props.selectedAssetFolderId!, [duplicatedAsset]);
+        props.onFolderReceiveAssets?.(props.selectedAssetFolderId!, [
+          duplicatedAsset,
+        ]);
       }
       return;
     }
@@ -430,7 +432,7 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     if (!selectedLayerId) return;
 
     // Check if it's a folder - if so, do nothing (folder duplication moved to three-dots menu)
-    const selectedFolder = sidebarFolders.find(f => f.id === selectedLayerId);
+    const selectedFolder = sidebarFolders.find((f) => f.id === selectedLayerId);
     if (selectedFolder) {
       return; // Folders are now duplicated via three-dots menu
     }
@@ -438,16 +440,29 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     // Check if it's an asset in root or folder
     const findAssetLocation = () => {
       // Check root assets
-      const rootIndex = rootAssets.findIndex(asset => asset.id === selectedLayerId);
+      const rootIndex = rootAssets.findIndex(
+        (asset) => asset.id === selectedLayerId
+      );
       if (rootIndex >= 0) {
-        return { type: 'root' as const, asset: rootAssets[rootIndex], index: rootIndex };
+        return {
+          type: "root" as const,
+          asset: rootAssets[rootIndex],
+          index: rootIndex,
+        };
       }
 
       // Check folder assets
       for (const [folderId, assets] of Object.entries(assetsByFolder)) {
-        const assetIndex = assets.findIndex(asset => asset.id === selectedLayerId);
+        const assetIndex = assets.findIndex(
+          (asset) => asset.id === selectedLayerId
+        );
         if (assetIndex >= 0) {
-          return { type: 'folder' as const, folderId, asset: assets[assetIndex], index: assetIndex };
+          return {
+            type: "folder" as const,
+            folderId,
+            asset: assets[assetIndex],
+            index: assetIndex,
+          };
         }
       }
       return null;
@@ -458,22 +473,26 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
 
     // Duplicate the asset
     const originalAsset = location.asset;
-    const existingNames = location.type === 'root' 
-      ? rootAssets.map(a => a.name)
-      : (assetsByFolder[location.folderId] || []).map(a => a.name);
-      
+    const existingNames =
+      location.type === "root"
+        ? rootAssets.map((a) => a.name)
+        : (assetsByFolder[location.folderId] || []).map((a) => a.name);
+
     const duplicatedAsset: AssetItem = {
       ...originalAsset,
       id: `asset-${Date.now()}-${Math.random()}`,
-      name: getDuplicateName(originalAsset.name, existingNames)
+      name: getDuplicateName(originalAsset.name, existingNames),
     };
 
-    if (location.type === 'root') {
-      setRootAssets(prev => [...prev, duplicatedAsset]);
-    } else if (location.type === 'folder') {
-      setAssetsByFolder(prev => ({
+    if (location.type === "root") {
+      setRootAssets((prev) => [...prev, duplicatedAsset]);
+    } else if (location.type === "folder") {
+      setAssetsByFolder((prev) => ({
         ...prev,
-        [location.folderId]: [...(prev[location.folderId] || []), duplicatedAsset]
+        [location.folderId]: [
+          ...(prev[location.folderId] || []),
+          duplicatedAsset,
+        ],
       }));
 
       // Notify parent about the new asset in the folder
@@ -483,63 +502,92 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
 
   // Duplicate folder functionality
   const handleDuplicateFolder = (folderId: string) => {
-    const originalName = folderNames[folderId] || sidebarFolders.find(f => f.id === folderId)?.label || 'Folder';
-    const duplicateName = getDuplicateName(originalName, Object.values(folderNames));
+    const originalName =
+      folderNames[folderId] ||
+      sidebarFolders.find((f) => f.id === folderId)?.label ||
+      "Folder";
+    const duplicateName = getDuplicateName(
+      originalName,
+      Object.values(folderNames)
+    );
+
+    // Check if this is a composition folder (exists in compositeFolderIds or compositionByFolder)
+    const isCompositionFolder = 
+      (props.compositeFolderIds && props.compositeFolderIds.includes(folderId)) ||
+      (compositionByFolder && compositionByFolder[folderId]);
+
+    console.log("Duplicating folder:", {
+      folderId,
+      originalName,
+      duplicateName,
+      isCompositionFolder,
+      compositeFolderIds: props.compositeFolderIds,
+      hasCompositionSettings: !!compositionByFolder[folderId]
+    });
     
-    console.log('Duplicating folder:', { folderId, originalName, duplicateName });
-    
-    // In composite mode, check compositeFolderIds instead of sidebarFolders
-    if (mode === "composite" && props.compositeFolderIds && props.setCompositeFolderIds) {
+    if (
+      isCompositionFolder &&
+      props.compositeFolderIds &&
+      props.setCompositeFolderIds
+    ) {
       const currentCompositeIds = new Set(props.compositeFolderIds);
-      console.log('Current composite folder IDs before creation:', currentCompositeIds);
-      
+      console.log(
+        "Current composite folder IDs before creation:",
+        currentCompositeIds
+      );
+
       // Create new folder first
       addFolder();
-      
+
       // Use a longer timeout and retry logic to find the new folder
       const findNewFolder = (attempt = 1, maxAttempts = 10) => {
         setTimeout(() => {
-          const newCompositeIds = props.compositeFolderIds!.filter(id => !currentCompositeIds.has(id));
-          
-          console.log(`Attempt ${attempt}:`, { 
-            allCompositeIds: props.compositeFolderIds, 
-            newCompositeIds, 
-            compositeFolderIdsLength: props.compositeFolderIds!.length 
+          const newCompositeIds = props.compositeFolderIds!.filter(
+            (id) => !currentCompositeIds.has(id)
+          );
+
+          console.log(`Attempt ${attempt}:`, {
+            allCompositeIds: props.compositeFolderIds,
+            newCompositeIds,
+            compositeFolderIdsLength: props.compositeFolderIds!.length,
           });
-          
+
           if (newCompositeIds.length > 0) {
             const newestFolderId = newCompositeIds[0]; // Take the first new folder found
-            console.log('Found new composite folder:', newestFolderId);
-            
+            console.log("Found new composite folder:", newestFolderId);
+
             // Update the folder name
-            setFolderNames(prev => ({
+            setFolderNames((prev) => ({
               ...prev,
-              [newestFolderId]: duplicateName
+              [newestFolderId]: duplicateName,
             }));
 
             // Copy composition settings if it's a composition folder
             if (compositionByFolder[folderId]) {
               const compSettings = compositionByFolder[folderId];
-              console.log('Copying composition settings:', compSettings);
+              console.log("Copying composition settings:", compSettings);
               props.onSetComposition?.(newestFolderId, compSettings);
             }
 
             // Copy all assets from the original folder
             const originalAssets = assetsByFolder[folderId] || [];
-            console.log('Original assets to copy:', originalAssets);
-            
+            console.log("Original assets to copy:", originalAssets);
+
             if (originalAssets.length > 0) {
               const duplicatedAssets = originalAssets.map((asset, index) => ({
                 ...asset,
                 id: `asset-${Date.now()}-${index}-${Math.random()}`,
-                name: getDuplicateName(asset.name, originalAssets.map(a => a.name))
+                name: getDuplicateName(
+                  asset.name,
+                  originalAssets.map((a) => a.name)
+                ),
               }));
-              
-              console.log('Duplicated assets:', duplicatedAssets);
-              
-              setAssetsByFolder(prev => ({
+
+              console.log("Duplicated assets:", duplicatedAssets);
+
+              setAssetsByFolder((prev) => ({
                 ...prev,
-                [newestFolderId]: duplicatedAssets
+                [newestFolderId]: duplicatedAssets,
               }));
 
               // Notify parent if there's a handler for folder receiving assets
@@ -547,68 +595,77 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
             }
           } else if (attempt < maxAttempts) {
             // Retry if we haven't found the new folder yet
-            console.log(`No new composite folder found, retrying... (${attempt}/${maxAttempts})`);
+            console.log(
+              `No new composite folder found, retrying... (${attempt}/${maxAttempts})`
+            );
             findNewFolder(attempt + 1, maxAttempts);
           } else {
-            console.log('Failed to find new composite folder after maximum attempts');
+            console.log(
+              "Failed to find new composite folder after maximum attempts"
+            );
           }
         }, 100 * attempt); // Increase timeout with each attempt
       };
-      
+
       findNewFolder();
     } else {
-      // Fallback to original logic for non-composite modes
-      const currentFolderIds = new Set(sidebarFolders.map(f => f.id));
-      console.log('Current folder IDs before creation:', currentFolderIds);
-      
+      // Handle regular folders (not composition folders) using sidebarFolders
+      const currentFolderIds = new Set(sidebarFolders.map((f) => f.id));
+      console.log("Current folder IDs before creation:", currentFolderIds);
+
       // Create new folder first
       addFolder();
-      
+
       // Use a longer timeout and retry logic to find the new folder
       const findNewFolder = (attempt = 1, maxAttempts = 10) => {
         setTimeout(() => {
-          const allFolderIds = sidebarFolders.map(f => f.id);
-          const newFolderIds = allFolderIds.filter(id => !currentFolderIds.has(id));
-          
-          console.log(`Attempt ${attempt}:`, { 
-            allFolderIds, 
-            newFolderIds, 
-            sidebarFoldersLength: sidebarFolders.length 
+          const allFolderIds = sidebarFolders.map((f) => f.id);
+          const newFolderIds = allFolderIds.filter(
+            (id) => !currentFolderIds.has(id)
+          );
+
+          console.log(`Attempt ${attempt}:`, {
+            allFolderIds,
+            newFolderIds,
+            sidebarFoldersLength: sidebarFolders.length,
           });
-          
+
           if (newFolderIds.length > 0) {
             const newestFolderId = newFolderIds[0]; // Take the first new folder found
-            console.log('Found new folder:', newestFolderId);
-            
+            console.log("Found new folder:", newestFolderId);
+
             // Update the folder name
-            setFolderNames(prev => ({
+            setFolderNames((prev) => ({
               ...prev,
-              [newestFolderId]: duplicateName
+              [newestFolderId]: duplicateName,
             }));
 
             // Copy composition settings if it's a composition folder
             if (compositionByFolder[folderId]) {
               const compSettings = compositionByFolder[folderId];
-              console.log('Copying composition settings:', compSettings);
+              console.log("Copying composition settings:", compSettings);
               props.onSetComposition?.(newestFolderId, compSettings);
             }
 
             // Copy all assets from the original folder
             const originalAssets = assetsByFolder[folderId] || [];
-            console.log('Original assets to copy:', originalAssets);
-            
+            console.log("Original assets to copy:", originalAssets);
+
             if (originalAssets.length > 0) {
               const duplicatedAssets = originalAssets.map((asset, index) => ({
                 ...asset,
                 id: `asset-${Date.now()}-${index}-${Math.random()}`,
-                name: getDuplicateName(asset.name, originalAssets.map(a => a.name))
+                name: getDuplicateName(
+                  asset.name,
+                  originalAssets.map((a) => a.name)
+                ),
               }));
-              
-              console.log('Duplicated assets:', duplicatedAssets);
-              
-              setAssetsByFolder(prev => ({
+
+              console.log("Duplicated assets:", duplicatedAssets);
+
+              setAssetsByFolder((prev) => ({
                 ...prev,
-                [newestFolderId]: duplicatedAssets
+                [newestFolderId]: duplicatedAssets,
               }));
 
               // Notify parent if there's a handler for folder receiving assets
@@ -616,14 +673,16 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
             }
           } else if (attempt < maxAttempts) {
             // Retry if we haven't found the new folder yet
-            console.log(`No new folder found, retrying... (${attempt}/${maxAttempts})`);
+            console.log(
+              `No new folder found, retrying... (${attempt}/${maxAttempts})`
+            );
             findNewFolder(attempt + 1, maxAttempts);
           } else {
-            console.log('Failed to find new folder after maximum attempts');
+            console.log("Failed to find new folder after maximum attempts");
           }
         }, 100 * attempt); // Increase timeout with each attempt
       };
-      
+
       findNewFolder();
     }
   };
@@ -635,37 +694,44 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
       const folderAssets = assetsByFolder[props.selectedAssetFolderId] || [];
       return folderAssets.length > props.selectedAssetIndex;
     }
-    
+
     // Check if there's a regular selectedLayerId
     if (!selectedLayerId) return false;
-    
+
     // Check if it's a folder
-    const selectedFolder = sidebarFolders.find(f => f.id === selectedLayerId);
+    const selectedFolder = sidebarFolders.find((f) => f.id === selectedLayerId);
     if (selectedFolder) return false;
-    
+
     // Check if it's an asset
-    const rootIndex = rootAssets.findIndex(asset => asset.id === selectedLayerId);
+    const rootIndex = rootAssets.findIndex(
+      (asset) => asset.id === selectedLayerId
+    );
     if (rootIndex >= 0) return true;
-    
+
     // Check folder assets by ID
     for (const assets of Object.values(assetsByFolder)) {
-      const assetIndex = assets.findIndex(asset => asset.id === selectedLayerId);
+      const assetIndex = assets.findIndex(
+        (asset) => asset.id === selectedLayerId
+      );
       if (assetIndex >= 0) return true;
     }
-    
+
     return false;
   };
 
   // Helper function to generate unique duplicate names
-  const getDuplicateName = (originalName: string, existingNames: string[]): string => {
+  const getDuplicateName = (
+    originalName: string,
+    existingNames: string[]
+  ): string => {
     let counter = 1;
     let newName = `${originalName} Copy`;
-    
+
     while (existingNames.includes(newName)) {
       counter++;
       newName = `${originalName} Copy ${counter}`;
     }
-    
+
     return newName;
   };
 
@@ -966,7 +1032,9 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
           <div className="border-b border-gray-600 my-4 flex-shrink-0" />
           <ColorEffectsPanel
             assetIdentity={selectedAssetKey || null}
-            effects={selectedAssetKey ? assetEffects[selectedAssetKey] || {} : {}}
+            effects={
+              selectedAssetKey ? assetEffects[selectedAssetKey] || {} : {}
+            }
             onEffectsChange={onAssetEffectsChange}
           />
         </>
