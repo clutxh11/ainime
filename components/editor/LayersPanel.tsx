@@ -542,7 +542,15 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
             -1
           )
         : -1;
-      const placeholderMax = props.compositeFolderIds.reduce(
+      
+      // Include all existing composition folder IDs to avoid conflicts
+      const allExistingIds = [
+        ...props.compositeFolderIds,
+        // Also check sidebarFolders for any realized composition folders
+        ...sidebarFolders.map(f => f.id)
+      ];
+      
+      const placeholderMax = allExistingIds.reduce(
         (acc: number, id: string) => {
           const parts = id.split("-");
           const idx = parseInt(parts[2] || "0", 10);
@@ -558,6 +566,9 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
         realizedMax,
         placeholderMax,
         nextIndex,
+        allExistingIds,
+        compositeFolderIds: props.compositeFolderIds,
+        sidebarFolderIds: sidebarFolders.map(f => f.id),
       });
 
       // Add to compositeFolderIds
@@ -584,10 +595,8 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
         const duplicatedAssets = originalAssets.map((asset, index) => ({
           ...asset,
           id: `asset-${Date.now()}-${index}-${Math.random()}`,
-          name: getDuplicateName(
-            asset.name,
-            originalAssets.map((a) => a.name)
-          ),
+          // Don't add "Copy" to asset names since the folder already has "Copy" in its name
+          name: asset.name,
         }));
 
         console.log("Duplicated assets:", duplicatedAssets);
@@ -642,10 +651,8 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
             const duplicatedAssets = originalAssets.map((asset, index) => ({
               ...asset,
               id: `asset-${Date.now()}-${index}-${Math.random()}`,
-              name: getDuplicateName(
-                asset.name,
-                originalAssets.map((a) => a.name)
-              ),
+              // Don't add "Copy" to asset names since the folder already has "Copy" in its name
+              name: asset.name,
             }));
 
             console.log("Duplicated assets:", duplicatedAssets);
