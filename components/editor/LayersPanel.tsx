@@ -485,56 +485,74 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     
     console.log('Duplicating folder:', { folderId, originalName, duplicateName });
     
+    // Store current folder IDs before creating new folder
+    const currentFolderIds = new Set(sidebarFolders.map(f => f.id));
+    console.log('Current folder IDs before creation:', currentFolderIds);
+    
     // Create new folder first
     addFolder();
     
-    // Wait for the new folder to be created and then copy its contents
-    setTimeout(() => {
-      // Find the newest folder (last in sidebarFolders)
-      const allFolderIds = sidebarFolders.map(f => f.id);
-      const newestFolderId = allFolderIds[allFolderIds.length - 1];
-      
-      console.log('After folder creation:', { allFolderIds, newestFolderId, originalFolderId: folderId });
-      
-      if (newestFolderId && newestFolderId !== folderId) {
-        // Update the folder name
-        setFolderNames(prev => ({
-          ...prev,
-          [newestFolderId]: duplicateName
-        }));
-
-        // Copy composition settings if it's a composition folder
-        if (compositionByFolder[folderId]) {
-          const compSettings = compositionByFolder[folderId];
-          console.log('Copying composition settings:', compSettings);
-          props.onSetComposition?.(newestFolderId, compSettings);
-        }
-
-        // Copy all assets from the original folder
-        const originalAssets = assetsByFolder[folderId] || [];
-        console.log('Original assets to copy:', originalAssets);
+    // Use a longer timeout and retry logic to find the new folder
+    const findNewFolder = (attempt = 1, maxAttempts = 10) => {
+      setTimeout(() => {
+        const allFolderIds = sidebarFolders.map(f => f.id);
+        const newFolderIds = allFolderIds.filter(id => !currentFolderIds.has(id));
         
-        if (originalAssets.length > 0) {
-          const duplicatedAssets = originalAssets.map((asset, index) => ({
-            ...asset,
-            id: `asset-${Date.now()}-${index}-${Math.random()}`,
-            name: getDuplicateName(asset.name, originalAssets.map(a => a.name))
-          }));
+        console.log(`Attempt ${attempt}:`, { 
+          allFolderIds, 
+          newFolderIds, 
+          sidebarFoldersLength: sidebarFolders.length 
+        });
+        
+        if (newFolderIds.length > 0) {
+          const newestFolderId = newFolderIds[0]; // Take the first new folder found
+          console.log('Found new folder:', newestFolderId);
           
-          console.log('Duplicated assets:', duplicatedAssets);
-          
-          setAssetsByFolder(prev => ({
+          // Update the folder name
+          setFolderNames(prev => ({
             ...prev,
-            [newestFolderId]: duplicatedAssets
+            [newestFolderId]: duplicateName
           }));
 
-          // Notify parent if there's a handler for folder receiving assets
-          props.onFolderReceiveAssets?.(newestFolderId, duplicatedAssets);
+          // Copy composition settings if it's a composition folder
+          if (compositionByFolder[folderId]) {
+            const compSettings = compositionByFolder[folderId];
+            console.log('Copying composition settings:', compSettings);
+            props.onSetComposition?.(newestFolderId, compSettings);
+          }
+
+          // Copy all assets from the original folder
+          const originalAssets = assetsByFolder[folderId] || [];
+          console.log('Original assets to copy:', originalAssets);
+          
+          if (originalAssets.length > 0) {
+            const duplicatedAssets = originalAssets.map((asset, index) => ({
+              ...asset,
+              id: `asset-${Date.now()}-${index}-${Math.random()}`,
+              name: getDuplicateName(asset.name, originalAssets.map(a => a.name))
+            }));
+            
+            console.log('Duplicated assets:', duplicatedAssets);
+            
+            setAssetsByFolder(prev => ({
+              ...prev,
+              [newestFolderId]: duplicatedAssets
+            }));
+
+            // Notify parent if there's a handler for folder receiving assets
+            props.onFolderReceiveAssets?.(newestFolderId, duplicatedAssets);
+          }
+        } else if (attempt < maxAttempts) {
+          // Retry if we haven't found the new folder yet
+          console.log(`No new folder found, retrying... (${attempt}/${maxAttempts})`);
+          findNewFolder(attempt + 1, maxAttempts);
+        } else {
+          console.log('Failed to find new folder after maximum attempts');
         }
-      } else {
-        console.log('No new folder found or same folder ID');
-      }
-    }, 100);
+      }, 100 * attempt); // Increase timeout with each attempt
+    };
+    
+    findNewFolder();
   };
 
   // Helper function to check if selected item is an asset (not a folder)
