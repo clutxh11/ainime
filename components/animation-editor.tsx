@@ -451,17 +451,15 @@ export function AnimationEditor({
     );
     if (!df) return null;
 
-    // For sequence frames, use only the folderId as the key to ensure
-    // transformations are shared across all frames in the sequence
-    if (df.isSequenceFrame) {
-      return compSelectedAssetFolderId;
-    }
-
-    // For single images, use assetId if available for consistency with color effects
-    const identity = df.assetId
-      ? df.assetId
-      : df.fileName || df.imageUrl || null;
-    return identity ? `${compSelectedAssetFolderId}|${identity}` : null;
+    // Use consistent identity calculation for all asset types
+    const identity = df.isSequenceFrame && df.folderId
+      ? df.assetId 
+        ? `${df.folderId}|${df.assetId}`
+        : df.folderId
+      : df.assetId 
+        ? `${compSelectedAssetFolderId}|${df.assetId}`
+        : `${compSelectedAssetFolderId}|${df.fileName || df.imageUrl || ""}`;
+    return identity;
   }, [compSelectedAssetFolderId, compSelectedAssetIndex, drawingFrames]);
 
   // Draw compositing canvas: render all assets for the active composition in row order (stacked)
@@ -514,7 +512,9 @@ export function AnimationEditor({
         // Use the same key logic as in the drawing loop
         const identity =
           cell.isSequenceFrame && cell.folderId
-            ? cell.folderId
+            ? cell.assetId 
+              ? `${cell.folderId}|${cell.assetId}`
+              : cell.folderId
             : cell.assetId
             ? `${activeFolderId}|${cell.assetId}`
             : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
@@ -563,12 +563,14 @@ export function AnimationEditor({
 
         // Draw all images synchronously in the correct order (back to front)
         for (const { cell, img } of loadedImages) {
-          // For sequence frames, use folderId as the transformation key to ensure
-          // transformations persist across all frames in the sequence
+          // For sequence frames, use folderId + assetId to ensure duplicated sequences have unique identities
+          // while still allowing transformations to persist across frames within the same sequence
           // For regular assets, use assetId if available to ensure duplicated assets have unique identities
           const identity =
             cell.isSequenceFrame && cell.folderId
-              ? cell.folderId
+              ? cell.assetId 
+                ? `${cell.folderId}|${cell.assetId}`
+                : cell.folderId
               : cell.assetId
               ? `${activeFolderId}|${cell.assetId}`
               : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
@@ -579,7 +581,7 @@ export function AnimationEditor({
             isSequenceFrame: cell.isSequenceFrame,
             folderId: cell.folderId,
             activeFolderId,
-            finalIdentity: identity
+            finalIdentity: identity,
           });
 
           const persisted = boundsByAsset[identity];
@@ -599,12 +601,14 @@ export function AnimationEditor({
           console.log(`[COLOR EFFECTS DEBUG] Effects lookup:`, {
             identity,
             hasEffects: !!effects,
-            effects: effects ? {
-              colorKey: effects.colorKey?.enabled,
-              colorKeep: effects.colorKeep?.enabled,
-              fill: effects.fill?.enabled
-            } : null,
-            allAssetEffects: Object.keys(assetEffects)
+            effects: effects
+              ? {
+                  colorKey: effects.colorKey?.enabled,
+                  colorKeep: effects.colorKeep?.enabled,
+                  fill: effects.fill?.enabled,
+                }
+              : null,
+            allAssetEffects: Object.keys(assetEffects),
           });
 
           if (
@@ -613,7 +617,10 @@ export function AnimationEditor({
               effects.colorKeep?.enabled ||
               effects.fill?.enabled)
           ) {
-            console.log(`[COLOR EFFECTS DEBUG] Applying effects for identity: ${identity}`, effects);
+            console.log(
+              `[COLOR EFFECTS DEBUG] Applying effects for identity: ${identity}`,
+              effects
+            );
             // Process image with effects
             const processedCanvas = processImageWithEffects(ctx, img, effects);
             imageToRender = processedCanvas as any; // Canvas can be drawn like an image
@@ -3069,14 +3076,17 @@ export function AnimationEditor({
                         folderId,
                         assetId: asset.id, // Include asset ID for unique identification
                       };
-                      
-                      console.log(`[COLOR EFFECTS DEBUG] Creating DrawingFrame for regular asset:`, {
-                        assetName: asset.name,
-                        assetId: asset.id,
-                        folderId,
-                        newFrame
-                      });
-                      
+
+                      console.log(
+                        `[COLOR EFFECTS DEBUG] Creating DrawingFrame for regular asset:`,
+                        {
+                          assetName: asset.name,
+                          assetId: asset.id,
+                          folderId,
+                          newFrame,
+                        }
+                      );
+
                       allNewFrames.push(newFrame);
                     }
 
@@ -3157,9 +3167,13 @@ export function AnimationEditor({
               const x = Math.round((comp.width - w) / 2);
               const y = Math.round((comp.height - h) / 2);
               // Prefer persisted bounds if available
-              const identity = df.assetId
-                ? `${folderId}|${df.assetId}`
-                : `${folderId}|${df.fileName || df.imageUrl || ""}`;
+                            const identity = df.isSequenceFrame && df.folderId
+                ? df.assetId 
+                  ? `${df.folderId}|${df.assetId}`
+                  : df.folderId
+                : df.assetId 
+                  ? `${folderId}|${df.assetId}`
+                  : `${folderId}|${df.fileName || df.imageUrl || ""}`;
               const persisted = boundsByAsset[identity];
               if (persisted) {
                 setCompImageBounds({ ...persisted });
