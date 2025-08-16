@@ -30,6 +30,9 @@ interface Props {
   hideEditButtons?: boolean;
   suppressFrames?: boolean;
   activeCompositionLabel?: string;
+  // Composition hierarchy props
+  isChildComposition?: boolean;
+  compositionHierarchy?: any;
 }
 
 export default function TimelineDock(props: Props) {
@@ -40,6 +43,8 @@ export default function TimelineDock(props: Props) {
         frames={frameCount}
         setFrames={setFrameCount}
         activeCompositionLabel={(props as any).activeCompositionLabel}
+        isChildComposition={props.isChildComposition}
+        compositionHierarchy={props.compositionHierarchy}
         {...(rest as any)}
       />
     </div>

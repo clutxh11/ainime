@@ -182,8 +182,6 @@ export function applyFill(
     const b = data[i + 2];
     const a = data[i + 3];
 
-
-
     // Apply fill opacity by blending between original and fill color
     const finalR = r + (fillRgb.r - r) * fillOpacity;
     const finalG = g + (fillRgb.g - g) * fillOpacity;
@@ -248,4 +246,78 @@ export function processImageWithEffects(
   tempCtx.putImageData(imageData, 0, 0);
 
   return tempCanvas;
+}
+
+/**
+ * Create a blob URL from a processed image with effects baked in
+ */
+export async function createProcessedImageBlob(
+  imageUrl: string,
+  effects: AssetEffects
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+
+    img.onload = () => {
+      try {
+        // Create a temporary canvas for processing
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = img.naturalWidth;
+        tempCanvas.height = img.naturalHeight;
+        const tempCtx = tempCanvas.getContext("2d");
+
+        if (!tempCtx) {
+          reject(new Error("Failed to get canvas context"));
+          return;
+        }
+
+        // Process the image with effects
+        const processedCanvas = processImageWithEffects(tempCtx, img, effects);
+
+        console.log(
+          "[COLOR EFFECTS DEBUG] processImageWithEffects completed:",
+          {
+            originalSize: `${img.naturalWidth}x${img.naturalHeight}`,
+            processedSize: `${processedCanvas.width}x${processedCanvas.height}`,
+            effects,
+          }
+        );
+
+        // Convert to blob
+        processedCanvas.toBlob((blob) => {
+          if (blob) {
+            const blobUrl = URL.createObjectURL(blob);
+            console.log("[COLOR EFFECTS DEBUG] Processed blob created:", {
+              blobUrl,
+              blobSize: blob.size,
+              originalUrl: imageUrl,
+            });
+            resolve(blobUrl);
+          } else {
+            reject(new Error("Failed to create blob"));
+          }
+        }, "image/png");
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = imageUrl;
+  });
+}
+
+/**
+ * Check if an AssetEffects object has any enabled effects
+ */
+export function hasEnabledEffects(
+  effects: AssetEffects | undefined | null
+): boolean {
+  if (!effects) return false;
+  return !!(
+    effects.colorKey?.enabled ||
+    effects.colorKeep?.enabled ||
+    effects.fill?.enabled
+  );
 }

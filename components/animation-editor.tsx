@@ -128,6 +128,29 @@ interface Frame {
 
 // moved helpers to lib/editor/paths
 
+// Track recent import operations to prevent duplicates
+const recentImports = new Set<string>();
+
+// Types for composition hierarchy
+interface NestedComposition {
+  compositionId: string; // The nested composition's folder ID
+  parentCompositionId: string; // The parent composition's folder ID
+  assetId: string; // The asset ID representing this composition in the parent
+  name: string; // Display name for the nested composition
+  settings: { width: number; height: number; fps: number };
+  // Position within the parent composition's asset list
+  index: number;
+}
+
+interface CompositionHierarchy {
+  // Map of composition ID -> array of nested composition IDs it contains
+  children: Record<string, string[]>;
+  // Map of composition ID -> parent composition ID (if nested)
+  parents: Record<string, string>;
+  // Map of nested composition asset IDs -> composition metadata
+  nestedCompositions: Record<string, NestedComposition>;
+}
+
 export function AnimationEditor({
   onViewChange,
   sceneSettings,
@@ -283,6 +306,221 @@ export function AnimationEditor({
   const [compositionByFolder, setCompositionByFolder] = useState<
     Record<string, { width: number; height: number; fps: number }>
   >({});
+
+  // Composition hierarchy state
+  const [compositionHierarchy, setCompositionHierarchy] =
+    useState<CompositionHierarchy>({
+      children: {},
+      parents: {},
+      nestedCompositions: {},
+    });
+
+  // Helper functions for composition hierarchy
+  const addNestedComposition = useCallback(
+    (
+      parentId: string,
+      childId: string,
+      assetId: string,
+      name: string,
+      index: number
+    ) => {
+      const childSettings = compositionByFolder[childId];
+      if (!childSettings) {
+        console.warn(
+          "[HIERARCHY] Child composition settings not found:",
+          childId
+        );
+        return;
+      }
+
+      setCompositionHierarchy((prev) => {
+        const newHierarchy = { ...prev };
+
+        // Add child to parent's children array
+        if (!newHierarchy.children[parentId]) {
+          newHierarchy.children[parentId] = [];
+        }
+        if (!newHierarchy.children[parentId].includes(childId)) {
+          newHierarchy.children[parentId].push(childId);
+        }
+
+        // Set parent relationship
+        newHierarchy.parents[childId] = parentId;
+
+        // Store nested composition metadata
+        newHierarchy.nestedCompositions[assetId] = {
+          compositionId: childId,
+          parentCompositionId: parentId,
+          assetId,
+          name,
+          settings: childSettings,
+          index,
+        };
+
+        console.log("[HIERARCHY] Added nested composition:", {
+          parentId,
+          childId,
+          assetId,
+          name,
+          hierarchy: newHierarchy,
+        });
+
+        return newHierarchy;
+      });
+
+      // CRITICAL: Create frames for the nested composition in the parent folder
+      // This ensures the nested composition appears in parent timeline and canvas
+      setDrawingFrames((prev: any[]) => {
+        console.log(
+          "[NESTED COMP CREATION] Creating frames for nested composition:",
+          {
+            parentId,
+            childId,
+            assetId,
+            name,
+            existingFrames: prev.length,
+          }
+        );
+
+        // Get all frames from the child composition
+        const childFrames = prev.filter((df: any) => df.folderId === childId);
+
+        if (childFrames.length === 0) {
+          console.log(
+            "[NESTED COMP CREATION] No child frames found for composition:",
+            childId
+          );
+          return prev;
+        }
+
+        console.log("[NESTED COMP CREATION] Found child frames:", {
+          childId,
+          frameCount: childFrames.length,
+          sampleFrame: childFrames[0]
+            ? {
+                fileName: childFrames[0].fileName,
+                rowId: childFrames[0].rowId,
+                assetId: childFrames[0].assetId,
+              }
+            : null,
+        });
+
+        // Find next available row in parent folder
+        const existingParentFrames = prev.filter(
+          (df: any) => df.folderId === parentId
+        );
+        const maxRowNumber = existingParentFrames.reduce((max, frame) => {
+          const rowNum = parseInt(frame.rowId.split("-")[1] || "0", 10);
+          return Math.max(max, rowNum);
+        }, 0);
+        const newRowId = `row-${maxRowNumber + 1}`;
+
+        console.log("[NESTED COMP CREATION] Assigning row:", {
+          parentId,
+          existingParentFrames: existingParentFrames.length,
+          maxRowNumber,
+          newRowId,
+        });
+
+        // Create frames that represent the nested composition content in the parent
+        const newFrames = childFrames.map((childFrame: any) => ({
+          rowId: newRowId,
+          frameIndex: childFrame.frameIndex,
+          length: childFrame.length,
+          imageUrl: childFrame.imageUrl,
+          fileName: `${name} > ${childFrame.fileName}`,
+          folderId: parentId, // Belongs to parent folder
+          assetId, // Use the nested composition asset ID
+          parentAssetId: assetId, // CRITICAL: This enables unique grouping
+          isNestedCompositionFrame: true,
+          sourceCompositionId: childId,
+          sourceFrameId: `${childFrame.folderId}|${childFrame.assetId}|${childFrame.frameIndex}`,
+        }));
+
+        console.log("[NESTED COMP CREATION] Created nested frames:", {
+          parentId,
+          childId,
+          newFrameCount: newFrames.length,
+          sampleNewFrame: newFrames[0]
+            ? {
+                fileName: newFrames[0].fileName,
+                parentAssetId: newFrames[0].parentAssetId,
+                folderId: newFrames[0].folderId,
+                isNestedCompositionFrame: newFrames[0].isNestedCompositionFrame,
+              }
+            : null,
+        });
+
+        return [...prev, ...newFrames];
+      });
+    },
+    [compositionByFolder]
+  );
+
+  const removeNestedComposition = useCallback(
+    (parentId: string, childId: string, assetId: string) => {
+      setCompositionHierarchy((prev) => {
+        const newHierarchy = { ...prev };
+
+        // Remove child from parent's children array
+        if (newHierarchy.children[parentId]) {
+          newHierarchy.children[parentId] = newHierarchy.children[
+            parentId
+          ].filter((id) => id !== childId);
+          if (newHierarchy.children[parentId].length === 0) {
+            delete newHierarchy.children[parentId];
+          }
+        }
+
+        // Remove parent relationship
+        delete newHierarchy.parents[childId];
+
+        // Remove nested composition metadata
+        delete newHierarchy.nestedCompositions[assetId];
+
+        console.log("[HIERARCHY] Removed nested composition:", {
+          parentId,
+          childId,
+          assetId,
+          hierarchy: newHierarchy,
+        });
+
+        return newHierarchy;
+      });
+    },
+    []
+  );
+
+  const isCompositionNested = useCallback(
+    (compositionId: string): boolean => {
+      return compositionHierarchy.parents[compositionId] !== undefined;
+    },
+    [compositionHierarchy.parents]
+  );
+
+  const getNestedCompositionsInParent = useCallback(
+    (parentId: string): NestedComposition[] => {
+      const childIds = compositionHierarchy.children[parentId] || [];
+      return childIds
+        .map((childId) => {
+          // Find the asset ID for this nested composition
+          const assetId = Object.keys(
+            compositionHierarchy.nestedCompositions
+          ).find(
+            (key) =>
+              compositionHierarchy.nestedCompositions[key].compositionId ===
+                childId &&
+              compositionHierarchy.nestedCompositions[key]
+                .parentCompositionId === parentId
+          );
+          return assetId
+            ? compositionHierarchy.nestedCompositions[assetId]
+            : null;
+        })
+        .filter(Boolean) as NestedComposition[];
+    },
+    [compositionHierarchy]
+  );
   const compCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [compSelectedAssetIndex, setCompSelectedAssetIndex] = useState<
     number | null
@@ -445,17 +683,253 @@ export function AnimationEditor({
     ];
   });
 
+  // Auto-update parent compositions when child compositions change
+  useEffect(() => {
+    // Find all nested composition frames that need updating
+    const needsUpdate = new Set<string>();
+
+    drawingFrames.forEach((frame: any) => {
+      if (frame.isNestedCompositionFrame && frame.sourceCompositionId) {
+        // Check if the child composition has changed
+        const childFrames = drawingFrames.filter(
+          (df: any) => df.folderId === frame.sourceCompositionId
+        );
+        const childFrameCount = childFrames.length;
+        const parentFrameCount = drawingFrames.filter(
+          (df: any) =>
+            df.folderId === frame.folderId &&
+            df.assetId === frame.assetId &&
+            df.isNestedCompositionFrame
+        ).length;
+
+        if (childFrameCount !== parentFrameCount) {
+          needsUpdate.add(`${frame.folderId}|${frame.assetId}`);
+        }
+      }
+    });
+
+    if (needsUpdate.size > 0) {
+      console.log(
+        "[NESTED COMP UPDATE] Detected changes requiring updates:",
+        Array.from(needsUpdate)
+      );
+
+      // Trigger regeneration of nested composition frames
+      setTimeout(() => {
+        setDrawingFrames((prev) => {
+          const updated = [...prev];
+          let hasChanges = false;
+
+          for (const updateKey of needsUpdate) {
+            const [parentFolderId, nestedAssetId] = updateKey.split("|");
+
+            // Remove old nested composition frames for this asset
+            const withoutOld = updated.filter(
+              (frame: any) =>
+                !(
+                  frame.folderId === parentFolderId &&
+                  frame.assetId === nestedAssetId &&
+                  frame.isNestedCompositionFrame
+                )
+            );
+
+            // Find the nested composition asset to get its composition ID
+            const nestedAsset = prev.find(
+              (frame: any) =>
+                frame.folderId === parentFolderId &&
+                frame.assetId === nestedAssetId &&
+                frame.isNestedCompositionFrame
+            ) as any;
+
+            if (nestedAsset && nestedAsset.sourceCompositionId) {
+              const childFrames = prev.filter(
+                (df: any) => df.folderId === nestedAsset.sourceCompositionId
+              );
+
+              // Get row info from old frame
+              const rowId = nestedAsset.rowId;
+              const assetName =
+                nestedAsset.fileName.split(" > ")[0] || "Nested Composition";
+
+              // Create updated nested composition frames
+              for (const childFrame of childFrames) {
+                withoutOld.push({
+                  rowId,
+                  frameIndex: childFrame.frameIndex,
+                  length: childFrame.length,
+                  imageUrl: childFrame.imageUrl,
+                  fileName: `${assetName} > ${childFrame.fileName}`,
+                  folderId: parentFolderId,
+                  assetId: nestedAssetId,
+                  isNestedCompositionFrame: true,
+                  sourceCompositionId: nestedAsset.sourceCompositionId,
+                  sourceFrameId: `${childFrame.folderId}|${childFrame.assetId}|${childFrame.frameIndex}`,
+                });
+              }
+
+              updated.length = 0;
+              updated.push(...withoutOld);
+              hasChanges = true;
+            }
+          }
+
+          return hasChanges ? updated : prev;
+        });
+      }, 100);
+    }
+  }, [drawingFrames]);
+
   // Stable key for per-asset rotation that survives reordering: folderId + fileName
   const selectedAssetKey = useMemo(() => {
-    if (compSelectedAssetFolderId == null || compSelectedAssetIndex == null)
+    console.log("[SELECTED ASSET KEY DEBUG] Calculating selectedAssetKey:", {
+      compSelectedAssetFolderId,
+      compSelectedAssetIndex,
+      totalDrawingFrames: drawingFrames.length,
+      framesForSelectedFolder: drawingFrames.filter(
+        (d) => (d as any).folderId === compSelectedAssetFolderId
+      ).length,
+    });
+
+    if (compSelectedAssetFolderId == null || compSelectedAssetIndex == null) {
+      console.log(
+        "[SELECTED ASSET KEY DEBUG] Missing selection state, returning null"
+      );
       return null;
+    }
+
     const df = drawingFrames.find(
       (d) =>
         (d as any).folderId === compSelectedAssetFolderId &&
         d.frameIndex === 0 &&
         parseInt(d.rowId.split("-")[1], 10) === compSelectedAssetIndex + 1
     );
-    if (!df) return null;
+
+    console.log("[SELECTED ASSET KEY DEBUG] Frame lookup result:", {
+      found: !!df,
+      searchCriteria: {
+        folderId: compSelectedAssetFolderId,
+        frameIndex: 0,
+        expectedRowNumber: compSelectedAssetIndex + 1,
+      },
+      foundFrame: df
+        ? {
+            folderId: (df as any).folderId,
+            frameIndex: df.frameIndex,
+            rowId: df.rowId,
+            assetId: df.assetId,
+            fileName: df.fileName,
+          }
+        : null,
+    });
+
+    if (!df) {
+      console.log(
+        "[SELECTED ASSET KEY DEBUG] No matching frame found for standard logic"
+      );
+
+      // FALLBACK: For child compositions, try to find frame by logical position instead of rowId
+      if (compositionHierarchy.parents[compSelectedAssetFolderId || ""]) {
+        console.log(
+          "[SELECTED ASSET KEY DEBUG] Trying fallback logic for nested composition"
+        );
+        const sortedFrames = drawingFrames
+          .filter((d: any) => (d as any).folderId === compSelectedAssetFolderId)
+          .sort((a: any, b: any) => {
+            const aRowNum = parseInt(a.rowId.split("-")[1] || "0", 10);
+            const bRowNum = parseInt(b.rowId.split("-")[1] || "0", 10);
+            return aRowNum - bRowNum;
+          });
+
+        // Group by asset identity, then take the asset at the requested index
+        const assetGroups = sortedFrames.reduce((groups, frame) => {
+          const key = frame.assetId || `${frame.folderId}-${frame.rowId}`;
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(frame);
+          return groups;
+        }, {} as Record<string, any[]>);
+
+        const assetKeys = Object.keys(assetGroups);
+        if (
+          compSelectedAssetIndex != null &&
+          compSelectedAssetIndex < assetKeys.length
+        ) {
+          const targetAssetKey = assetKeys[compSelectedAssetIndex];
+          const fallbackFrame = assetGroups[targetAssetKey][0]; // First frame of the asset
+          console.log("[SELECTED ASSET KEY DEBUG] Fallback frame found:", {
+            targetAssetKey,
+            fallbackFrame: {
+              assetId: fallbackFrame.assetId,
+              rowId: fallbackFrame.rowId,
+              fileName: fallbackFrame.fileName,
+            },
+          });
+
+          const identity =
+            fallbackFrame.isSequenceFrame && fallbackFrame.folderId
+              ? fallbackFrame.assetId
+                ? `${fallbackFrame.folderId}|${fallbackFrame.assetId}`
+                : fallbackFrame.folderId
+              : fallbackFrame.assetId
+              ? `${compSelectedAssetFolderId}|${fallbackFrame.assetId}`
+              : `${compSelectedAssetFolderId}|${
+                  fallbackFrame.fileName || fallbackFrame.imageUrl || ""
+                }`;
+
+          console.log("[SELECTED ASSET KEY DEBUG] Fallback identity:", {
+            identity,
+          });
+          return identity;
+        }
+      }
+
+      // SPECIAL CASE: Check if this is a nested composition asset selection
+      if (compSelectedAssetFolderId && compSelectedAssetIndex != null) {
+        // Get regular frames for this folder
+        const folderFrames = drawingFrames.filter(
+          (d: any) => (d as any).folderId === compSelectedAssetFolderId
+        );
+
+        // Check if the selected index is beyond regular frames (indicating nested composition)
+        const nestedCompositions =
+          compositionHierarchy.children[compSelectedAssetFolderId] || [];
+        if (
+          compSelectedAssetIndex >= folderFrames.length &&
+          nestedCompositions.length > 0
+        ) {
+          const nestedIndex = compSelectedAssetIndex - folderFrames.length;
+          if (nestedIndex < nestedCompositions.length) {
+            const childId = nestedCompositions[nestedIndex];
+            const nestedComp =
+              compositionHierarchy.nestedCompositions[
+                Object.keys(compositionHierarchy.nestedCompositions).find(
+                  (assetId) =>
+                    compositionHierarchy.nestedCompositions[assetId]
+                      .compositionId === childId
+                ) || ""
+              ];
+
+            if (nestedComp) {
+              const nestedCompIdentity = `${compSelectedAssetFolderId}|${nestedComp.assetId}`;
+              console.log(
+                "[SELECTED ASSET KEY DEBUG] Found nested composition asset:",
+                {
+                  identity: nestedCompIdentity,
+                  assetId: nestedComp.assetId,
+                  name: nestedComp.name,
+                  compositionId: childId,
+                }
+              );
+              return nestedCompIdentity;
+            }
+          }
+        }
+      }
+
+      console.log(
+        "[SELECTED ASSET KEY DEBUG] No fallback frame found either, returning null"
+      );
+      return null;
+    }
 
     // Use consistent identity calculation for all asset types
     const identity =
@@ -466,6 +940,15 @@ export function AnimationEditor({
         : df.assetId
         ? `${compSelectedAssetFolderId}|${df.assetId}`
         : `${compSelectedAssetFolderId}|${df.fileName || df.imageUrl || ""}`;
+
+    console.log("[SELECTED ASSET KEY DEBUG] Final identity:", {
+      identity,
+      isSequenceFrame: df.isSequenceFrame,
+      assetId: df.assetId,
+      fileName: df.fileName,
+      imageUrl: df.imageUrl,
+    });
+
     return identity;
   }, [compSelectedAssetFolderId, compSelectedAssetIndex, drawingFrames]);
 
@@ -487,10 +970,200 @@ export function AnimationEditor({
     // Get the current frame index (0-based) from selectedFrameNumber (1-based)
     const currentFrameIndex = selectedFrameNumber ? selectedFrameNumber - 1 : 0;
 
-    const assetsToDraw = drawingFrames
-      .filter((df) => {
-        if (df.folderId !== activeFolderId) return false;
+    // Get frames for this composition, handling nested compositions properly
+    const getFramesForComposition = (folderId: string): any[] => {
+      const directFrames = drawingFrames.filter(
+        (df: any) => df.folderId === folderId
+      );
 
+      // Check if this composition is nested (child composition)
+      // If it is, show only its own frames, not parent frames
+      const isNestedComposition = isCompositionNested(folderId);
+
+      console.log("[CANVAS RENDER DEBUG] Canvas composition check:", {
+        folderId,
+        isNestedComposition,
+        directFrames: directFrames.length,
+        hasNestedChildren:
+          (compositionHierarchy.children[folderId] || []).length > 0,
+      });
+
+      if (isNestedComposition) {
+        // For child compositions, show only their direct frames
+        console.log(
+          "[CANVAS RENDER] Child composition - showing only direct frames:",
+          {
+            childId: folderId,
+            directFrames: directFrames.length,
+          }
+        );
+
+        // For child compositions, restore original rowIds for proper isolation
+        // This ensures child compositions render with R1 F1:6 instead of parent display rowIds
+        const framesWithOriginalRowIds = directFrames.map((frame) => ({
+          ...frame,
+          // Use original rowId if it exists, otherwise keep current rowId
+          rowId: (frame as any).originalRowId || frame.rowId,
+        }));
+
+        console.log(
+          "[CANVAS RENDER] Restored original rowIds for child composition:",
+          {
+            frameCount: framesWithOriginalRowIds.length,
+            rowIds: framesWithOriginalRowIds.map((f) => f.rowId),
+          }
+        );
+
+        return framesWithOriginalRowIds;
+      }
+
+      // If this composition has nested compositions, include their frames too
+      const nestedCompositions = compositionHierarchy.children[folderId] || [];
+      if (nestedCompositions.length > 0) {
+        console.log(
+          "[CANVAS RENDER] Parent composition - including nested composition frames:",
+          {
+            parentId: folderId,
+            nestedCompositions,
+            directFrames: directFrames.length,
+          }
+        );
+
+        // Collect all nested frames - use the newly created nested composition frames, not original child frames
+        const allNestedFrames: any[] = [];
+        for (const childCompositionId of nestedCompositions) {
+          // Find nested composition frames that were created for this child composition
+          const nestedCompFrames = drawingFrames.filter(
+            (df: any) =>
+              df.folderId === folderId &&
+              df.isNestedCompositionFrame === true &&
+              df.sourceCompositionId === childCompositionId
+          );
+
+          console.log("[CANVAS RENDER] Collecting nested comp frames:", {
+            childCompositionId,
+            foundFrames: nestedCompFrames.length,
+            sampleFrame: nestedCompFrames[0]
+              ? {
+                  parentAssetId: (nestedCompFrames[0] as any).parentAssetId,
+                  folderId: nestedCompFrames[0].folderId,
+                  isNestedCompositionFrame: (nestedCompFrames[0] as any)
+                    .isNestedCompositionFrame,
+                  sourceCompositionId: (nestedCompFrames[0] as any)
+                    .sourceCompositionId,
+                }
+              : null,
+          });
+
+          allNestedFrames.push(...nestedCompFrames);
+        }
+
+        // Combine all frames and sort by rowId to respect user's reordering
+        // This ensures reordering works properly with nested compositions
+        const allFrames = [...allNestedFrames, ...directFrames];
+
+        console.log(
+          "[CANVAS RENDER] Combining frames for parent composition:",
+          {
+            directFrames: directFrames.length,
+            nestedFrames: allNestedFrames.length,
+            directRowIds: directFrames.map((f) => f.rowId),
+            nestedRowIds: allNestedFrames.map((f) => f.rowId),
+            totalFrames: allFrames.length,
+          }
+        );
+
+        // First, sort frames to get the correct visual order
+        const sortedFrames = allFrames.sort((a, b) => {
+          // Extract row number from rowId (e.g., "row-1", "row-2")
+          const aRowNum = parseInt(a.rowId.split("-")[1] || "0", 10);
+          const bRowNum = parseInt(b.rowId.split("-")[1] || "0", 10);
+
+          // If rowIds are the same, prioritize direct frames over nested frames
+          // This ensures direct frames appear in front when reordered
+          if (aRowNum === bRowNum) {
+            const aIsDirect = a.folderId === folderId;
+            const bIsDirect = b.folderId === folderId;
+
+            if (aIsDirect && !bIsDirect) return -1; // a (direct) comes before b (nested)
+            if (!aIsDirect && bIsDirect) return 1; // b (direct) comes before a (nested)
+            return 0; // Same type, maintain relative order
+          }
+
+          return aRowNum - bRowNum;
+        });
+
+        // Group frames by asset/composition and assign virtual display rowIds
+        // This ensures consistent rendering order with timeline display
+        const frameGroups: { [key: string]: any[] } = {};
+        sortedFrames.forEach((frame) => {
+          let groupKey: string;
+          if (frame.folderId === folderId) {
+            // Direct frames: group by assetId
+            groupKey = `direct-${frame.assetId}`;
+          } else {
+            // Nested frames: group by parent asset ID to distinguish duplicated compositions
+            const parentAssetId = frame.parentAssetId || frame.folderId;
+            groupKey = `nested-${frame.folderId}-${parentAssetId}`;
+
+            console.log("[CANVAS GROUPING DEBUG] Nested frame grouping:", {
+              frameId: `${frame.folderId}|${frame.assetId}`,
+              parentAssetId: frame.parentAssetId,
+              folderId: frame.folderId,
+              assetId: frame.assetId,
+              groupKey,
+              fileName: frame.fileName,
+            });
+          }
+
+          if (!frameGroups[groupKey]) {
+            frameGroups[groupKey] = [];
+          }
+          frameGroups[groupKey].push(frame);
+        });
+
+        // Assign virtual display rowIds for parent composition view
+        let displayRowCounter = 1;
+        const framesWithDisplayRowIds = Object.values(frameGroups).flatMap(
+          (group) => {
+            const displayRowId = `row-${displayRowCounter}`;
+            displayRowCounter++;
+
+            return group.map((frame) => ({
+              ...frame,
+              // Store both original rowId (for child composition isolation)
+              // and display rowId (for parent composition display)
+              originalRowId: frame.rowId,
+              displayRowId: displayRowId,
+              // Use displayRowId for parent composition canvas
+              rowId: displayRowId,
+            }));
+          }
+        );
+
+        console.log("[CANVAS RENDER] Assigned display rowIds:", {
+          totalGroups: Object.keys(frameGroups).length,
+          frameGroupKeys: Object.keys(frameGroups),
+          framesWithDisplayRowIds: framesWithDisplayRowIds.length,
+        });
+
+        console.log("[CANVAS GROUPING DEBUG] Final frame groups:", {
+          groupKeys: Object.keys(frameGroups),
+          groupSizes: Object.keys(frameGroups).map((key) => ({
+            key,
+            count: frameGroups[key].length,
+            firstFrame: frameGroups[key][0]?.fileName || "unknown",
+          })),
+        });
+
+        return framesWithDisplayRowIds;
+      }
+
+      return directFrames;
+    };
+
+    const assetsToDraw = getFramesForComposition(activeFolderId)
+      .filter((df) => {
         // Get the effective start frame
         const startFrame = df.startFrame ?? df.frameIndex;
 
@@ -589,6 +1262,8 @@ export function AnimationEditor({
             folderId: cell.folderId,
             activeFolderId,
             finalIdentity: identity,
+            imageUrl: cell.imageUrl,
+            cellData: cell,
           });
 
           const persisted = boundsByAsset[identity];
@@ -635,39 +1310,41 @@ export function AnimationEditor({
 
           // Get transform settings for this asset
           const transform = assetTransforms[identity];
-          const opacity = transform?.opacity !== undefined ? transform.opacity / 100 : 1;
+          const opacity =
+            transform?.opacity !== undefined ? transform.opacity / 100 : 1;
 
           // Sync transform values with current bounds and rotation
           if (transform) {
             const currentBounds = boundsByAsset[identity];
             const currentRotation = rotationByAsset[key] ?? 0;
-            
+
             // Update transform if values have changed
-            if (currentBounds && (
-              Math.abs(transform.position.x - currentBounds.x) > 1 ||
-              Math.abs(transform.position.y - currentBounds.y) > 1 ||
-              Math.abs(transform.rotation - currentRotation) > 1
-            )) {
-              setAssetTransforms(prev => ({
+            if (
+              currentBounds &&
+              (Math.abs(transform.position.x - currentBounds.x) > 1 ||
+                Math.abs(transform.position.y - currentBounds.y) > 1 ||
+                Math.abs(transform.rotation - currentRotation) > 1)
+            ) {
+              setAssetTransforms((prev) => ({
                 ...prev,
                 [identity]: {
                   ...transform,
                   position: { x: currentBounds.x, y: currentBounds.y },
                   rotation: currentRotation,
                   scale: transform.scale || 1,
-                }
+                },
               }));
             }
           } else {
             // Initialize transform if it doesn't exist
-            setAssetTransforms(prev => ({
+            setAssetTransforms((prev) => ({
               ...prev,
               [identity]: {
                 opacity: 100,
                 position: { x, y },
                 rotation: deg,
                 scale: 1,
-              }
+              },
             }));
           }
 
@@ -711,6 +1388,8 @@ export function AnimationEditor({
     rotationByAsset,
     boundsByAsset,
     assetEffects,
+    assetTransforms,
+    compositionHierarchy,
   ]);
 
   // In compositing mode we allow creating folders without timeline cells.
@@ -1796,9 +2475,12 @@ export function AnimationEditor({
         .map((df: any) => df.folderId)
         .filter((id: any) => typeof id === "string") as string[]
     );
+    // Also include folders that have composition settings, even if empty
+    const withSettings = new Set(Object.keys(compositionByFolder || {}));
     const all = new Set<string>([
       ...compositeFolderIds,
       ...Array.from(realized),
+      ...Array.from(withSettings),
     ]);
     const result = Array.from(all).sort((a, b) => {
       const ai = parseInt(a.split("-")[2] || "0", 10);
@@ -1806,7 +2488,7 @@ export function AnimationEditor({
       return ai - bi;
     });
     return result;
-  }, [mode, compositeFolderIds, drawingFrames]);
+  }, [mode, compositeFolderIds, drawingFrames, compositionByFolder]);
 
   useEffect(() => {
     if (mode !== "composite") return;
@@ -1981,6 +2663,65 @@ export function AnimationEditor({
     saveToUndoStack: saveToUndoStackFromHook,
   });
 
+  // Delete handler for selected assets and nested compositions
+  const handleDeleteSelected = () => {
+    if (mode !== "composite") return;
+
+    if (compSelectedAssetFolderId && compSelectedAssetIndex != null) {
+      // Get regular frames for this folder
+      const folderFrames = drawingFrames.filter(
+        (d: any) => (d as any).folderId === compSelectedAssetFolderId
+      );
+
+      // Check if the selected index is a nested composition
+      const nestedCompositions =
+        compositionHierarchy.children[compSelectedAssetFolderId] || [];
+      if (
+        compSelectedAssetIndex >= folderFrames.length &&
+        nestedCompositions.length > 0
+      ) {
+        // Deleting a nested composition
+        const nestedIndex = compSelectedAssetIndex - folderFrames.length;
+        if (nestedIndex < nestedCompositions.length) {
+          const childId = nestedCompositions[nestedIndex];
+          const nestedComp =
+            compositionHierarchy.nestedCompositions[
+              Object.keys(compositionHierarchy.nestedCompositions).find(
+                (assetId) =>
+                  compositionHierarchy.nestedCompositions[assetId]
+                    .compositionId === childId
+              ) || ""
+            ];
+
+          if (nestedComp && removeNestedComposition) {
+            console.log("[DELETE] Removing nested composition:", {
+              parentId: compSelectedAssetFolderId,
+              childId: childId,
+              assetId: nestedComp.assetId,
+            });
+            removeNestedComposition(
+              compSelectedAssetFolderId,
+              childId,
+              nestedComp.assetId
+            );
+
+            // Clear selection
+            setCompSelectedAssetFolderId(null);
+            setCompSelectedAssetIndex(null);
+          }
+        }
+      } else if (compSelectedAssetIndex < folderFrames.length) {
+        // Deleting a regular asset - delegate to LayersPanel
+        if (layersPanelRef.current?.handleDeleteSelectedAsset) {
+          console.log(
+            "[DELETE] Delegating regular asset deletion to LayersPanel"
+          );
+          layersPanelRef.current.handleDeleteSelectedAsset();
+        }
+      }
+    }
+  };
+
   // Now that handlers exist, install keyboard shortcuts
   useKeyboardShortcuts({
     onUndo: undo,
@@ -1992,6 +2733,7 @@ export function AnimationEditor({
     onEnter: () => {
       if (isResizing) handleConfirmResize();
     },
+    onDelete: handleDeleteSelected,
   });
 
   const {
@@ -2562,7 +3304,144 @@ export function AnimationEditor({
                         ref={compCanvasRef as any}
                         width={comp.width}
                         height={comp.height}
-                        className="bg-white shadow-md"
+                        className="bg-white shadow-md cursor-pointer"
+                        onClick={(e) => {
+                          // Handle canvas click for asset selection
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const x = e.clientX - rect.left;
+                          const y = e.clientY - rect.top;
+
+                          // Get all frames for this composition and sort by rowId (back to front)
+                          const activeFolderId = selectedLayerId;
+                          if (!activeFolderId) return;
+
+                          const allFrames = (() => {
+                            const directFrames = drawingFrames.filter(
+                              (df: any) => df.folderId === activeFolderId
+                            );
+                            const nestedCompositions =
+                              compositionHierarchy.children[activeFolderId] ||
+                              [];
+
+                            if (nestedCompositions.length > 0) {
+                              const allNestedFrames: any[] = [];
+                              for (const childId of nestedCompositions) {
+                                const childFrames = drawingFrames.filter(
+                                  (df: any) => df.folderId === childId
+                                );
+                                allNestedFrames.push(...childFrames);
+                              }
+                              const combined = [
+                                ...allNestedFrames,
+                                ...directFrames,
+                              ];
+                              return combined.sort((a, b) => {
+                                const aRowNum = parseInt(
+                                  a.rowId.split("-")[1] || "0",
+                                  10
+                                );
+                                const bRowNum = parseInt(
+                                  b.rowId.split("-")[1] || "0",
+                                  10
+                                );
+                                return aRowNum - bRowNum;
+                              });
+                            }
+
+                            return directFrames;
+                          })();
+
+                          // Group frames by asset (each sequence or single image is one "asset")
+                          const frameGroups = allFrames.reduce(
+                            (groups, frame) => {
+                              const key = `${frame.folderId}-${frame.rowId}`;
+                              if (!groups[key]) groups[key] = frame; // Store first frame of each group
+                              return groups;
+                            },
+                            {} as Record<string, any>
+                          );
+
+                          const groupKeys = Object.keys(frameGroups)
+                            .sort()
+                            .reverse(); // Front to back for hit testing
+
+                          // Test click against each frame (from front to back)
+                          for (let i = 0; i < groupKeys.length; i++) {
+                            const frame = frameGroups[groupKeys[i]];
+                            if (frame?.imageUrl) {
+                              // Check if click is within this image's bounds
+                              // For now, use a simple image bounds check
+                              // In a more sophisticated implementation, you might use pixel-perfect collision detection
+                              const img = new Image();
+                              img.onload = () => {
+                                const imgWidth = img.naturalWidth;
+                                const imgHeight = img.naturalHeight;
+
+                                // Simple bounds check (assumes image is centered)
+                                const centerX = comp.width / 2;
+                                const centerY = comp.height / 2;
+                                const halfWidth = imgWidth / 2;
+                                const halfHeight = imgHeight / 2;
+
+                                if (
+                                  x >= centerX - halfWidth &&
+                                  x <= centerX + halfWidth &&
+                                  y >= centerY - halfHeight &&
+                                  y <= centerY + halfHeight
+                                ) {
+                                  // Found the clicked asset - calculate its index in UI order (sorted, not reversed)
+                                  const sortedGroupKeys =
+                                    Object.keys(frameGroups).sort();
+                                  const assetIndex = sortedGroupKeys.indexOf(
+                                    groupKeys[i]
+                                  );
+
+                                  console.log(
+                                    "[CANVAS CLICK] Asset selected:",
+                                    {
+                                      frame: {
+                                        folderId: frame.folderId,
+                                        rowId: frame.rowId,
+                                      },
+                                      clickPos: { x, y },
+                                      imageBounds: {
+                                        centerX,
+                                        centerY,
+                                        width: imgWidth,
+                                        height: imgHeight,
+                                      },
+                                      assetIndex,
+                                      clickedGroupKey: groupKeys[i],
+                                      sortedGroupKeys,
+                                    }
+                                  );
+
+                                  // Trigger the same selection logic as clicking in the LayersPanel
+                                  setTimeout(() => {
+                                    console.log(
+                                      "[CANVAS CLICK] Triggering asset selection:",
+                                      {
+                                        folderId: activeFolderId,
+                                        index: assetIndex,
+                                      }
+                                    );
+                                    setCompSelectedAssetFolderId(
+                                      activeFolderId
+                                    );
+                                    setCompSelectedAssetIndex(assetIndex);
+                                  }, 10);
+                                  return;
+                                }
+                              };
+                              img.src = frame.imageUrl;
+                            }
+                          }
+
+                          console.log(
+                            "[CANVAS CLICK] No asset found at click position:",
+                            { x, y }
+                          );
+                        }}
                       />
                       {/* (HUD moved to workspace-level container above) */}
                       {/* We only draw the selection outline above the canvas; the images themselves are rendered on the canvas to avoid duplication/upscaling. */}
@@ -2882,10 +3761,232 @@ export function AnimationEditor({
                       // Use selectedLayerId directly as the active folder ID
                       const activeFolderId = selectedLayerId;
                       if (!activeFolderId) return [] as any[];
-                      // Render all frames for the active composition, scoped by folderId
-                      return drawingFrames.filter(
+
+                      // Get frames for this composition, including nested compositions
+                      const directFrames = drawingFrames.filter(
                         (df) => df.folderId === activeFolderId
                       );
+
+                      // Check if this composition is nested (child composition)
+                      // If it is, show only its own frames, not parent frames
+                      const isNestedComposition =
+                        isCompositionNested(activeFolderId);
+
+                      console.log(
+                        "[TIMELINE RENDER DEBUG] Timeline composition check:",
+                        {
+                          activeFolderId,
+                          isNestedComposition,
+                          directFrames: directFrames.length,
+                          hasNestedChildren:
+                            (
+                              compositionHierarchy.children[activeFolderId] ||
+                              []
+                            ).length > 0,
+                        }
+                      );
+
+                      if (isNestedComposition) {
+                        // For child compositions, show only their direct frames
+                        console.log(
+                          "[TIMELINE RENDER] Child composition - showing only direct frames:",
+                          {
+                            childId: activeFolderId,
+                            directFrames: directFrames.length,
+                          }
+                        );
+
+                        // For child compositions, restore original rowIds for proper isolation
+                        // This ensures child compositions show R1 F1:6 instead of parent display rowIds
+                        const framesWithOriginalRowIds = directFrames.map(
+                          (frame) => ({
+                            ...frame,
+                            // Use original rowId if it exists, otherwise keep current rowId
+                            rowId: (frame as any).originalRowId || frame.rowId,
+                          })
+                        );
+
+                        console.log(
+                          "[TIMELINE RENDER] Restored original rowIds for child composition:",
+                          {
+                            frameCount: framesWithOriginalRowIds.length,
+                            rowIds: framesWithOriginalRowIds.map(
+                              (f) => f.rowId
+                            ),
+                          }
+                        );
+
+                        return framesWithOriginalRowIds;
+                      }
+
+                      // If this composition has nested compositions, include their frames too
+                      const nestedCompositions =
+                        compositionHierarchy.children[activeFolderId] || [];
+                      if (nestedCompositions.length > 0) {
+                        console.log(
+                          "[TIMELINE RENDER] Parent composition - including nested composition frames:",
+                          {
+                            parentId: activeFolderId,
+                            nestedCompositions,
+                            directFrames: directFrames.length,
+                          }
+                        );
+
+                        // Collect all nested frames - use the newly created nested composition frames, not original child frames
+                        const allNestedFrames: any[] = [];
+                        for (const childCompositionId of nestedCompositions) {
+                          // Find nested composition frames that were created for this child composition
+                          const nestedCompFrames = drawingFrames.filter(
+                            (df: any) =>
+                              df.folderId === activeFolderId &&
+                              df.isNestedCompositionFrame === true &&
+                              df.sourceCompositionId === childCompositionId
+                          );
+
+                          console.log(
+                            "[TIMELINE RENDER] Collecting nested comp frames:",
+                            {
+                              childCompositionId,
+                              foundFrames: nestedCompFrames.length,
+                              sampleFrame: nestedCompFrames[0]
+                                ? {
+                                    parentAssetId: (nestedCompFrames[0] as any)
+                                      .parentAssetId,
+                                    folderId: nestedCompFrames[0].folderId,
+                                    isNestedCompositionFrame: (
+                                      nestedCompFrames[0] as any
+                                    ).isNestedCompositionFrame,
+                                    sourceCompositionId: (
+                                      nestedCompFrames[0] as any
+                                    ).sourceCompositionId,
+                                  }
+                                : null,
+                            }
+                          );
+
+                          allNestedFrames.push(...nestedCompFrames);
+                        }
+
+                        // Combine all frames and sort by rowId to respect user's reordering
+                        // This maintains consistent ordering with canvas rendering
+                        const allFrames = [...allNestedFrames, ...directFrames];
+
+                        console.log(
+                          "[TIMELINE RENDER] Combining frames for parent composition:",
+                          {
+                            directFrames: directFrames.length,
+                            nestedFrames: allNestedFrames.length,
+                            directRowIds: directFrames.map((f) => f.rowId),
+                            nestedRowIds: allNestedFrames.map((f) => f.rowId),
+                            totalFrames: allFrames.length,
+                          }
+                        );
+
+                        // First, sort frames to get the correct visual order
+                        const sortedFrames = allFrames.sort((a, b) => {
+                          // Extract row number from rowId (e.g., "row-1", "row-2")
+                          const aRowNum = parseInt(
+                            a.rowId.split("-")[1] || "0",
+                            10
+                          );
+                          const bRowNum = parseInt(
+                            b.rowId.split("-")[1] || "0",
+                            10
+                          );
+
+                          // If rowIds are the same, prioritize direct frames over nested frames
+                          // This ensures direct frames appear in front when reordered
+                          if (aRowNum === bRowNum) {
+                            const aIsDirect = a.folderId === activeFolderId;
+                            const bIsDirect = b.folderId === activeFolderId;
+
+                            if (aIsDirect && !bIsDirect) return -1; // a (direct) comes before b (nested)
+                            if (!aIsDirect && bIsDirect) return 1; // b (direct) comes before a (nested)
+                            return 0; // Same type, maintain relative order
+                          }
+
+                          return aRowNum - bRowNum;
+                        });
+
+                        // Group frames by asset/composition and assign virtual display rowIds
+                        // This ensures proper timeline display while preserving original rowIds
+                        const frameGroups: { [key: string]: any[] } = {};
+                        sortedFrames.forEach((frame) => {
+                          let groupKey: string;
+                          if (frame.folderId === activeFolderId) {
+                            // Direct frames: group by assetId
+                            groupKey = `direct-${frame.assetId}`;
+                          } else {
+                            // Nested frames: group by parent asset ID to distinguish duplicated compositions
+                            const parentAssetId =
+                              frame.parentAssetId || frame.folderId;
+                            groupKey = `nested-${frame.folderId}-${parentAssetId}`;
+
+                            console.log(
+                              "[TIMELINE GROUPING DEBUG] Nested frame grouping:",
+                              {
+                                frameId: `${frame.folderId}|${frame.assetId}`,
+                                parentAssetId: frame.parentAssetId,
+                                folderId: frame.folderId,
+                                assetId: frame.assetId,
+                                groupKey,
+                                fileName: frame.fileName,
+                              }
+                            );
+                          }
+
+                          if (!frameGroups[groupKey]) {
+                            frameGroups[groupKey] = [];
+                          }
+                          frameGroups[groupKey].push(frame);
+                        });
+
+                        // Assign virtual display rowIds for parent composition view
+                        let displayRowCounter = 1;
+                        const framesWithDisplayRowIds = Object.values(
+                          frameGroups
+                        ).flatMap((group) => {
+                          const displayRowId = `row-${displayRowCounter}`;
+                          displayRowCounter++;
+
+                          return group.map((frame) => ({
+                            ...frame,
+                            // Store both original rowId (for child composition isolation)
+                            // and display rowId (for parent composition display)
+                            originalRowId: frame.rowId,
+                            displayRowId: displayRowId,
+                            // Use displayRowId for parent composition timeline
+                            rowId: displayRowId,
+                          }));
+                        });
+
+                        console.log(
+                          "[TIMELINE RENDER] Assigned display rowIds:",
+                          {
+                            totalGroups: Object.keys(frameGroups).length,
+                            frameGroupKeys: Object.keys(frameGroups),
+                            framesWithDisplayRowIds:
+                              framesWithDisplayRowIds.length,
+                          }
+                        );
+
+                        console.log(
+                          "[TIMELINE GROUPING DEBUG] Final frame groups:",
+                          {
+                            groupKeys: Object.keys(frameGroups),
+                            groupSizes: Object.keys(frameGroups).map((key) => ({
+                              key,
+                              count: frameGroups[key].length,
+                              firstFrame:
+                                frameGroups[key][0]?.fileName || "unknown",
+                            })),
+                          }
+                        );
+
+                        return framesWithDisplayRowIds;
+                      }
+
+                      return directFrames;
                     })()
                   : drawingFrames) as any
               }
@@ -2964,6 +4065,13 @@ export function AnimationEditor({
               onAddRow={handleAddRow}
               hideEditButtons={mode === "composite"}
               suppressFrames={false}
+              // Composition hierarchy props for timeline isolation
+              isChildComposition={
+                mode === "composite" && selectedLayerId
+                  ? isCompositionNested(selectedLayerId)
+                  : false
+              }
+              compositionHierarchy={compositionHierarchy}
             />
           )}
         </div>
@@ -3008,38 +4116,138 @@ export function AnimationEditor({
           selectedAssetFolderId={compSelectedAssetFolderId || undefined}
           selectedAssetIndex={compSelectedAssetIndex ?? undefined}
           onReorderCompAssets={(folderId, from, to) => {
+            console.log("[REORDER] Starting asset reorder:", {
+              folderId,
+              from,
+              to,
+            });
+
             // Reorder z-index for compositing by reordering the drawingFrames entries for this folder
             setDrawingFrames((prev) => {
-              // Group frames by asset/row - for sequences, we need to move all frames together
-              const assetFrameGroups = prev
-                .filter((df) => df.folderId === folderId)
-                .reduce((acc, df) => {
-                  const rowKey = df.rowId;
-                  if (!acc[rowKey]) acc[rowKey] = [];
-                  acc[rowKey].push(df);
-                  return acc;
-                }, {} as Record<string, typeof prev>);
+              // For parent compositions with nested content, we need to handle both direct frames and nested frames
+              const allFolderFrames = prev.filter(
+                (df) => df.folderId === folderId
+              );
+              const nestedFrames: any[] = [];
 
-              const otherFrames = prev.filter((df) => df.folderId !== folderId);
+              // Also include frames from nested compositions
+              const nestedCompositions =
+                compositionHierarchy.children[folderId] || [];
+              for (const childId of nestedCompositions) {
+                const childFrames = prev.filter(
+                  (df) => df.folderId === childId
+                );
+                nestedFrames.push(...childFrames);
+              }
+
+              const allRelevantFrames = [...nestedFrames, ...allFolderFrames];
+
+              console.log("[REORDER] Frame analysis:", {
+                folderId,
+                totalFrames: allRelevantFrames.length,
+                directFrames: allFolderFrames.length,
+                nestedFrames: nestedFrames.length,
+                nestedCompositions,
+              });
+
+              // Group frames by asset/row - for sequences, we need to move all frames together
+              const assetFrameGroups = allRelevantFrames.reduce((acc, df) => {
+                const rowKey = df.rowId;
+                if (!acc[rowKey]) acc[rowKey] = [];
+                acc[rowKey].push(df);
+                return acc;
+              }, {} as Record<string, typeof prev>);
+
+              const otherFrames = prev.filter(
+                (df) =>
+                  df.folderId !== folderId &&
+                  !nestedCompositions.includes(df.folderId || "")
+              );
+
               const groupKeys = Object.keys(assetFrameGroups).sort();
 
-              if (groupKeys.length <= 1) return prev;
+              console.log("[REORDER] Asset groups:", {
+                groupKeys,
+                groupCount: groupKeys.length,
+                groups: Object.entries(assetFrameGroups).map(
+                  ([key, frames]) => {
+                    const typedFrames = frames as any[];
+                    return {
+                      key,
+                      frameCount: typedFrames.length,
+                      firstFrame: {
+                        folderId: typedFrames[0]?.folderId,
+                        rowId: typedFrames[0]?.rowId,
+                      },
+                    };
+                  }
+                ),
+              });
+
+              if (groupKeys.length <= 1) {
+                console.log("[REORDER] Not enough groups to reorder");
+                return prev;
+              }
 
               // Reorder the asset groups
               const [movedGroup] = groupKeys.splice(from, 1);
               groupKeys.splice(to, 0, movedGroup);
 
+              console.log("[REORDER] After reordering:", {
+                movedGroup,
+                newOrder: groupKeys,
+                from,
+                to,
+              });
+
               // Reassign rowIds and flatten back to individual frames
+              // CRITICAL: Only reassign rowIds for frames belonging to the active folder
+              // This preserves nested composition isolation
               const reorderedFrames = groupKeys.flatMap((groupKey, idx) => {
                 const newRowId = `row-${idx + 1}`;
-                return assetFrameGroups[groupKey].map((df) => ({
-                  ...df,
-                  rowId: newRowId,
-                }));
+                const frames = assetFrameGroups[groupKey];
+                console.log("[REORDER] Reassigning rowId:", {
+                  oldRowId: groupKey,
+                  newRowId,
+                  frameCount: frames.length,
+                  folderId: frames[0]?.folderId,
+                  isActiveFolder: frames[0]?.folderId === folderId,
+                });
+                return frames.map((df: any) => {
+                  const shouldChangeRowId = df.folderId === folderId;
+                  const resultRowId = shouldChangeRowId ? newRowId : df.rowId;
+
+                  console.log("[REORDER] Frame rowId decision:", {
+                    frameId: `${df.folderId}-${df.assetId}`,
+                    originalRowId: df.rowId,
+                    frameFolderId: df.folderId,
+                    activeFolderId: folderId,
+                    shouldChange: shouldChangeRowId,
+                    resultRowId,
+                  });
+
+                  return {
+                    ...df,
+                    rowId: resultRowId,
+                  };
+                });
+              });
+
+              console.log("[REORDER] Final result:", {
+                totalFrames: [...otherFrames, ...reorderedFrames].length,
+                reorderedFrameCount: reorderedFrames.length,
+                otherFrameCount: otherFrames.length,
               });
 
               return [...otherFrames, ...reorderedFrames];
             });
+
+            // Force canvas redraw after reordering
+            setTimeout(() => {
+              console.log("[REORDER] Forcing canvas redraw after reorder");
+              drawFrame();
+            }, 10);
+
             // Update selected index if it was moved
             setCompSelectedAssetIndex((cur) => {
               if (cur == null) return cur;
@@ -3085,6 +4293,28 @@ export function AnimationEditor({
             // For compositing, each new asset should occupy the next row at F1 (R1 F1, R2 F1, ...)
             const parts = folderId.split("-");
             const frameIndex = parseInt(parts[2], 10);
+
+            // Create a unique key for this import operation to prevent duplicates
+            const importKey = `${folderId}-${assets
+              .map((a) => a.id || a.name)
+              .join("-")}-${Date.now()}`;
+
+            // Use a module-level Set to track recent imports and prevent duplicates
+            const dedupKey = importKey.substring(0, importKey.lastIndexOf("-"));
+            if (recentImports.has(dedupKey)) {
+              console.log("[IMPORT DEBUG] Skipping duplicate import:", {
+                importKey,
+                folderId,
+              });
+              return;
+            }
+            recentImports.add(dedupKey);
+
+            // Clean up old import keys after a short delay
+            setTimeout(() => {
+              recentImports.delete(dedupKey);
+            }, 1000);
+
             setTimeout(
               () =>
                 setDrawingFrames((prev) => {
@@ -3095,14 +4325,143 @@ export function AnimationEditor({
                       .map((df) => df.rowId)
                   );
 
+                  // For parent compositions with nested compositions, we need to account for
+                  // rows used by nested compositions to avoid row conflicts
+                  let allVisibleRows = existingRowsForFolder;
+                  const nestedCompositions =
+                    compositionHierarchy.children[folderId] || [];
+                  if (nestedCompositions.length > 0) {
+                    // Include rows from nested compositions to avoid conflicts
+                    const nestedRows = new Set(
+                      prev
+                        .filter(
+                          (df) =>
+                            df.folderId &&
+                            nestedCompositions.includes(df.folderId)
+                        )
+                        .map((df) => df.rowId)
+                    );
+                    allVisibleRows = new Set([
+                      ...existingRowsForFolder,
+                      ...nestedRows,
+                    ]);
+                  }
+
+                  console.log("[IMPORT DEBUG] Import starting:", {
+                    folderId,
+                    totalFramesBefore: prev.length,
+                    existingRowsForFolder: Array.from(existingRowsForFolder),
+                    existingRowsSize: existingRowsForFolder.size,
+                    allVisibleRows: Array.from(allVisibleRows),
+                    allVisibleRowsSize: allVisibleRows.size,
+                    hasNestedCompositions: nestedCompositions.length > 0,
+                    nestedCompositions,
+                    assetsToImport: assets.length,
+                    dedupKey,
+                  });
+
                   const allNewFrames = [];
-                  let currentRowNumber = existingRowsForFolder.size + 1; // Start from next available row
+                  let currentRowNumber = allVisibleRows.size + 1; // Start from next available row considering all visible rows
 
                   // Process each asset
                   for (const asset of assets) {
                     const rowId = `row-${currentRowNumber}`;
 
-                    if (asset.isSequence && asset.sequenceFrames) {
+                    console.log("[IMPORT DEBUG] Processing asset:", {
+                      assetName: asset.name,
+                      assetId: asset.id,
+                      isSequence: asset.isSequence,
+                      sequenceFrameCount: asset.sequenceFrames?.length,
+                      isNestedComposition:
+                        (asset as any).type === "nested-composition",
+                      assignedRowId: rowId,
+                      currentRowNumber,
+                    });
+
+                    // Handle nested composition assets
+                    if ((asset as any).type === "nested-composition") {
+                      const compositionId = (asset as any).compositionId;
+                      console.log(
+                        "[NESTED COMP RENDER] Processing nested composition:",
+                        {
+                          assetName: asset.name,
+                          compositionId,
+                          parentFolder: folderId,
+                        }
+                      );
+
+                      // Get all frames from the child composition
+                      const childFrames = prev.filter(
+                        (df: any) => df.folderId === compositionId
+                      );
+
+                      if (childFrames.length > 0) {
+                        // Create frames that represent the nested composition content
+                        for (const childFrame of childFrames) {
+                          console.log(
+                            "[NESTED COMP FRAME CREATION] Creating frame with parentAssetId:",
+                            {
+                              assetName: asset.name,
+                              assetId: asset.id,
+                              parentAssetId: asset.id,
+                              childFrameId: `${childFrame.folderId}|${childFrame.assetId}`,
+                              fileName: `${asset.name} > ${childFrame.fileName}`,
+                            }
+                          );
+
+                          allNewFrames.push({
+                            rowId,
+                            frameIndex: childFrame.frameIndex,
+                            length: childFrame.length,
+                            imageUrl: childFrame.imageUrl,
+                            fileName: `${asset.name} > ${childFrame.fileName}`,
+                            folderId,
+                            assetId: asset.id, // Use the nested composition asset ID
+                            parentAssetId: asset.id, // Add parent asset ID for unique grouping
+                            isNestedCompositionFrame: true,
+                            sourceCompositionId: compositionId,
+                            sourceFrameId: `${childFrame.folderId}|${childFrame.assetId}|${childFrame.frameIndex}`,
+                          });
+                        }
+                        console.log(
+                          "[NESTED COMP RENDER] Created frames for nested composition:",
+                          {
+                            compositionId,
+                            childFrameCount: childFrames.length,
+                            newFrameCount: childFrames.length,
+                          }
+                        );
+                      } else {
+                        console.log(
+                          "[NESTED COMP RENDER] No frames found in child composition:",
+                          compositionId
+                        );
+
+                        console.log(
+                          "[NESTED COMP FRAME CREATION] Creating placeholder frame with parentAssetId:",
+                          {
+                            assetName: asset.name,
+                            assetId: asset.id,
+                            parentAssetId: asset.id,
+                            fileName: `${asset.name} (Empty)`,
+                          }
+                        );
+
+                        // Create a placeholder frame
+                        allNewFrames.push({
+                          rowId,
+                          frameIndex: 0,
+                          length: 1,
+                          imageUrl: "", // No image for empty composition
+                          fileName: `${asset.name} (Empty)`,
+                          folderId,
+                          assetId: asset.id,
+                          parentAssetId: asset.id, // Add parent asset ID for unique grouping
+                          isNestedCompositionFrame: true,
+                          sourceCompositionId: compositionId,
+                        });
+                      }
+                    } else if (asset.isSequence && asset.sequenceFrames) {
                       // For sequence assets, create a frame for each sequence frame
                       for (let i = 0; i < asset.sequenceFrames.length; i++) {
                         const seqFrame = asset.sequenceFrames[i];
@@ -3166,6 +4525,14 @@ export function AnimationEditor({
 
                   const after = prev.concat(allNewFrames);
 
+                  console.log("[IMPORT DEBUG] Import completed:", {
+                    newFramesCreated: allNewFrames.length,
+                    newFrameRowIds: [
+                      ...new Set(allNewFrames.map((f) => f.rowId)),
+                    ],
+                    totalFramesAfter: after.length,
+                  });
+
                   return after;
                 }),
               0
@@ -3205,45 +4572,219 @@ export function AnimationEditor({
             // Select asset within comp and compute its natural bounds
             const comp = compositionByFolder[folderId];
             if (!comp) return;
-            const df = drawingFrames.find(
-              (d) =>
-                d.folderId === folderId &&
-                d.frameIndex === 0 &&
-                parseInt(d.rowId.split("-")[1], 10) === index + 1
-            );
-            if (!df?.imageUrl) return;
-            const img = new Image();
-            img.onload = () => {
-              // Set bounds from the selected image's natural size centered
-              setCompSelectedAssetFolderId(folderId);
-              setCompSelectedAssetIndex(index);
-              // do not reset rotation here; keep rotation keyed to asset identity
-              const w = img.naturalWidth || comp.width;
-              const h = img.naturalHeight || comp.height;
+
+            // Get all frames for this composition (including nested ones) and sort by rowId
+            const allFrames = (() => {
+              const directFrames = drawingFrames.filter(
+                (df: any) => df.folderId === folderId
+              );
+              const nestedCompositions =
+                compositionHierarchy.children[folderId] || [];
+
+              if (nestedCompositions.length > 0) {
+                const allNestedFrames: any[] = [];
+                for (const childId of nestedCompositions) {
+                  const childFrames = drawingFrames.filter(
+                    (df: any) => df.folderId === childId
+                  );
+                  allNestedFrames.push(...childFrames);
+                }
+                const combined = [...allNestedFrames, ...directFrames];
+                return combined.sort((a, b) => {
+                  const aRowNum = parseInt(a.rowId.split("-")[1] || "0", 10);
+                  const bRowNum = parseInt(b.rowId.split("-")[1] || "0", 10);
+                  return aRowNum - bRowNum;
+                });
+              }
+
+              return directFrames;
+            })();
+
+            // Group frames by asset (each sequence or single image is one "asset")
+            const frameGroups = allFrames.reduce((groups, frame) => {
+              const key = `${frame.folderId}-${frame.rowId}`;
+              if (!groups[key]) {
+                groups[key] = frame; // Store the first frame of each group (represents the asset)
+              }
+              return groups;
+            }, {} as Record<string, any>);
+
+            // Also include nested composition assets as virtual assets
+            const nestedCompositions =
+              compositionHierarchy.children[folderId] || [];
+            const virtualAssets: any[] = [];
+            for (const childId of nestedCompositions) {
+              const nestedComp =
+                compositionHierarchy.nestedCompositions[
+                  Object.keys(compositionHierarchy.nestedCompositions).find(
+                    (assetId) =>
+                      compositionHierarchy.nestedCompositions[assetId]
+                        .compositionId === childId
+                  ) || ""
+                ];
+              if (nestedComp) {
+                // Create a virtual frame for the nested composition
+                virtualAssets.push({
+                  assetId: nestedComp.assetId,
+                  folderId: folderId,
+                  rowId: `row-${
+                    Object.keys(frameGroups).length + virtualAssets.length + 1
+                  }`,
+                  isNestedComposition: true,
+                  compositionId: childId,
+                  name: nestedComp.name,
+                  imageUrl: "virtual-nested-composition", // Mark as virtual
+                });
+              }
+            }
+
+            // Combine real frames and virtual nested composition assets
+            const allAssets = [...Object.values(frameGroups), ...virtualAssets];
+
+            // Get sorted asset keys to maintain consistent order
+            const groupKeys = Object.keys(frameGroups).sort();
+            const totalAssets = groupKeys.length + virtualAssets.length;
+
+            console.log("[ASSET SELECTION] Frame groups:", {
+              folderId,
+              index,
+              totalGroups: totalAssets,
+              groupKeys,
+              frameGroups: Object.values(frameGroups).map((f: any) => ({
+                folderId: f.folderId,
+                rowId: f.rowId,
+                imageUrl: !!f.imageUrl,
+              })),
+              virtualAssets: virtualAssets.map((va: any) => ({
+                assetId: va.assetId,
+                name: va.name,
+                compositionId: va.compositionId,
+              })),
+            });
+
+            // Find the asset at the clicked index
+            let targetAsset: any = null;
+            if (index < groupKeys.length) {
+              // Regular frame asset
+              const targetGroupKey = groupKeys[index];
+              targetAsset = frameGroups[targetGroupKey];
+            } else {
+              // Virtual nested composition asset
+              const virtualIndex = index - groupKeys.length;
+              if (virtualIndex < virtualAssets.length) {
+                targetAsset = virtualAssets[virtualIndex];
+              }
+            }
+
+            if (!targetAsset) {
+              console.warn("[ASSET SELECTION] No asset found for selection:", {
+                folderId,
+                index,
+                totalFrames: allFrames.length,
+                totalAssets,
+                availableFrames: allFrames.map((f) => ({
+                  folderId: f.folderId,
+                  rowId: f.rowId,
+                  frameIndex: f.frameIndex,
+                })),
+                availableVirtualAssets: virtualAssets.map((va) => va.name),
+              });
+              return;
+            }
+
+            console.log("[ASSET SELECTION] Selected asset:", {
+              folderId,
+              index,
+              selectedFrame: targetAsset.isNestedComposition
+                ? {
+                    assetId: targetAsset.assetId,
+                    name: targetAsset.name,
+                    compositionId: targetAsset.compositionId,
+                    isNestedComposition: true,
+                  }
+                : {
+                    folderId: targetAsset.folderId,
+                    rowId: targetAsset.rowId,
+                    frameIndex: targetAsset.frameIndex,
+                  },
+              totalFrames: allFrames.length,
+            });
+
+            // Set selection state
+            setCompSelectedAssetFolderId(folderId);
+            setCompSelectedAssetIndex(index);
+
+            if (targetAsset.isNestedComposition) {
+              // For nested compositions, set default bounds (no image to load)
+              const w = comp.width * 0.8; // Default size as 80% of composition
+              const h = comp.height * 0.8;
               const x = Math.round((comp.width - w) / 2);
               const y = Math.round((comp.height - h) / 2);
-              // Prefer persisted bounds if available
-              const identity =
-                df.isSequenceFrame && df.folderId
-                  ? df.assetId
-                    ? `${df.folderId}|${df.assetId}`
-                    : df.folderId
-                  : df.assetId
-                  ? `${folderId}|${df.assetId}`
-                  : `${folderId}|${df.fileName || df.imageUrl || ""}`;
+
+              // Use nested composition asset ID for identity
+              const identity = `${folderId}|${targetAsset.assetId}`;
               const persisted = boundsByAsset[identity];
               if (persisted) {
                 setCompImageBounds({ ...persisted });
               } else {
                 setCompImageBounds({ x, y, width: w, height: h });
               }
-            };
-            img.src = df.imageUrl;
+            } else {
+              // For regular assets, load image and set bounds
+              const img = new Image();
+              img.onload = () => {
+                // do not reset rotation here; keep rotation keyed to asset identity
+                const w = img.naturalWidth || comp.width;
+                const h = img.naturalHeight || comp.height;
+                const x = Math.round((comp.width - w) / 2);
+                const y = Math.round((comp.height - h) / 2);
+                // Prefer persisted bounds if available
+                const identity =
+                  targetAsset.isSequenceFrame && targetAsset.folderId
+                    ? targetAsset.assetId
+                      ? `${targetAsset.folderId}|${targetAsset.assetId}`
+                      : targetAsset.folderId
+                    : targetAsset.assetId
+                    ? `${folderId}|${targetAsset.assetId}`
+                    : `${folderId}|${
+                        targetAsset.fileName || targetAsset.imageUrl || ""
+                      }`;
+                const persisted = boundsByAsset[identity];
+                if (persisted) {
+                  setCompImageBounds({ ...persisted });
+                } else {
+                  setCompImageBounds({ x, y, width: w, height: h });
+                }
+              };
+              img.src = targetAsset.imageUrl;
+            }
           }}
           drawingFrames={drawingFrames}
+          setDrawingFrames={setDrawingFrames}
           assetEffects={assetEffects}
           onAssetEffectsChange={(identity, effects) => {
-            setAssetEffects((prev) => ({ ...prev, [identity]: effects }));
+            console.log("[ASSET EFFECTS] Updating effects for identity:", {
+              identity,
+              effects,
+              isUndefined: effects === undefined,
+              isEmpty: effects && Object.keys(effects).length === 0,
+            });
+
+            if (effects === undefined || effects === null) {
+              // Remove the asset from effects tracking completely
+              setAssetEffects((prev) => {
+                const newEffects = { ...prev };
+                delete newEffects[identity];
+                console.log("[ASSET EFFECTS] Removed identity from effects:", {
+                  identity,
+                  remainingEffects: Object.keys(newEffects),
+                });
+                return newEffects;
+              });
+            } else {
+              // Update or add effects
+              setAssetEffects((prev) => ({ ...prev, [identity]: effects }));
+            }
           }}
           assetTransforms={assetTransforms}
           onAssetTransformsChange={(identity, transform) => {
@@ -3252,6 +4793,13 @@ export function AnimationEditor({
           selectedAssetKey={selectedAssetKey}
           compositeFolderIds={compositeFolderIds}
           setCompositeFolderIds={setCompositeFolderIds}
+          setRows={setRows}
+          // Composition hierarchy props
+          compositionHierarchy={compositionHierarchy}
+          addNestedComposition={addNestedComposition}
+          removeNestedComposition={removeNestedComposition}
+          isCompositionNested={isCompositionNested}
+          getNestedCompositionsInParent={getNestedCompositionsInParent}
         />
       </div>
 

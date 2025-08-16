@@ -17,6 +17,7 @@ interface TransformPanelProps {
   onTransformChange: (identity: string, transform: TransformSettings) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  disabled?: boolean;
 }
 
 export function TransformPanel({
@@ -25,17 +26,34 @@ export function TransformPanel({
   onTransformChange,
   isCollapsed,
   onToggleCollapse,
+  disabled = false,
 }: TransformPanelProps) {
+  // Ensure transform has all required properties with defaults
+  const safeTransform: TransformSettings = {
+    opacity: 100,
+    position: { x: 0, y: 0 },
+    rotation: 0,
+    scale: 1,
+    ...transform,
+    position: {
+      x: 0,
+      y: 0,
+      ...transform?.position,
+    },
+  };
+
   const updateTransform = (updates: Partial<TransformSettings>) => {
+    if (disabled) return; // Don't update if disabled
+
     const newTransform: TransformSettings = {
-      ...transform,
+      ...safeTransform,
       ...updates,
     };
     console.log(`[TRANSFORM DEBUG] Transform change:`, {
       assetIdentity,
       updates,
       newTransform,
-      previousTransform: transform
+      previousTransform: safeTransform,
     });
     onTransformChange(assetIdentity, newTransform);
   };
@@ -66,20 +84,22 @@ export function TransformPanel({
                 type="number"
                 min="0"
                 max="100"
-                value={transform.opacity}
+                value={safeTransform.opacity}
                 onChange={(e) =>
                   updateTransform({ opacity: parseInt(e.target.value) || 0 })
                 }
                 className="w-16 h-6 text-xs bg-gray-700 border-gray-600"
+                disabled={disabled}
               />
             </div>
             <Slider
-              value={[transform.opacity]}
+              value={[safeTransform.opacity]}
               onValueChange={([value]) => updateTransform({ opacity: value })}
               max={100}
               min={0}
               step={1}
               className="w-full"
+              disabled={disabled}
             />
           </div>
 
@@ -91,32 +111,34 @@ export function TransformPanel({
                 <Label className="text-xs text-gray-400">X</Label>
                 <Input
                   type="number"
-                  value={Math.round(transform.position.x)}
+                  value={Math.round(safeTransform.position.x)}
                   onChange={(e) =>
                     updateTransform({
                       position: {
-                        ...transform.position,
+                        ...safeTransform.position,
                         x: parseInt(e.target.value) || 0,
                       },
                     })
                   }
                   className="h-6 text-xs bg-gray-700 border-gray-600"
+                  disabled={disabled}
                 />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-gray-400">Y</Label>
                 <Input
                   type="number"
-                  value={Math.round(transform.position.y)}
+                  value={Math.round(safeTransform.position.y)}
                   onChange={(e) =>
                     updateTransform({
                       position: {
-                        ...transform.position,
+                        ...safeTransform.position,
                         y: parseInt(e.target.value) || 0,
                       },
                     })
                   }
                   className="h-6 text-xs bg-gray-700 border-gray-600"
+                  disabled={disabled}
                 />
               </div>
             </div>
@@ -131,22 +153,24 @@ export function TransformPanel({
                   type="number"
                   min="0"
                   max="360"
-                  value={Math.round(transform.rotation)}
+                  value={Math.round(safeTransform.rotation)}
                   onChange={(e) =>
                     updateTransform({ rotation: parseInt(e.target.value) || 0 })
                   }
                   className="w-16 h-6 text-xs bg-gray-700 border-gray-600"
+                  disabled={disabled}
                 />
                 <span className="text-xs text-gray-400">°</span>
               </div>
             </div>
             <Slider
-              value={[transform.rotation]}
+              value={[safeTransform.rotation]}
               onValueChange={([value]) => updateTransform({ rotation: value })}
               max={360}
               min={0}
               step={1}
               className="w-full"
+              disabled={disabled}
             />
           </div>
 
@@ -160,22 +184,26 @@ export function TransformPanel({
                   min="0.1"
                   max="5"
                   step="0.1"
-                  value={transform.scale.toFixed(1)}
+                  value={safeTransform.scale.toFixed(1)}
                   onChange={(e) =>
                     updateTransform({ scale: parseFloat(e.target.value) || 1 })
                   }
                   className="w-16 h-6 text-xs bg-gray-700 border-gray-600"
+                  disabled={disabled}
                 />
                 <span className="text-xs text-gray-400">x</span>
               </div>
             </div>
             <Slider
-              value={[transform.scale * 100]}
-              onValueChange={([value]) => updateTransform({ scale: value / 100 })}
+              value={[safeTransform.scale * 100]}
+              onValueChange={([value]) =>
+                updateTransform({ scale: value / 100 })
+              }
               max={500}
               min={10}
               step={10}
               className="w-full"
+              disabled={disabled}
             />
           </div>
         </div>

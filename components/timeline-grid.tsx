@@ -30,6 +30,10 @@ export interface DrawingFrame {
   folderId?: string;
   // Asset ID for unique identification (used for color effects)
   assetId?: string;
+  // Nested composition support
+  isNestedCompositionFrame?: boolean; // Indicates this frame represents content from a nested composition
+  sourceCompositionId?: string; // ID of the child composition this frame comes from
+  sourceFrameId?: string; // Unique identifier for the source frame in child composition
   // Sequence-specific properties
   sequenceIndex?: number;
   isSequenceFrame?: boolean;
@@ -64,6 +68,9 @@ interface TimelineGridProps {
   hideEditButtons?: boolean;
   suppressFrames?: boolean;
   activeCompositionLabel?: string;
+  // Composition hierarchy flags
+  isChildComposition?: boolean; // If true, use logical positions instead of actual rowIdx
+  compositionHierarchy?: any; // For checking composition relationships
 }
 
 export default function TimelineGrid({
@@ -94,6 +101,8 @@ export default function TimelineGrid({
   hideEditButtons = false,
   suppressFrames = false,
   activeCompositionLabel = "",
+  isChildComposition = false,
+  compositionHierarchy,
 }: TimelineGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   React.useEffect(() => {
@@ -149,7 +158,6 @@ export default function TimelineGrid({
     handleType: "left" | "right",
     e: React.MouseEvent
   ) => {
-
     setDragging({
       rowId,
       frameIndex,
@@ -197,9 +205,14 @@ export default function TimelineGrid({
       let delta = Math.round((e.clientX - dragging.startX) / cellWidth);
 
       // Helper function to find collision boundaries for a given row
-      const findCollisionBoundaries = (rowId: string, excludeFrameIndex: number) => {
+      const findCollisionBoundaries = (
+        rowId: string,
+        excludeFrameIndex: number
+      ) => {
         const rowFrames = drawingFrames
-          .filter((df) => df.rowId === rowId && df.frameIndex !== excludeFrameIndex)
+          .filter(
+            (df) => df.rowId === rowId && df.frameIndex !== excludeFrameIndex
+          )
           .map((df) => ({
             frameIndex: df.frameIndex,
             start: df.startFrame ?? df.frameIndex,
@@ -217,48 +230,61 @@ export default function TimelineGrid({
         let targetEndFrame = startFrame + targetLength - 1;
 
         // Find collision boundaries - frames that could block this expansion
-        const boundaries = findCollisionBoundaries(dragging.rowId, dragging.frameIndex);
-        
+        const boundaries = findCollisionBoundaries(
+          dragging.rowId,
+          dragging.frameIndex
+        );
+
         // Find the next frame that would block expansion
-        const blockingFrame = boundaries.find((frame) => frame.start > startFrame);
-        
+        const blockingFrame = boundaries.find(
+          (frame) => frame.start > startFrame
+        );
+
         let framesToUpdate = [];
-        
+
         if (blockingFrame && targetEndFrame >= blockingFrame.start) {
           // We're hitting a blocking frame - try to push it
           const pushDistance = targetEndFrame - blockingFrame.start + 1; // How much we need to push
-          
+
           // Check if we can push the blocking frame (and any frames behind it)
           let canPush = true;
           let framesToPush = [blockingFrame];
-          
+
           // Find all frames that would need to be pushed in a chain
           let currentPushEnd = blockingFrame.end + pushDistance;
           boundaries.forEach((frame) => {
-            if (frame.start > blockingFrame.start && frame.start <= currentPushEnd) {
+            if (
+              frame.start > blockingFrame.start &&
+              frame.start <= currentPushEnd
+            ) {
               framesToPush.push(frame);
-              currentPushEnd = Math.max(currentPushEnd, frame.end + pushDistance);
+              currentPushEnd = Math.max(
+                currentPushEnd,
+                frame.end + pushDistance
+              );
             }
           });
-          
+
           // Check if the final pushed position would have space
-          const finalPushEnd = Math.max(...framesToPush.map(f => f.end)) + pushDistance;
-          const nextFrameAfterPush = boundaries.find((frame) => 
-            frame.start > Math.max(...framesToPush.map(f => f.start))
+          const finalPushEnd =
+            Math.max(...framesToPush.map((f) => f.end)) + pushDistance;
+          const nextFrameAfterPush = boundaries.find(
+            (frame) =>
+              frame.start > Math.max(...framesToPush.map((f) => f.start))
           );
-          
+
           if (nextFrameAfterPush && finalPushEnd >= nextFrameAfterPush.start) {
             // Can't push - would collide with frame behind
             canPush = false;
           }
-          
+
           if (canPush) {
             // Push all frames in the chain
             framesToUpdate = framesToPush.map((frame) => ({
               frameIndex: frame.frameIndex,
-              newStartFrame: frame.start + pushDistance
+              newStartFrame: frame.start + pushDistance,
             }));
-            
+
             // We can extend to our target length
             // (targetLength stays as calculated)
           } else {
@@ -279,77 +305,95 @@ export default function TimelineGrid({
         setDrawingFrames((prev) =>
           prev.map((df) => {
             // Update the main frame being dragged
-            if (df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex) {
+            if (
+              df.rowId === dragging.rowId &&
+              df.frameIndex === dragging.frameIndex
+            ) {
               return { ...df, length: targetLength, startFrame };
             }
-            
+
             // Update any frames that need to be pushed
-            const pushUpdate = framesToUpdate.find(update => update.frameIndex === df.frameIndex);
+            const pushUpdate = framesToUpdate.find(
+              (update) => update.frameIndex === df.frameIndex
+            );
             if (pushUpdate && df.rowId === dragging.rowId) {
               return { ...df, startFrame: pushUpdate.newStartFrame };
             }
-            
+
             return df;
           })
         );
       } else {
         // Left handle: move start frame backward while keeping END FRAME absolutely fixed
-        let originalEndFrame = dragging.origStartFrame + dragging.origLength - 1; // FIXED end position
+        let originalEndFrame =
+          dragging.origStartFrame + dragging.origLength - 1; // FIXED end position
         let targetStartFrame = Math.max(0, dragging.origStartFrame + delta);
         let targetLength = Math.max(1, originalEndFrame - targetStartFrame + 1);
 
-        // Find collision boundaries - frames that could block moving the start backward  
-        const boundaries = findCollisionBoundaries(dragging.rowId, dragging.frameIndex);
-        
-        // Find frames that would block moving the start frame backward
-        const blockingFrame = boundaries.find((frame) => 
-          frame.end >= targetStartFrame && frame.start <= targetStartFrame
+        // Find collision boundaries - frames that could block moving the start backward
+        const boundaries = findCollisionBoundaries(
+          dragging.rowId,
+          dragging.frameIndex
         );
-        
+
+        // Find frames that would block moving the start frame backward
+        const blockingFrame = boundaries.find(
+          (frame) =>
+            frame.end >= targetStartFrame && frame.start <= targetStartFrame
+        );
+
         let framesToUpdate = [];
-        
+
         if (blockingFrame && targetStartFrame < blockingFrame.end + 1) {
           // We're hitting a blocking frame - try to push it backward
-          const pushDistance = (blockingFrame.end + 1) - targetStartFrame; // How much we need to push
-          
+          const pushDistance = blockingFrame.end + 1 - targetStartFrame; // How much we need to push
+
           // Check if we can push the blocking frame (and any frames in front of it)
           let canPush = true;
           let framesToPush = [blockingFrame];
-          
+
           // Find all frames that would need to be pushed in a chain (frames to the left)
           let currentPushStart = blockingFrame.start - pushDistance;
           boundaries.forEach((frame) => {
-            if (frame.end < blockingFrame.end && frame.end >= currentPushStart) {
+            if (
+              frame.end < blockingFrame.end &&
+              frame.end >= currentPushStart
+            ) {
               framesToPush.push(frame);
-              currentPushStart = Math.min(currentPushStart, frame.start - pushDistance);
+              currentPushStart = Math.min(
+                currentPushStart,
+                frame.start - pushDistance
+              );
             }
           });
-          
+
           // Check if the final pushed position would have space (can't go below 0)
-          const finalPushStart = Math.min(...framesToPush.map(f => f.start)) - pushDistance;
-          
+          const finalPushStart =
+            Math.min(...framesToPush.map((f) => f.start)) - pushDistance;
+
           if (finalPushStart < 0) {
             // Can't push - would go below frame 0
             canPush = false;
           } else {
             // Check if pushing would collide with any frame to the left
-            const nextFrameBeforePush = boundaries.find((frame) => 
-              frame.end < Math.min(...framesToPush.map(f => f.start)) &&
-              frame.end >= finalPushStart
+            const nextFrameBeforePush = boundaries.find(
+              (frame) =>
+                frame.end < Math.min(...framesToPush.map((f) => f.start)) &&
+                frame.end >= finalPushStart
             );
-            
+
             if (nextFrameBeforePush) {
               canPush = false;
             }
           }
-          
+
           if (canPush) {
             // Push all frames in the chain
             framesToUpdate = framesToPush.map((frame) => ({
               frameIndex: frame.frameIndex,
-              newStartFrame: frame.start - pushDistance
+              newStartFrame: frame.start - pushDistance,
             }));
-            
+
             // We can move to our target start frame
             // (targetStartFrame and targetLength stay as calculated)
           } else {
@@ -357,7 +401,10 @@ export default function TimelineGrid({
             const minStartFrame = blockingFrame.end + 1;
             if (targetStartFrame < minStartFrame) {
               targetStartFrame = minStartFrame;
-              targetLength = Math.max(1, originalEndFrame - targetStartFrame + 1);
+              targetLength = Math.max(
+                1,
+                originalEndFrame - targetStartFrame + 1
+              );
             }
           }
         }
@@ -370,16 +417,25 @@ export default function TimelineGrid({
         setDrawingFrames((prev) =>
           prev.map((df) => {
             // Update the main frame being dragged
-            if (df.rowId === dragging.rowId && df.frameIndex === dragging.frameIndex) {
-              return { ...df, length: targetLength, startFrame: targetStartFrame };
+            if (
+              df.rowId === dragging.rowId &&
+              df.frameIndex === dragging.frameIndex
+            ) {
+              return {
+                ...df,
+                length: targetLength,
+                startFrame: targetStartFrame,
+              };
             }
-            
+
             // Update any frames that need to be pushed
-            const pushUpdate = framesToUpdate.find(update => update.frameIndex === df.frameIndex);
+            const pushUpdate = framesToUpdate.find(
+              (update) => update.frameIndex === df.frameIndex
+            );
             if (pushUpdate && df.rowId === dragging.rowId) {
               return { ...df, startFrame: pushUpdate.newStartFrame };
             }
-            
+
             return df;
           })
         );
@@ -600,7 +656,6 @@ export default function TimelineGrid({
                           padding: 0,
                         }}
                         onClick={(e) => {
-
                           e.stopPropagation();
                           handleCellClick(row.id, effectiveStartFrame);
                         }}
@@ -677,7 +732,33 @@ export default function TimelineGrid({
                                     className="h-5 w-auto max-w-[40px] object-contain mr-1"
                                   />
                                   <span className="select-none whitespace-nowrap text-left">{`R${
-                                    rowIdx + 1
+                                    isChildComposition
+                                      ? (() => {
+                                          // For child compositions, show logical position based on sorted order
+                                          const allAssetRows = new Set(
+                                            drawingFrames.map((df) => df.rowId)
+                                          );
+                                          const sortedRowIds = Array.from(
+                                            allAssetRows
+                                          ).sort((a, b) => {
+                                            const aNum = parseInt(
+                                              a.split("-")[1] || "0",
+                                              10
+                                            );
+                                            const bNum = parseInt(
+                                              b.split("-")[1] || "0",
+                                              10
+                                            );
+                                            return aNum - bNum;
+                                          });
+
+                                          const logicalPosition =
+                                            sortedRowIds.indexOf(row.id);
+                                          return logicalPosition >= 0
+                                            ? logicalPosition + 1
+                                            : rowIdx + 1;
+                                        })()
+                                      : rowIdx + 1
                                   } F${(drawing.startFrame ?? i) + 1}:${
                                     (drawing.startFrame ?? i) + drawing.length
                                   }`}</span>
@@ -708,7 +789,33 @@ export default function TimelineGrid({
                             <>
                               <div className="flex flex-col items-start justify-center pl-1 flex-1 h-full">
                                 <span className="leading-tight select-none">{`R${
-                                  rowIdx + 1
+                                  isChildComposition
+                                    ? (() => {
+                                        // For child compositions, show logical position based on sorted order
+                                        const allAssetRows = new Set(
+                                          drawingFrames.map((df) => df.rowId)
+                                        );
+                                        const sortedRowIds = Array.from(
+                                          allAssetRows
+                                        ).sort((a, b) => {
+                                          const aNum = parseInt(
+                                            a.split("-")[1] || "0",
+                                            10
+                                          );
+                                          const bNum = parseInt(
+                                            b.split("-")[1] || "0",
+                                            10
+                                          );
+                                          return aNum - bNum;
+                                        });
+
+                                        const logicalPosition =
+                                          sortedRowIds.indexOf(row.id);
+                                        return logicalPosition >= 0
+                                          ? logicalPosition + 1
+                                          : rowIdx + 1;
+                                      })()
+                                    : rowIdx + 1
                                 }`}</span>
                                 <span className="leading-tight select-none">{`F${
                                   i + 1

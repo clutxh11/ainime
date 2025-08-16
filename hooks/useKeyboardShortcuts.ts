@@ -10,6 +10,7 @@ interface KeyboardShortcutsOptions {
   onCopy?: () => void;
   onPaste?: () => void;
   onEnter?: () => void;
+  onDelete?: () => void;
 }
 
 export default function useKeyboardShortcuts(opts: KeyboardShortcutsOptions) {
@@ -20,7 +21,10 @@ export default function useKeyboardShortcuts(opts: KeyboardShortcutsOptions) {
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         opts.onUndo();
-      } else if ((e.metaKey || e.ctrlKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+      } else if (
+        (e.metaKey || e.ctrlKey) &&
+        (e.key === "y" || (e.key === "z" && e.shiftKey))
+      ) {
         e.preventDefault();
         opts.onRedo();
       } else if (e.code === "Space") {
@@ -32,6 +36,9 @@ export default function useKeyboardShortcuts(opts: KeyboardShortcutsOptions) {
         opts.onPaste?.();
       } else if (e.key === "Enter") {
         opts.onEnter?.();
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        opts.onDelete?.();
       }
     };
 
@@ -50,5 +57,3 @@ export default function useKeyboardShortcuts(opts: KeyboardShortcutsOptions) {
     };
   }, [opts]);
 }
-
-
