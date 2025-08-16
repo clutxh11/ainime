@@ -40,6 +40,7 @@ import {
 import { SequenceImportModal } from "@/components/ui/SequenceImportModal";
 import type { DrawingFrame } from "../timeline-grid";
 import ColorEffectsPanel from "./ColorEffectsPanel";
+import { TransformPanel, TransformSettings } from "./TransformPanel";
 import type { AssetEffects } from "@/lib/utils/color-effects";
 
 export interface SidebarFolder {
@@ -121,6 +122,9 @@ export interface LayersPanelProps {
   // Color effects system
   assetEffects?: Record<string, AssetEffects>;
   onAssetEffectsChange?: (identity: string, effects: AssetEffects) => void;
+  // Transform system
+  assetTransforms?: Record<string, import("@/components/editor/TransformPanel").TransformSettings>;
+  onAssetTransformsChange?: (identity: string, transform: import("@/components/editor/TransformPanel").TransformSettings) => void;
   selectedAssetKey?: string | null;
   // Compositing only: highlight selected asset
   selectedAssetFolderId?: string;
@@ -170,8 +174,14 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     drawingFrames = [],
     assetEffects = {},
     onAssetEffectsChange,
+    assetTransforms = {},
+    onAssetTransformsChange,
     selectedAssetKey,
   } = props;
+
+  // Collapse states for panels
+  const [isTransformCollapsed, setIsTransformCollapsed] = useState(false);
+  const [isColorEffectsCollapsed, setIsColorEffectsCollapsed] = useState(false);
 
   // Root assets (not in a folder) and per-folder assets for compositing mode
   type AssetItem = {
@@ -1035,17 +1045,47 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
         )}
       </div>
 
-      {/* Color Effects Panel - only show in composite mode when an asset is selected */}
-      {mode === "composite" && onAssetEffectsChange && (
+      {/* Transform and Color Effects Panels - only show in composite mode when an asset is selected */}
+      {mode === "composite" && selectedAssetKey && (onAssetTransformsChange || onAssetEffectsChange) && (
         <>
           <div className="border-b border-gray-600 my-4 flex-shrink-0" />
-          <ColorEffectsPanel
-            assetIdentity={selectedAssetKey || null}
-            effects={
-              selectedAssetKey ? assetEffects[selectedAssetKey] || {} : {}
-            }
-            onEffectsChange={onAssetEffectsChange}
-          />
+          
+          {/* Transform Panel */}
+          {onAssetTransformsChange && (
+            <div className="mb-4">
+              <TransformPanel
+                assetIdentity={selectedAssetKey}
+                transform={
+                  assetTransforms[selectedAssetKey] || {
+                    opacity: 100,
+                    position: { x: 0, y: 0 },
+                    rotation: 0,
+                    scale: 1,
+                  }
+                }
+                onTransformChange={(identity, transform) => {
+                  onAssetTransformsChange?.(identity, transform);
+                  // TODO: Sync position, rotation, and scale changes back to the canvas state
+                  // This would require additional props to update boundsByAsset and rotationByAsset
+                }}
+                isCollapsed={isTransformCollapsed}
+                onToggleCollapse={() => setIsTransformCollapsed(!isTransformCollapsed)}
+              />
+            </div>
+          )}
+
+          {/* Color Effects Panel */}
+          {onAssetEffectsChange && (
+            <div className="mb-4">
+              <ColorEffectsPanel
+                assetIdentity={selectedAssetKey}
+                effects={assetEffects[selectedAssetKey] || {}}
+                onEffectsChange={onAssetEffectsChange}
+                isCollapsed={isColorEffectsCollapsed}
+                onToggleCollapse={() => setIsColorEffectsCollapsed(!isColorEffectsCollapsed)}
+              />
+            </div>
+          )}
         </>
       )}
 

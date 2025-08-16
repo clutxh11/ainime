@@ -58,6 +58,7 @@ import {
   processImageWithEffects,
   type AssetEffects,
 } from "@/lib/utils/color-effects";
+import { TransformSettings } from "@/components/editor/TransformPanel";
 import useSceneLoader from "@/hooks/useSceneLoader";
 import useCanvasSetup from "@/hooks/useCanvasSetup";
 import useColorSets from "@/hooks/useColorSets";
@@ -344,6 +345,11 @@ export function AnimationEditor({
     Record<string, AssetEffects>
   >({});
 
+  // Asset transforms (opacity, position, rotation, scale) - keyed by asset identity
+  const [assetTransforms, setAssetTransforms] = useState<
+    Record<string, TransformSettings>
+  >({});
+
   const [isLooping, setIsLooping] = useState(false);
   const [contextMenu, setContextMenu] = useState({
     visible: false,
@@ -452,11 +458,12 @@ export function AnimationEditor({
     if (!df) return null;
 
     // Use consistent identity calculation for all asset types
-    const identity = df.isSequenceFrame && df.folderId
-      ? df.assetId 
-        ? `${df.folderId}|${df.assetId}`
-        : df.folderId
-      : df.assetId 
+    const identity =
+      df.isSequenceFrame && df.folderId
+        ? df.assetId
+          ? `${df.folderId}|${df.assetId}`
+          : df.folderId
+        : df.assetId
         ? `${compSelectedAssetFolderId}|${df.assetId}`
         : `${compSelectedAssetFolderId}|${df.fileName || df.imageUrl || ""}`;
     return identity;
@@ -512,7 +519,7 @@ export function AnimationEditor({
         // Use the same key logic as in the drawing loop
         const identity =
           cell.isSequenceFrame && cell.folderId
-            ? cell.assetId 
+            ? cell.assetId
               ? `${cell.folderId}|${cell.assetId}`
               : cell.folderId
             : cell.assetId
@@ -568,7 +575,7 @@ export function AnimationEditor({
           // For regular assets, use assetId if available to ensure duplicated assets have unique identities
           const identity =
             cell.isSequenceFrame && cell.folderId
-              ? cell.assetId 
+              ? cell.assetId
                 ? `${cell.folderId}|${cell.assetId}`
                 : cell.folderId
               : cell.assetId
@@ -626,6 +633,50 @@ export function AnimationEditor({
             imageToRender = processedCanvas as any; // Canvas can be drawn like an image
           }
 
+          // Get transform settings for this asset
+          const transform = assetTransforms[identity];
+          const opacity = transform?.opacity !== undefined ? transform.opacity / 100 : 1;
+
+          // Sync transform values with current bounds and rotation
+          if (transform) {
+            const currentBounds = boundsByAsset[identity];
+            const currentRotation = rotationByAsset[key] ?? 0;
+            
+            // Update transform if values have changed
+            if (currentBounds && (
+              Math.abs(transform.position.x - currentBounds.x) > 1 ||
+              Math.abs(transform.position.y - currentBounds.y) > 1 ||
+              Math.abs(transform.rotation - currentRotation) > 1
+            )) {
+              setAssetTransforms(prev => ({
+                ...prev,
+                [identity]: {
+                  ...transform,
+                  position: { x: currentBounds.x, y: currentBounds.y },
+                  rotation: currentRotation,
+                  scale: transform.scale || 1,
+                }
+              }));
+            }
+          } else {
+            // Initialize transform if it doesn't exist
+            setAssetTransforms(prev => ({
+              ...prev,
+              [identity]: {
+                opacity: 100,
+                position: { x, y },
+                rotation: deg,
+                scale: 1,
+              }
+            }));
+          }
+
+          // Apply opacity
+          if (opacity < 1) {
+            ctx.save();
+            ctx.globalAlpha = opacity;
+          }
+
           if (deg !== 0) {
             ctx.save();
             // rotate around the image center
@@ -638,6 +689,11 @@ export function AnimationEditor({
             ctx.restore();
           } else {
             ctx.drawImage(imageToRender, x, y, drawW, drawH);
+          }
+
+          // Restore opacity
+          if (opacity < 1) {
+            ctx.restore();
           }
         }
       } catch (error) {
@@ -3167,11 +3223,12 @@ export function AnimationEditor({
               const x = Math.round((comp.width - w) / 2);
               const y = Math.round((comp.height - h) / 2);
               // Prefer persisted bounds if available
-                            const identity = df.isSequenceFrame && df.folderId
-                ? df.assetId 
-                  ? `${df.folderId}|${df.assetId}`
-                  : df.folderId
-                : df.assetId 
+              const identity =
+                df.isSequenceFrame && df.folderId
+                  ? df.assetId
+                    ? `${df.folderId}|${df.assetId}`
+                    : df.folderId
+                  : df.assetId
                   ? `${folderId}|${df.assetId}`
                   : `${folderId}|${df.fileName || df.imageUrl || ""}`;
               const persisted = boundsByAsset[identity];
@@ -3187,6 +3244,10 @@ export function AnimationEditor({
           assetEffects={assetEffects}
           onAssetEffectsChange={(identity, effects) => {
             setAssetEffects((prev) => ({ ...prev, [identity]: effects }));
+          }}
+          assetTransforms={assetTransforms}
+          onAssetTransformsChange={(identity, transform) => {
+            setAssetTransforms((prev) => ({ ...prev, [identity]: transform }));
           }}
           selectedAssetKey={selectedAssetKey}
           compositeFolderIds={compositeFolderIds}

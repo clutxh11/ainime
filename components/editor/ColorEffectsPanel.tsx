@@ -5,19 +5,23 @@ import { Slider } from "../ui/slider";
 import { Switch } from "../ui/switch";
 import { Input } from "../ui/input";
 
-import { Palette, Pipette, Eye, EyeOff, PaintBucket, Check } from "lucide-react";
+import { Palette, Pipette, Eye, EyeOff, PaintBucket, Check, ChevronDown, ChevronRight } from "lucide-react";
 import type { AssetEffects, ColorKeySettings, ColorKeepSettings, FillSettings } from "@/lib/utils/color-effects";
 
 interface ColorEffectsPanelProps {
   assetIdentity: string | null;
   effects: AssetEffects;
   onEffectsChange: (identity: string, effects: AssetEffects) => void;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 export default function ColorEffectsPanel({
   assetIdentity,
   effects,
   onEffectsChange,
+  isCollapsed,
+  onToggleCollapse,
 }: ColorEffectsPanelProps) {
   const [showColorKey, setShowColorKey] = useState(false);
   const [showColorKeep, setShowColorKeep] = useState(false);
@@ -105,10 +109,23 @@ export default function ColorEffectsPanel({
   };
 
   return (
-    <div className="space-y-4 p-4">
-      <div className="text-sm font-medium text-gray-200 mb-4">
-        Color Effects
+    <div className="space-y-4">
+      {/* Header with collapse toggle */}
+      <div
+        className="flex items-center justify-between cursor-pointer"
+        onClick={onToggleCollapse}
+      >
+        <h3 className="text-sm font-medium text-white">Color Effects</h3>
+        {isCollapsed ? (
+          <ChevronRight className="w-4 h-4 text-gray-400" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-gray-400" />
+        )}
       </div>
+
+      {/* Content - only show when not collapsed */}
+      {!isCollapsed && (
+        <div className="space-y-4 pl-2">
 
       {/* Fill Section */}
       <div className="space-y-3">
@@ -351,7 +368,8 @@ export default function ColorEffectsPanel({
         )}
       </div>
 
-
+        </div>
+      )}
     </div>
   );
 }
