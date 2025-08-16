@@ -1277,35 +1277,75 @@ export function AnimationEditor({
           const deg = rotationByAsset[key] ?? 0;
 
           // Apply color effects if any are set for this asset
-          const effects = assetEffects[identity];
           let imageToRender = img;
+          const instanceEffects = assetEffects[identity];
+
+          // Check if this is a nested composition and get inherited effects
+          const isNestedCompositionFrame = cell.isNestedCompositionFrame;
+          let inheritedEffects = null;
+          
+          if (isNestedCompositionFrame && cell.sourceCompositionId) {
+            // Look up the original child composition's effects
+            const childFrames = drawingFrames.filter((df: any) => df.folderId === cell.sourceCompositionId);
+            if (childFrames.length > 0) {
+              const originalChildAssetId = childFrames[0].assetId;
+              const childAssetIdentity = `${cell.sourceCompositionId}|${originalChildAssetId}`;
+              inheritedEffects = assetEffects[childAssetIdentity];
+            }
+          }
 
           console.log(`[COLOR EFFECTS DEBUG] Effects lookup:`, {
             identity,
-            hasEffects: !!effects,
-            effects: effects
+            isNestedCompositionFrame,
+            sourceCompositionId: cell.sourceCompositionId,
+            hasInheritedEffects: !!inheritedEffects,
+            hasInstanceEffects: !!instanceEffects,
+            inheritedEffects: inheritedEffects
               ? {
-                  colorKey: effects.colorKey?.enabled,
-                  colorKeep: effects.colorKeep?.enabled,
-                  fill: effects.fill?.enabled,
+                  colorKey: inheritedEffects.colorKey?.enabled,
+                  colorKeep: inheritedEffects.colorKeep?.enabled,
+                  fill: inheritedEffects.fill?.enabled,
+                }
+              : null,
+            instanceEffects: instanceEffects
+              ? {
+                  colorKey: instanceEffects.colorKey?.enabled,
+                  colorKeep: instanceEffects.colorKeep?.enabled,
+                  fill: instanceEffects.fill?.enabled,
                 }
               : null,
             allAssetEffects: Object.keys(assetEffects),
           });
 
+          // Apply inherited effects first (for nested compositions)
           if (
-            effects &&
-            (effects.colorKey?.enabled ||
-              effects.colorKeep?.enabled ||
-              effects.fill?.enabled)
+            inheritedEffects &&
+            (inheritedEffects.colorKey?.enabled ||
+              inheritedEffects.colorKeep?.enabled ||
+              inheritedEffects.fill?.enabled)
           ) {
             console.log(
-              `[COLOR EFFECTS DEBUG] Applying effects for identity: ${identity}`,
-              effects
+              `[COLOR EFFECTS DEBUG] Applying inherited effects for nested composition: ${identity}`,
+              inheritedEffects
             );
-            // Process image with effects
-            const processedCanvas = processImageWithEffects(ctx, img, effects);
-            imageToRender = processedCanvas as any; // Canvas can be drawn like an image
+            const processedCanvas = processImageWithEffects(ctx, img, inheritedEffects);
+            imageToRender = processedCanvas as any;
+          }
+
+          // Apply instance effects on top (if any)
+          if (
+            instanceEffects &&
+            (instanceEffects.colorKey?.enabled ||
+              instanceEffects.colorKeep?.enabled ||
+              instanceEffects.fill?.enabled)
+          ) {
+            console.log(
+              `[COLOR EFFECTS DEBUG] Applying instance effects for identity: ${identity}`,
+              instanceEffects
+            );
+            // Apply instance effects to the current image (which may already have inherited effects)
+            const processedCanvas = processImageWithEffects(ctx, imageToRender as any, instanceEffects);
+            imageToRender = processedCanvas as any;
           }
 
           // Get transform settings for this asset

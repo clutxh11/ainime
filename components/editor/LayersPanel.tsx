@@ -656,17 +656,18 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
 
             if (originalEffects) {
               console.log(
-                "[DUPLICATION] Copying effects from original to duplicate:",
+                "[DUPLICATION] NOT copying effects to UI (preserving clean slate for editing):",
                 {
                   originalAssetIdentity,
                   newAssetIdentity,
                   originalEffects,
+                  note: "Effects will be inherited visually during canvas rendering"
                 }
               );
 
-              setTimeout(() => {
-                props.onAssetEffectsChange!(newAssetIdentity, originalEffects);
-              }, 100);
+              // Note: We deliberately DON'T copy effects to the duplicated nested composition's UI
+              // The effects will be inherited visually during canvas rendering
+              // But the Color Effects Panel will show a clean slate for independent editing
             }
           }
         } else {
@@ -961,17 +962,18 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
             const nestedAssetIdentity = `${targetFolderId}|${assetId}`;
 
             console.log(
-              "[NESTED COMP EFFECTS] Copying effects to nested composition:",
+              "[NESTED COMP EFFECTS] NOT copying effects to UI (preserving clean slate for editing):",
               {
                 from: childAssetIdentity,
                 to: nestedAssetIdentity,
                 effects: childEffects,
+                note: "Effects will be inherited visually during canvas rendering"
               }
             );
 
-            if (props.onAssetEffectsChange) {
-              props.onAssetEffectsChange(nestedAssetIdentity, childEffects);
-            }
+            // Note: We deliberately DON'T copy effects to the nested composition's UI
+            // The effects will be inherited visually during canvas rendering
+            // But the Color Effects Panel will show a clean slate for independent editing
           } else {
             console.log("[NESTED COMP EFFECTS] No child effects to copy");
           }
