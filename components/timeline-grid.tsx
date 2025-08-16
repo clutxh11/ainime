@@ -28,6 +28,8 @@ export interface DrawingFrame {
   fileName?: string;
   // Optional: source folder identity (used by compositing mode)
   folderId?: string;
+  // Asset ID for unique identification (used for color effects)
+  assetId?: string;
   // Sequence-specific properties
   sequenceIndex?: number;
   isSequenceFrame?: boolean;

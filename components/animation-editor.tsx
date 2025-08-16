@@ -513,6 +513,8 @@ export function AnimationEditor({
         const identity =
           cell.isSequenceFrame && cell.folderId
             ? cell.folderId
+            : cell.assetId
+            ? `${activeFolderId}|${cell.assetId}`
             : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
         return identity === selectedAssetKey;
       };
@@ -561,9 +563,12 @@ export function AnimationEditor({
         for (const { cell, img } of loadedImages) {
           // For sequence frames, use folderId as the transformation key to ensure
           // transformations persist across all frames in the sequence
+          // For regular assets, use assetId if available to ensure duplicated assets have unique identities
           const identity =
             cell.isSequenceFrame && cell.folderId
               ? cell.folderId
+              : cell.assetId
+              ? `${activeFolderId}|${cell.assetId}`
               : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
 
           const persisted = boundsByAsset[identity];
@@ -3022,6 +3027,7 @@ export function AnimationEditor({
                           imageUrl: seqFrame.blobUrl,
                           fileName: `${asset.name} [Frame ${i + 1}]`,
                           folderId,
+                          assetId: asset.id, // Include asset ID for unique identification
                           sequenceIndex: i,
                           isSequenceFrame: true,
                         });
@@ -3038,6 +3044,7 @@ export function AnimationEditor({
                             : asset.url,
                         fileName: asset.name,
                         folderId,
+                        assetId: asset.id, // Include asset ID for unique identification
                       });
                     }
 
