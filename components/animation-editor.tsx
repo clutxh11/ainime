@@ -457,8 +457,10 @@ export function AnimationEditor({
       return compSelectedAssetFolderId;
     }
 
-    // For single images, use the traditional folderId|fileName format
-    const identity = df.fileName || df.imageUrl || null;
+    // For single images, use assetId if available for consistency with color effects
+    const identity = df.assetId 
+      ? df.assetId 
+      : df.fileName || df.imageUrl || null;
     return identity ? `${compSelectedAssetFolderId}|${identity}` : null;
   }, [compSelectedAssetFolderId, compSelectedAssetIndex, drawingFrames]);
 
@@ -3125,9 +3127,9 @@ export function AnimationEditor({
               const x = Math.round((comp.width - w) / 2);
               const y = Math.round((comp.height - h) / 2);
               // Prefer persisted bounds if available
-              const identity = `${folderId}|${
-                df.fileName || df.imageUrl || ""
-              }`;
+              const identity = df.assetId 
+                ? `${folderId}|${df.assetId}`
+                : `${folderId}|${df.fileName || df.imageUrl || ""}`;
               const persisted = boundsByAsset[identity];
               if (persisted) {
                 setCompImageBounds({ ...persisted });
