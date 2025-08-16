@@ -399,6 +399,31 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
 
   // Duplicate selected asset (only assets, not folders)
   const handleDuplicateSelected = () => {
+    // Check if there's a folder asset selected (composition mode)
+    if (props.selectedAssetFolderId && props.selectedAssetIndex !== undefined) {
+      const folderAssets = assetsByFolder[props.selectedAssetFolderId] || [];
+      if (folderAssets.length > props.selectedAssetIndex) {
+        const originalAsset = folderAssets[props.selectedAssetIndex];
+        const existingNames = folderAssets.map(a => a.name);
+        
+        const duplicatedAsset: AssetItem = {
+          ...originalAsset,
+          id: `asset-${Date.now()}-${Math.random()}`,
+          name: getDuplicateName(originalAsset.name, existingNames)
+        };
+
+        setAssetsByFolder(prev => ({
+          ...prev,
+          [props.selectedAssetFolderId!]: [...folderAssets, duplicatedAsset]
+        }));
+
+        // Notify parent about the new asset in the folder
+        props.onFolderReceiveAssets?.(props.selectedAssetFolderId!, [duplicatedAsset]);
+      }
+      return;
+    }
+
+    // Handle regular selectedLayerId selection
     if (!selectedLayerId) return;
 
     // Check if it's a folder - if so, do nothing (folder duplication moved to three-dots menu)
@@ -503,6 +528,13 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
 
   // Helper function to check if selected item is an asset (not a folder)
   const isSelectedAsset = (): boolean => {
+    // Check if there's a folder asset selected (composition mode)
+    if (props.selectedAssetFolderId && props.selectedAssetIndex !== undefined) {
+      const folderAssets = assetsByFolder[props.selectedAssetFolderId] || [];
+      return folderAssets.length > props.selectedAssetIndex;
+    }
+    
+    // Check if there's a regular selectedLayerId
     if (!selectedLayerId) return false;
     
     // Check if it's a folder
@@ -513,7 +545,7 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
     const rootIndex = rootAssets.findIndex(asset => asset.id === selectedLayerId);
     if (rootIndex >= 0) return true;
     
-    // Check folder assets
+    // Check folder assets by ID
     for (const assets of Object.values(assetsByFolder)) {
       const assetIndex = assets.findIndex(asset => asset.id === selectedLayerId);
       if (assetIndex >= 0) return true;
@@ -940,32 +972,32 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
                       )}
                     </>
                   )}
-                  {mode === "composite" && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          className="text-gray-300 hover:text-white px-1"
-                          title="Folder Settings"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem
-                          onClick={() => handleDuplicateFolder(folder.id)}
-                        >
-                          Duplicate Folder
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setEditingFolderId(folder.id);
-                            setEditingFolderValue(
-                              folderNames[folder.id] || folder.label
-                            );
-                          }}
-                        >
-                          Rename
-                        </DropdownMenuItem>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="text-gray-300 hover:text-white px-1"
+                        title="Folder Settings"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem
+                        onClick={() => handleDuplicateFolder(folder.id)}
+                      >
+                        Duplicate Folder
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setEditingFolderId(folder.id);
+                          setEditingFolderValue(
+                            folderNames[folder.id] || folder.label
+                          );
+                        }}
+                      >
+                        Rename
+                      </DropdownMenuItem>
+                      {mode === "composite" && (
                         <DropdownMenuItem
                           onClick={() =>
                             setCompositionModal({
@@ -981,9 +1013,9 @@ const LayersPanel = React.forwardRef<any, LayersPanelProps>((props, ref) => {
                         >
                           Create Composition
                         </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
                 {mode === "storyboard" && (
                   <button
