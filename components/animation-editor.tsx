@@ -458,8 +458,8 @@ export function AnimationEditor({
     }
 
     // For single images, use assetId if available for consistency with color effects
-    const identity = df.assetId 
-      ? df.assetId 
+    const identity = df.assetId
+      ? df.assetId
       : df.fileName || df.imageUrl || null;
     return identity ? `${compSelectedAssetFolderId}|${identity}` : null;
   }, [compSelectedAssetFolderId, compSelectedAssetIndex, drawingFrames]);
@@ -573,6 +573,15 @@ export function AnimationEditor({
               ? `${activeFolderId}|${cell.assetId}`
               : `${activeFolderId}|${cell.fileName || cell.imageUrl || ""}`;
 
+          console.log(`[COLOR EFFECTS DEBUG] Asset identity calculation:`, {
+            fileName: cell.fileName,
+            assetId: cell.assetId,
+            isSequenceFrame: cell.isSequenceFrame,
+            folderId: cell.folderId,
+            activeFolderId,
+            finalIdentity: identity
+          });
+
           const persisted = boundsByAsset[identity];
           const defaultX = Math.round((comp.width - img.naturalWidth) / 2);
           const defaultY = Math.round((comp.height - img.naturalHeight) / 2);
@@ -587,12 +596,24 @@ export function AnimationEditor({
           const effects = assetEffects[identity];
           let imageToRender = img;
 
+          console.log(`[COLOR EFFECTS DEBUG] Effects lookup:`, {
+            identity,
+            hasEffects: !!effects,
+            effects: effects ? {
+              colorKey: effects.colorKey?.enabled,
+              colorKeep: effects.colorKeep?.enabled,
+              fill: effects.fill?.enabled
+            } : null,
+            allAssetEffects: Object.keys(assetEffects)
+          });
+
           if (
             effects &&
             (effects.colorKey?.enabled ||
               effects.colorKeep?.enabled ||
               effects.fill?.enabled)
           ) {
+            console.log(`[COLOR EFFECTS DEBUG] Applying effects for identity: ${identity}`, effects);
             // Process image with effects
             const processedCanvas = processImageWithEffects(ctx, img, effects);
             imageToRender = processedCanvas as any; // Canvas can be drawn like an image
@@ -3036,7 +3057,7 @@ export function AnimationEditor({
                       }
                     } else {
                       // For regular assets, create a single frame
-                      allNewFrames.push({
+                      const newFrame = {
                         rowId,
                         frameIndex: 0, // Regular images start at F1
                         length: 1,
@@ -3047,7 +3068,16 @@ export function AnimationEditor({
                         fileName: asset.name,
                         folderId,
                         assetId: asset.id, // Include asset ID for unique identification
+                      };
+                      
+                      console.log(`[COLOR EFFECTS DEBUG] Creating DrawingFrame for regular asset:`, {
+                        assetName: asset.name,
+                        assetId: asset.id,
+                        folderId,
+                        newFrame
                       });
+                      
+                      allNewFrames.push(newFrame);
                     }
 
                     currentRowNumber++; // Move to next row for next asset
@@ -3127,7 +3157,7 @@ export function AnimationEditor({
               const x = Math.round((comp.width - w) / 2);
               const y = Math.round((comp.height - h) / 2);
               // Prefer persisted bounds if available
-              const identity = df.assetId 
+              const identity = df.assetId
                 ? `${folderId}|${df.assetId}`
                 : `${folderId}|${df.fileName || df.imageUrl || ""}`;
               const persisted = boundsByAsset[identity];

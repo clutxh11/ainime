@@ -74,6 +74,12 @@ export default function ColorEffectsPanel({
         ...updates,
       },
     };
+    console.log(`[COLOR EFFECTS DEBUG] ColorEffectsPanel - Fill effect change:`, {
+      assetIdentity,
+      updates,
+      newEffects,
+      previousEffects: effects
+    });
     onEffectsChange(assetIdentity, newEffects);
   };
 
