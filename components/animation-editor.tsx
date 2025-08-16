@@ -3136,6 +3136,8 @@ export function AnimationEditor({
             setAssetEffects((prev) => ({ ...prev, [identity]: effects }));
           }}
           selectedAssetKey={selectedAssetKey}
+          compositeFolderIds={compositeFolderIds}
+          setCompositeFolderIds={setCompositeFolderIds}
         />
       </div>
 
